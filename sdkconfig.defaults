@@ -1,0 +1,24 @@
+# Board: Lonely Binary ESP32-S3 N16R8 — 16MB quad flash + 8MB OCTAL PSRAM.
+# The octal PSRAM setting is the one that matters: get it wrong and PSRAM either
+# fails to enumerate or enumerates and returns corrupt data. main.c checks both.
+
+CONFIG_IDF_TARGET="esp32s3"
+
+# 16MB flash
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# 8MB octal PSRAM — the "R8" in N16R8
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_TYPE_AUTO=y
+CONFIG_SPIRAM_SPEED_80M=y
+
+# Console on UART0 (GPIO43/44), which is the USB-C port behind the UART bridge.
+# If you flash via the *native* USB-C port instead (GPIO19/20), comment the two
+# lines below and uncomment the USB Serial/JTAG line.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+# CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
