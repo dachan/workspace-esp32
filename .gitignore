@@ -1,18 +1,19 @@
-# Dependencies
-node_modules/
-.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/releases
-!.yarn/plugins
-!.yarn/versions
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
 
-# Build output
-.next/
-out/
+# ESP-IDF
 build/
-dist/
+sdkconfig
+sdkconfig.old
+managed_components/
+dependencies.lock
+
+# Arduino
+*.bin
+*.elf
+*.map
 
 # Environment — never commit real values
 .env
@@ -21,26 +22,14 @@ dist/
 
 # Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# Caches
-.turbo/
-.eslintcache
-*.tsbuildinfo
-.cache/
-
-# Coverage
-coverage/
 
 # OS / editor
 .DS_Store
 Thumbs.db
 .idea/
+.vscode/
 *.swp
 
-# Deployment secrets
+# Keys and certificates
 *.pem
 *.key
