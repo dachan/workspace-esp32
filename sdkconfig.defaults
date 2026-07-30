@@ -16,9 +16,9 @@ CONFIG_SPIRAM_MODE_OCT=y
 CONFIG_SPIRAM_TYPE_AUTO=y
 CONFIG_SPIRAM_SPEED_80M=y
 
-# Console on UART0 (GPIO43/44), which is the USB-C port behind the UART bridge.
-# If you flash via the *native* USB-C port instead (GPIO19/20), comment the two
-# lines below and uncomment the USB Serial/JTAG line.
+# Console on UART0 (GPIO43/44) — the USB-C port behind the UART bridge.
+# ESP-IDF also enables USB Serial/JTAG as a *secondary* console by default, so
+# logs appear on the native USB-C port (GPIO19/20) too. Either port works; no
+# change needed to switch between them.
 CONFIG_ESP_CONSOLE_UART_DEFAULT=y
 CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
-# CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
