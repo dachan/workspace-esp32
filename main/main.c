@@ -15,12 +15,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "creature.h"
 #include "display.h"
 #include "esp_chip_info.h"
 #include "esp_flash.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
@@ -195,29 +197,40 @@ static void step2_touch(void)
         ESP_LOGI(TAG, "  hold the panel while resetting to recalibrate");
     }
 
-    ESP_LOGI(TAG, "  press the panel — dots follow your finger, coords go to the log");
-    ESP_LOGI(TAG, "  resistive touch needs FIRM pressure; a light brush reads as nothing");
+    ESP_LOGI(TAG, "  touch calibrated — handing over to the creature");
+}
 
-    display_fill(display_rgb(16, 16, 24));
-    ESP_ERROR_CHECK_WITHOUT_ABORT(display_flush());
+// Step 3: the creature. Redraws every frame from parameters; touch feeds the
+// reflex layer directly so a poke lands on the same frame it arrives.
+static void step3_creature(void)
+{
+    ESP_LOGI(TAG, "==== step 3: creature ====");
+    creature_init();
 
-    bool was_pressed = false;
+    int64_t prev = esp_timer_get_time();
+    int frames = 0;
+    int64_t fps_mark = prev;
+
     while (true) {
-        int x = 0, y = 0;
-        uint16_t rx = 0, ry = 0;
+        int64_t now = esp_timer_get_time();
+        float dt = (float)(now - prev) / 1000000.0f;
+        prev = now;
+        if (dt > 0.1f) { dt = 0.1f; }   // never let a stall lurch the animation
 
-        if (touch_read(&x, &y, &rx, &ry)) {
-            if (!was_pressed) {
-                ESP_LOGI(TAG, "  press   x=%3d y=%3d (raw %u,%u)", x, y, rx, ry);
-            }
-            was_pressed = true;
-            display_fill_rect(x - 4, y - 4, 9, 9, display_rgb(255, 120, 0));
-            ESP_ERROR_CHECK_WITHOUT_ABORT(display_flush());
-        } else if (was_pressed) {
-            was_pressed = false;
-            ESP_LOGI(TAG, "  release");
+        int tx = 0, ty = 0;
+        bool touched = touch_read(&tx, &ty, NULL, NULL);
+
+        creature_update(dt, touched, tx, ty);
+        creature_draw();
+        ESP_ERROR_CHECK_WITHOUT_ABORT(display_flush());
+
+        // Frame rate is worth watching: the SPI flush of a full 150KB frame at
+        // 40MHz costs ~31ms on its own, so that is the ceiling to beat.
+        if (++frames >= 60) {
+            ESP_LOGI(TAG, "  %.1f fps", 60.0f * 1000000.0f / (float)(now - fps_mark));
+            fps_mark = now;
+            frames = 0;
         }
-        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
 
@@ -259,12 +272,6 @@ void app_main(void)
     }
 
     step1_display();
-    step2_touch();  // does not return while touch is up
-
-    // Heartbeat: proves the console link is live and the board has not reset.
-    uint32_t tick = 0;
-    while (true) {
-        vTaskDelay(pdMS_TO_TICKS(5000));
-        ESP_LOGI(TAG, "alive (%" PRIu32 ")", ++tick);
-    }
+    step2_touch();
+    step3_creature();  // does not return
 }
