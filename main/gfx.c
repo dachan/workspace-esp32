@@ -54,9 +54,14 @@ void gfx_fill_poly(const gfx_pt_t *pts, int n, uint16_t colour)
     if (y0 < 0) { y0 = 0; }
     if (y1 > DISPLAY_HEIGHT - 1) { y1 = DISPLAY_HEIGHT - 1; }
 
+    // Static scratch, not stack. These buffers are a kilobyte apiece and the
+    // ESP-IDF main task gets 3.5KB by default — nesting a few of them overflows
+    // it and reboots the board. All drawing happens on one task, so a shared
+    // static is safe; if that ever stops being true this needs revisiting.
+    static float xs[GFX_MAX_POLY_PTS];
+
     for (int y = y0; y <= y1; y++) {
         float yc = (float)y + 0.5f;
-        float xs[GFX_MAX_POLY_PTS];
         int cnt = 0;
 
         for (int i = 0, j = n - 1; i < n; j = i++) {
@@ -111,7 +116,7 @@ void gfx_fill_poly_outlined(const gfx_pt_t *pts, int n, uint16_t fill,
     }
     const float sign = (area > 0.0f) ? 1.0f : -1.0f;
 
-    gfx_pt_t big[GFX_MAX_POLY_PTS];
+    static gfx_pt_t big[GFX_MAX_POLY_PTS];   // static: see gfx_fill_poly
     for (int i = 0; i < n; i++) {
         int prev = (i + n - 1) % n, next = (i + 1) % n;
 
@@ -138,7 +143,10 @@ void gfx_fill_poly_outlined(const gfx_pt_t *pts, int n, uint16_t fill,
         float cosang = n1x * n2x + n1y * n2y;
         float denom = (1.0f + cosang > 0.25f) ? (1.0f + cosang) : 0.25f;
         float miter = sqrtf(2.0f / denom);
-        if (miter > 2.2f) { miter = 2.2f; }
+        // Kept tight: the mouth ends in a near-degenerate point where its
+        // upper and lower edges meet, and a generous mitre turns that into a
+        // spike shooting out past the face.
+        if (miter > 1.35f) { miter = 1.35f; }
 
         big[i].x = pts[i].x + nx * px * miter;
         big[i].y = pts[i].y + ny * px * miter;

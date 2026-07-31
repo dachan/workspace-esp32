@@ -28,6 +28,12 @@ CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_ESP_CONSOLE_UART_DEFAULT=y
 CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
 
+# The render loop runs on the main task. 3584 bytes is the ESP-IDF default and
+# is not much once float maths and nested drawing calls are in flight; the large
+# scratch buffers are static rather than stack (see gfx.c), but keep headroom so
+# a stack overflow is not the way we find out about the next addition.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
 # Touch: give us the raw ADC counts, not the driver's own conversion. Its
 # built-in mapping assumes the panel swings the full 0-4096, which no real
 # resistive panel does — the result is coordinates that are squashed and offset.

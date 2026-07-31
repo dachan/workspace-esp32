@@ -150,9 +150,11 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
 // A tapered fin. The spine is a quadratic bezier so it curves rather than
 // running straight, the width falls off as a cosine so the edges never kink, and
 // the tip is capped with a small arc — nothing on the creature is a hard corner.
+#define BLADE_STEPS 12
+
 static void draw_blade(float bx, float by, float tipx, float tipy, float w, float bend)
 {
-    const int steps = 12;
+    const int steps = BLADE_STEPS;
     const float tip_u = 0.88f;      // stop short of the point and cap it
 
     float dx = tipx - bx, dy = tipy - by;
@@ -164,10 +166,10 @@ static void draw_blade(float bx, float by, float tipx, float tipy, float w, floa
     float ctlx = bx + dx * 0.5f - dy / len * bend;
     float ctly = by + dy * 0.5f + dx / len * bend;
 
-    gfx_pt_t p[GFX_MAX_POLY_PTS];
+    static gfx_pt_t p[GFX_MAX_POLY_PTS];
     int n = 0;
 
-    float sx[steps + 1], sy[steps + 1], sw[steps + 1];
+    float sx[BLADE_STEPS + 1], sy[BLADE_STEPS + 1], sw[BLADE_STEPS + 1];
     for (int i = 0; i <= steps; i++) {
         float u = tip_u * (float)i / (float)steps;
         float m = 1.0f - u;
@@ -223,7 +225,7 @@ static void draw_mouth(void)
     const float depth = 42.0f + c.mouth_open * 46.0f;
     const float tooth = 13.0f;
 
-    gfx_pt_t p[GFX_MAX_POLY_PTS];
+    static gfx_pt_t p[GFX_MAX_POLY_PTS];
     int n = 0;
 
     float x0 = BODY_CX - half_w + c.lean * 0.5f;
@@ -275,15 +277,15 @@ void creature_draw(void)
     float cy = BODY_CY + c.squash * 8.0f;
 
     // Limbs and fin sit behind the body so their bases are hidden by it.
-    draw_blade(BODY_CX - 62.0f + c.lean * 0.6f, cy - 34.0f,
-               BODY_CX - 108.0f + c.lean * 1.4f, cy - 88.0f, 13.0f, 10.0f);
-    draw_blade(BODY_CX - 40.0f + c.lean * 0.3f, cy + ry * 0.80f,
-               BODY_CX - 58.0f, cy + ry * 1.06f, 12.0f, 6.0f);
-    draw_blade(BODY_CX + 40.0f + c.lean * 0.3f, cy + ry * 0.80f,
-               BODY_CX + 60.0f, cy + ry * 1.04f, 12.0f, -6.0f);
+    draw_blade(BODY_CX - 58.0f + c.lean * 0.6f, cy - 30.0f,
+               BODY_CX - 96.0f + c.lean * 1.4f, cy - 74.0f, 19.0f, 7.0f);
+    draw_blade(BODY_CX - 36.0f + c.lean * 0.3f, cy + ry * 0.74f,
+               BODY_CX - 62.0f, cy + ry * 1.00f, 17.0f, 7.0f);
+    draw_blade(BODY_CX + 36.0f + c.lean * 0.3f, cy + ry * 0.74f,
+               BODY_CX + 64.0f, cy + ry * 0.98f, 17.0f, -7.0f);
 
     const int BODY_PTS = 56;
-    gfx_pt_t body[GFX_MAX_POLY_PTS];
+    static gfx_pt_t body[GFX_MAX_POLY_PTS];
     int n = gfx_blob_points(body, BODY_PTS, BODY_CX, cy, rx, ry,
                             c.lean, 0.018f, c.wobble_phase, BODY_TAPER);
     gfx_fill_poly_outlined(body, n, C_BODY, C_EDGE, 3.0f);
@@ -294,7 +296,7 @@ void creature_draw(void)
     // instead skew the boundary in whatever direction it was offset.
     {
         const int half = BODY_PTS / 2;   // t in [0, PI) traces the lower half
-        gfx_pt_t sh[GFX_MAX_POLY_PTS];
+        static gfx_pt_t sh[GFX_MAX_POLY_PTS];
         int m = 0;
         for (int i = 0; i <= half; i++) {
             sh[m++] = body[i];
