@@ -36,18 +36,17 @@ typedef struct {
     float wobble_phase;
     float lean;
     float squash;       // >0 squat and wide, <0 stretched tall
+    float squash_velocity;
     float mouth_open;
     float smile;
     float eye_open;
     float gaze_x, gaze_y;
 
-    // Cheap pseudo-depth. `facing` sweeps the fin horizontally: at 0 it is
-    // directly behind the body and hidden, which reads as facing the viewer, and
-    // it emerges on whichever side the creature has turned away from. `depth`
-    // is 0 far / 1 near and drives one overall scale.
+    // `facing` sweeps the fin horizontally: at 0 it is directly behind the
+    // body and hidden, which reads as facing the viewer, and it emerges on
+    // whichever side the creature has turned away from.
     float facing, facing_target;
-    float depth, depth_target;
-    float turn_timer, depth_timer;
+    float turn_timer;
 
     // Blink and saccade timers. Both intervals are randomised every time: a
     // fixed-period blink reads as a machine immediately.
@@ -55,7 +54,7 @@ typedef struct {
     float saccade_timer;
     float gaze_tx, gaze_ty;
 
-    bool was_touched;
+    bool was_on_body;
 } creature_t;
 
 static creature_t c;
@@ -105,20 +104,20 @@ void creature_init(void)
     c.blink_timer = 2.0f;
     c.saccade_timer = 1.0f;
     c.facing = c.facing_target = 1.0f;
-    c.depth = c.depth_target = 0.85f;
     c.turn_timer = 3.0f;
-    c.depth_timer = 4.0f;
 }
 
 // Where the body sits on screen this frame. Shared by update and draw so that
 // hit-testing a touch and rendering can never disagree about where it is.
 static void body_frame(float *cx, float *cy, float *rx, float *ry, float *scale)
 {
-    float s = 0.66f + 0.34f * c.depth;
+    // A fixed, slightly distant resting scale. Breathing and touch squash can
+    // change the silhouette, but the pet never drifts toward or away from you.
+    const float s = 0.80f;
     float breath = sinf(c.breathe) * 0.022f;
     *scale = s;
     *cx = BODY_CX;
-    *cy = BODY_CY - (1.0f - c.depth) * 30.0f + c.squash * 8.0f * s;
+    *cy = BODY_CY + c.squash * 8.0f * s;
     *rx = BODY_RX * s * (1.0f + breath * 0.5f + c.squash * 0.10f);
     *ry = BODY_RY * s * (1.0f + breath - c.squash * 0.13f);
 }
@@ -129,15 +128,16 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
     c.wobble_phase += dt * 0.55f;
 
     // --- reflex layer: immediate, no decisions ---------------------------
-    // Being poked is a jolt first and a feeling second. The squash and the gaze
-    // snap happen on the same frame as the touch; the mood catches up after.
+    // Being poked is a jolt first and a feeling second. Gaze has a fast target
+    // response; the body carries the physical response through a spring.
+    bool on_body = false;
     if (touched) {
         float cx, cy, rx, ry, s;
         body_frame(&cx, &cy, &rx, &ry, &s);
 
         float nx = ((float)touch_x - cx) / rx;
         float ny = ((float)touch_y - cy) / ry;
-        bool on_body = (nx * nx + ny * ny) <= 1.0f;
+        on_body = (nx * nx + ny * ny) <= 1.0f;
 
         c.saccade_timer = 0.6f;
 
@@ -147,12 +147,12 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
             c.gaze_ty = clampf(ny, -1.0f, 1.0f);
             c.lean = approach(c.lean, c.gaze_tx * 9.0f, 8.0f, dt);
             c.facing_target = (c.gaze_tx > 0.0f) ? -1.0f : 1.0f;
-            c.depth_target = 1.0f;
             c.turn_timer = 2.5f;
-            c.depth_timer = 3.0f;
 
-            if (!c.was_touched) {
-                c.squash += 0.5f;
+            if (!c.was_on_body) {
+                // An impulse into a damped spring is smooth from the first
+                // frame, then gives a tiny elastic rebound as it settles.
+                c.squash_velocity += 7.0f;
                 c.arousal = clampf(c.arousal + 0.45f, 0, 1);
                 c.valence = clampf(c.valence + 0.12f, 0, 1);
             }
@@ -171,28 +171,26 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
     } else {
         c.lean = approach(c.lean, sinf(c.breathe * 0.31f) * 3.0f, 1.5f, dt);
     }
-    c.was_touched = touched;
+    c.was_on_body = on_body;
 
-    // --- idle turning and drifting nearer / further ----------------------
-    // Both intervals randomised, like the blink: anything on a fixed period
-    // starts to read as a mechanism rather than a creature.
+    // --- idle turning -----------------------------------------------------
+    // The interval is randomised like the blink: a fixed period starts to read
+    // as a mechanism rather than a creature.
     c.turn_timer -= dt;
     if (c.turn_timer <= 0.0f) {
         c.facing_target = (gfx_randf() < 0.5f) ? -1.0f : 1.0f;
         c.turn_timer = 2.5f + gfx_randf() * 6.0f - c.arousal * 1.5f;
     }
-    c.depth_timer -= dt;
-    if (c.depth_timer <= 0.0f) {
-        c.depth_target = 0.18f + gfx_randf() * 0.82f;
-        c.depth_timer = 3.0f + gfx_randf() * 7.0f;
-    }
     c.facing = approach(c.facing, c.facing_target, 2.2f + c.arousal * 2.0f, dt);
-    c.depth = approach(c.depth, c.depth_target, 0.8f, dt);
 
     // --- cognition layer: slow drift back to baseline --------------------
     c.arousal = approach(c.arousal, 0.22f, 0.35f, dt);
     c.valence = approach(c.valence, 0.55f, 0.12f, dt);
-    c.squash = approach(c.squash, 0.0f, 6.0f, dt);
+    // A lightly underdamped spring replaces a hard squash followed by a
+    // mechanical exponential decay. It makes each poke feel soft and alive.
+    c.squash_velocity += -54.0f * c.squash * dt;
+    c.squash_velocity *= expf(-9.0f * dt);
+    c.squash += c.squash_velocity * dt;
 
     // --- emotion drives the visible parameters ---------------------------
     float mouth_target = 0.20f + c.arousal * 0.55f + c.valence * 0.12f;
@@ -301,9 +299,8 @@ static void draw_blade(float bx, float by, float tipx, float tipy, float w, floa
     gfx_fill_poly_outlined(p, n, fill, C_EDGE, 3.0f);
 }
 
-// `cx`/`cy` are the body centre and `s` the overall depth scale, so the mouth
-// tracks the creature as it moves nearer and further rather than sitting at
-// fixed screen coordinates.
+// `cx`/`cy` are the body centre and `s` the shared creature scale, so the mouth
+// remains correctly attached when the body breathes or squashes.
 static void draw_mouth(float cx, float cy, float s)
 {
     // Few, large teeth. Many small ones read as noise at this resolution rather
@@ -374,10 +371,9 @@ void creature_draw(void)
 {
     display_fill(C_BG);
 
-    // One scale carries the whole creature, and moving away also lifts it up the
-    // screen — the two cues together read as distance far more convincingly than
-    // scale alone. Breathing scales the body very slightly; squash trades height
-    // for width so volume looks conserved when it reacts.
+    // One fixed scale carries the whole creature. Breathing scales the body very
+    // slightly; squash trades height for width so volume looks conserved when it
+    // reacts.
     float cx, cy, rx, ry, s;
     body_frame(&cx, &cy, &rx, &ry, &s);
 
