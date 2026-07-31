@@ -96,7 +96,8 @@ void gfx_fill_poly(const gfx_pt_t *pts, int n, uint16_t colour)
     }
 }
 
-void gfx_poly_expand(const gfx_pt_t *pts, gfx_pt_t *out, int n, float px)
+void gfx_fill_poly_outlined(const gfx_pt_t *pts, int n, uint16_t fill,
+                            uint16_t edge, float px)
 {
     if (n < 3 || n > GFX_MAX_POLY_PTS) {
         return;
@@ -115,6 +116,7 @@ void gfx_poly_expand(const gfx_pt_t *pts, gfx_pt_t *out, int n, float px)
     }
     const float sign = (area > 0.0f) ? 1.0f : -1.0f;
 
+    static gfx_pt_t big[GFX_MAX_POLY_PTS];   // static: see gfx_fill_poly
     for (int i = 0; i < n; i++) {
         int prev = (i + n - 1) % n, next = (i + 1) % n;
 
@@ -146,16 +148,10 @@ void gfx_poly_expand(const gfx_pt_t *pts, gfx_pt_t *out, int n, float px)
         // spike shooting out past the face.
         if (miter > 1.35f) { miter = 1.35f; }
 
-        out[i].x = pts[i].x + nx * px * miter;
-        out[i].y = pts[i].y + ny * px * miter;
+        big[i].x = pts[i].x + nx * px * miter;
+        big[i].y = pts[i].y + ny * px * miter;
     }
-}
 
-void gfx_fill_poly_outlined(const gfx_pt_t *pts, int n, uint16_t fill,
-                            uint16_t edge, float px)
-{
-    static gfx_pt_t big[GFX_MAX_POLY_PTS];   // static: see gfx_fill_poly
-    gfx_poly_expand(pts, big, n, px);
     gfx_fill_poly(big, n, edge);
     gfx_fill_poly(pts, n, fill);
 }
