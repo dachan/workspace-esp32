@@ -195,8 +195,11 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
     // --- emotion drives the visible parameters ---------------------------
     float mouth_target = 0.20f + c.arousal * 0.55f + c.valence * 0.12f;
     float smile_target = 0.15f + c.valence * 0.85f;
-    c.mouth_open = approach(c.mouth_open, mouth_target, 7.0f, dt);
-    c.smile = approach(c.smile, smile_target, 4.0f, dt);
+    // The mouth carries the creature's expression, so it should follow a
+    // feeling rather than jump to it. Slower easing makes each change read as
+    // a soft shift through the face instead of a separate animation state.
+    c.mouth_open = approach(c.mouth_open, mouth_target, 3.8f, dt);
+    c.smile = approach(c.smile, smile_target, 2.4f, dt);
 
     // --- blinking --------------------------------------------------------
     c.blink_timer -= dt;
@@ -303,62 +306,69 @@ static void draw_blade(float bx, float by, float tipx, float tipy, float w, floa
 // remains correctly attached when the body breathes or squashes.
 static void draw_mouth(float cx, float cy, float s)
 {
-    // Few, large teeth. Many small ones read as noise at this resolution rather
-    // than as a grin — the reference has about five to a side.
     const int teeth = 4;
-    // Turning narrows the grin, the same foreshortening a real turn would give.
     const float turn = 1.0f - 0.16f * fabsf(c.facing);
     const float half_w = (66.0f + c.smile * 6.0f) * s * turn;
-    const float m0 = cy - 14.0f * s;                  // mouth reference line
+    const float m0 = cy - 14.0f * s;
     const float corner_y = m0 - (2.0f + c.smile * 10.0f) * s;
     const float sag_top = (10.0f + c.smile * 6.0f) * s;
-    // Kept comfortably deeper than twice the tooth height so the upper and lower
-    // scallops can never meet and tangle the outline.
     const float depth = (42.0f + c.mouth_open * 46.0f) * s;
     const float tooth = 9.0f * s;
-
+    float mx = cx + (c.lean * 0.5f + c.facing * 7.0f) * s;
+    float x0 = mx - half_w, x1 = mx + half_w;
+    const int steps = teeth * 9;
+    // Keep the upper and lower scallops well clear of each other at the two
+    // ends, rather than relying on an overlaid patch to hide a collision.
+    const float end_inset = 0.10f;
     static gfx_pt_t p[GFX_MAX_POLY_PTS];
     int n = 0;
 
-    float mx = cx + (c.lean * 0.5f + c.facing * 7.0f) * s;
-    float x0 = mx - half_w;
-    float x1 = mx + half_w;
-
-    // Teeth are a raised cosine rather than a zigzag: same toothy read, but the
-    // tips and valleys are rounded instead of being sharp vertices. Sampled
-    // several times per tooth so the curve stays smooth on screen.
-    const int per_tooth = 9;
-    const int steps = teeth * per_tooth;
-
-    // The two edges are sampled just inside the ends rather than all the way to
-    // them. Meeting exactly would make each corner a cusp, where the outline
-    // offset has no well-defined direction and throws a thin spike across the
-    // face; a few pixels of separation turns each corner into a short rounded
-    // edge instead.
-    const float end_inset = 0.035f;
-
-    // Upper edge, left to right, teeth hanging down into the mouth.
     for (int i = 0; i <= steps; i++) {
         float u = end_inset + (1.0f - 2.0f * end_inset) * (float)i / (float)steps;
         float x = x0 + (x1 - x0) * u;
         float base = corner_y + (m0 + sag_top - corner_y) * sinf(PI * u);
         float raised = 0.5f - 0.5f * cosf(u * (float)teeth * 2.0f * PI);
-        float bump = raised * raised;
-        p[n++] = (gfx_pt_t){x, base + tooth * bump};
+        p[n++] = (gfx_pt_t){x, base + tooth * raised * raised};
     }
-    // Lower edge, right back to left, teeth rising from the jaw.
-    for (int i = steps; i >= 0; i--) {
+
+    // Round cap on the right: an actual semicircle joining the upper and lower
+    // contours, rather than two lines meeting at a pointed corner.
+    gfx_pt_t right_top = p[n - 1];
+    float right_u = 1.0f - end_inset;
+    float right_x = x0 + (x1 - x0) * right_u;
+    float right_base = corner_y + (m0 + depth - corner_y) * sinf(PI * right_u);
+    float right_raised = 0.5f - 0.5f * cosf(right_u * (float)teeth * 2.0f * PI);
+    gfx_pt_t right_bottom = {right_x, right_base - tooth * right_raised * right_raised};
+    float cap_cy = (right_top.y + right_bottom.y) * 0.5f;
+    float cap_ry = (right_bottom.y - right_top.y) * 0.5f;
+    float cap_rx = 4.0f * s;
+    const int cap_steps = 6;
+    for (int i = 1; i <= cap_steps; i++) {
+        float a = -PI * 0.5f + PI * (float)i / (float)cap_steps;
+        p[n++] = (gfx_pt_t){right_x + cap_rx * cosf(a), cap_cy + cap_ry * sinf(a)};
+    }
+
+    for (int i = steps - 1; i >= 0; i--) {
         float u = end_inset + (1.0f - 2.0f * end_inset) * (float)i / (float)steps;
         float x = x0 + (x1 - x0) * u;
         float base = corner_y + (m0 + depth - corner_y) * sinf(PI * u);
         float raised = 0.5f - 0.5f * cosf(u * (float)teeth * 2.0f * PI);
-        float bump = raised * raised;
-        p[n++] = (gfx_pt_t){x, base - tooth * bump};
+        p[n++] = (gfx_pt_t){x, base - tooth * raised * raised};
     }
 
-    gfx_fill_poly_outlined(p, n, C_MOUTH, C_EDGE, 3.0f * s);
+    // Mirror the rounded cap on the left; its final point is the first upper
+    // point, supplied by the polygon close.
+    gfx_pt_t left_bottom = p[n - 1];
+    gfx_pt_t left_top = p[0];
+    cap_cy = (left_top.y + left_bottom.y) * 0.5f;
+    cap_ry = (left_bottom.y - left_top.y) * 0.5f;
+    float left_x = left_top.x;
+    for (int i = 1; i < cap_steps; i++) {
+        float a = PI * 0.5f + PI * (float)i / (float)cap_steps;
+        p[n++] = (gfx_pt_t){left_x + cap_rx * cosf(a), cap_cy + cap_ry * sinf(a)};
+    }
+    gfx_fill_poly_outlined(p, n, C_MOUTH, C_EDGE, 2.0f * s);
 
-    // Tongue, only once the mouth is open enough to see into.
     if (c.mouth_open > 0.32f) {
         float t = (c.mouth_open - 0.32f) / 0.68f;
         gfx_fill_ellipse(mx - 6.0f * s, m0 + depth * 0.62f,
@@ -429,8 +439,10 @@ void creature_draw(void)
     // Eyes: small dark ovals. Blink collapses height, so no separate lid shape.
     // They slide with the turn, and the trailing one narrows as it goes round.
     float ey = cy - ry * 0.52f;
-    float gx = (c.gaze_x * 3.0f + c.lean * 0.6f + c.facing * 9.0f) * s;
-    float gy = c.gaze_y * 2.0f * s;
+    // A tap should make the face clearly orient toward the contact point, not
+    // merely twitch by a pixel or two. These are still eased by gaze_x/y above.
+    float gx = (c.gaze_x * 6.5f + c.lean * 0.6f + c.facing * 9.0f) * s;
+    float gy = c.gaze_y * 4.5f * s;
     for (int i = 0; i < 2; i++) {
         float side = (i == 0) ? -1.0f : 1.0f;
         float squeeze = 1.0f - 0.35f * fabsf(c.facing) * ((side * c.facing > 0) ? 1.0f : 0.0f);
@@ -444,10 +456,21 @@ void creature_draw(void)
         if (c.eye_open > 0.45f) {
             // Tracking happens mostly here rather than by sliding the whole
             // eye: a pupil moving inside a fixed eye is what reads as looking
-            // at something.
-            gfx_fill_ellipse(ex + erx * 0.30f + c.facing * s + c.gaze_x * erx * 0.34f,
-                             ey + gy - ery * 0.32f + c.gaze_y * ery * 0.26f,
-                             erx * 0.42f, ery * 0.34f, C_PUPIL);
+            // at something. Constrain its centre to an inset ellipse so the
+            // highlight cannot cross the eye outline when it turns or looks
+            // hard toward an edge.
+            float prx = erx * 0.42f, pry = ery * 0.34f;
+            float dx = erx * 0.30f + c.facing * s + c.gaze_x * erx * 0.48f;
+            float dy = -ery * 0.32f + c.gaze_y * ery * 0.38f;
+            float inner_rx = erx - prx - 0.5f * s;
+            float inner_ry = ery - pry - 0.5f * s;
+            float distance = sqrtf((dx / inner_rx) * (dx / inner_rx)
+                                 + (dy / inner_ry) * (dy / inner_ry));
+            if (distance > 1.0f) {
+                dx /= distance;
+                dy /= distance;
+            }
+            gfx_fill_ellipse(ex + dx, ey + gy + dy, prx, pry, C_PUPIL);
         }
     }
 
