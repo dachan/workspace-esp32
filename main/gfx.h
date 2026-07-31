@@ -18,6 +18,12 @@ typedef struct {
 // Scanline-fills a closed polygon. Points may wind either way.
 void gfx_fill_poly(const gfx_pt_t *pts, int n, uint16_t colour);
 
+// Writes an outward offset of `pts` into `out`. Exposed so several shapes can
+// have their outlines laid down before any of them is filled, which is what
+// merges overlapping parts into one silhouette instead of letting each outline
+// cut across its neighbour.
+void gfx_poly_expand(const gfx_pt_t *pts, gfx_pt_t *out, int n, float px);
+
 // Fills the polygon with `fill`, over a copy expanded by `px` pixels in `edge`.
 // Cheapest way to get the reference art's heavy black outline: draw a slightly
 // larger silhouette behind the shape rather than stroking the boundary.
