@@ -18,17 +18,26 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import urllib.parse
 
 WIDTH, HEIGHT = 320, 240
 FRAME_BYTES = WIDTH * HEIGHT * 2
 PORT = 8765
 
+# Measured on the board: a full 150KB frame down a 40MHz SPI bus costs ~31ms, so
+# the firmware is pinned at 31.3fps. The desktop will happily run at 60+, which
+# makes the motion look smoother here than it ever will on the device. Pace to
+# the hardware instead, so timing judged in the emulator holds on the panel.
+BOARD_FPS = 31.3
+FRAME_INTERVAL = 1.0 / BOARD_FPS
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BINARY = os.path.join(ROOT, "sim", "creature_live")
 
 _lock = threading.Lock()
 _proc = None
+_next_frame = 0.0
 
 
 def start_creature():
@@ -39,9 +48,20 @@ def start_creature():
                              stdout=subprocess.PIPE, bufsize=0)
 
 
-def step(dt, touched, x, y):
-    """Advances the creature one frame and returns its framebuffer."""
+def step(touched, x, y):
+    """Advances the creature one frame and returns its framebuffer.
+
+    Paced to the board's frame rate and given the board's timestep, so the
+    browser's own refresh rate cannot influence how the animation looks.
+    """
+    global _next_frame
     with _lock:
+        now = time.monotonic()
+        if now < _next_frame:
+            time.sleep(_next_frame - now)
+        _next_frame = max(_next_frame + FRAME_INTERVAL, time.monotonic())
+
+        dt = FRAME_INTERVAL
         _proc.stdin.write(f"{dt:.5f} {int(touched)} {int(x)} {int(y)}\n".encode())
         _proc.stdin.flush()
         buf = bytearray()
@@ -70,6 +90,7 @@ PAGE = """<!doctype html>
 </style>
 <canvas id="c" width="{w}" height="{h}"></canvas>
 <div class="hint">click and drag on the creature — the mouse is the touch panel</div>
+<div class="hint">paced to the board: {fps} fps, 8KB stack budget, touch jitter</div>
 <div><span id="fps"></span></div>
 <p class="hint"><code>creature.c</code> is running live; this is not a recording</p>
 <script>
@@ -79,7 +100,7 @@ const img = cx.createImageData(W, H);
 const fpsEl = document.getElementById('fps');
 
 let touched = false, tx = 0, ty = 0;
-let last = performance.now(), frames = 0, fpsMark = last, inflight = false;
+let frames = 0, fpsMark = performance.now(), inflight = false;
 
 function pos(e) {{
   const r = cv.getBoundingClientRect();
@@ -95,10 +116,8 @@ async function loop() {{
   if (!inflight) {{
     inflight = true;
     const now = performance.now();
-    const dt = Math.min((now - last) / 1000, 0.1);
-    last = now;
     try {{
-      const r = await fetch(`/frame?dt=${{dt}}&t=${{touched?1:0}}&x=${{tx}}&y=${{ty}}`);
+      const r = await fetch(`/frame?t=${{touched?1:0}}&x=${{tx}}&y=${{ty}}`);
       const buf = new Uint8Array(await r.arrayBuffer());
       const px = img.data;
       for (let i = 0, p = 0; i < W * H; i++) {{
@@ -131,7 +150,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         url = urllib.parse.urlparse(self.path)
         if url.path == "/":
-            body = PAGE.format(w=WIDTH, h=HEIGHT).encode()
+            body = PAGE.format(w=WIDTH, h=HEIGHT, fps=BOARD_FPS).encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -142,8 +161,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if url.path == "/frame":
             q = urllib.parse.parse_qs(url.query)
             try:
-                frame = step(float(q.get("dt", ["0.033"])[0]),
-                             q.get("t", ["0"])[0] == "1",
+                frame = step(q.get("t", ["0"])[0] == "1",
                              int(q.get("x", ["0"])[0]),
                              int(q.get("y", ["0"])[0]))
             except Exception as exc:

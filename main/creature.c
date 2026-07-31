@@ -178,35 +178,43 @@ static void draw_blade(float bx, float by, float tipx, float tipy, float w, floa
         sw[i] = w * cosf(u * PI * 0.5f);
     }
 
-    // Out along one side...
+    // Unit tangent at each spine sample, from its neighbours.
+    float tanx[BLADE_STEPS + 1], tany[BLADE_STEPS + 1];
     for (int i = 0; i <= steps; i++) {
-        int j = (i == steps) ? i - 1 : i;
-        float tx = sx[j + 1 > steps ? steps : j + 1] - sx[j];
-        float ty = sy[j + 1 > steps ? steps : j + 1] - sy[j];
-        float tl = sqrtf(tx * tx + ty * ty);
-        if (tl < 0.001f) { tl = 1.0f; }
-        p[n++] = (gfx_pt_t){sx[i] - ty / tl * sw[i], sy[i] + tx / tl * sw[i]};
+        int a = (i > 0) ? i - 1 : i;
+        int b = (i < steps) ? i + 1 : i;
+        float ux = sx[b] - sx[a], uy = sy[b] - sy[a];
+        float ul = sqrtf(ux * ux + uy * uy);
+        if (ul < 0.0001f) { ul = 1.0f; }
+        tanx[i] = ux / ul;
+        tany[i] = uy / ul;
     }
-    // ...round the tip...
+
+    // Out along the left side...
+    for (int i = 0; i <= steps; i++) {
+        p[n++] = (gfx_pt_t){sx[i] - tany[i] * sw[i], sy[i] + tanx[i] * sw[i]};
+    }
+    // ...semicircle around the tip...
+    //
+    // Swept as nL*cos(s*PI) + tangent*sin(s*PI): at s=0 that is the left normal,
+    // at s=0.5 straight ahead, at s=1 the right normal. Building it from the
+    // vectors themselves rather than from an atan2 angle keeps the winding
+    // consistent with the two sides — get that wrong and the polygon
+    // self-intersects, which the even-odd fill leaves as a hole showing the
+    // background through the fin.
     {
-        float tx = tipx - sx[steps], ty = tipy - sy[steps];
-        float tl = sqrtf(tx * tx + ty * ty);
-        if (tl < 0.001f) { tl = 1.0f; }
-        float ang0 = atan2f(tx / tl, -ty / tl);
-        for (int i = 1; i < 5; i++) {
-            float a = ang0 - PI * (float)i / 5.0f;
-            p[n++] = (gfx_pt_t){sx[steps] + sinf(a) * sw[steps],
-                                sy[steps] - cosf(a) * sw[steps]};
+        const int cap = 7;
+        float nlx = -tany[steps], nly = tanx[steps];
+        for (int i = 1; i < cap; i++) {
+            float s = (float)i / (float)cap;
+            float cs = cosf(s * PI), sn = sinf(s * PI);
+            p[n++] = (gfx_pt_t){sx[steps] + (nlx * cs + tanx[steps] * sn) * sw[steps],
+                                sy[steps] + (nly * cs + tany[steps] * sn) * sw[steps]};
         }
     }
-    // ...and back along the other.
+    // ...and back along the right.
     for (int i = steps; i >= 0; i--) {
-        int j = (i == steps) ? i - 1 : i;
-        float tx = sx[j + 1 > steps ? steps : j + 1] - sx[j];
-        float ty = sy[j + 1 > steps ? steps : j + 1] - sy[j];
-        float tl = sqrtf(tx * tx + ty * ty);
-        if (tl < 0.001f) { tl = 1.0f; }
-        p[n++] = (gfx_pt_t){sx[i] + ty / tl * sw[i], sy[i] - tx / tl * sw[i]};
+        p[n++] = (gfx_pt_t){sx[i] + tany[i] * sw[i], sy[i] - tanx[i] * sw[i]};
     }
 
     gfx_fill_poly_outlined(p, n, C_BODY, C_EDGE, 3.0f);
