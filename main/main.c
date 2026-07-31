@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "display.h"
 #include "esp_chip_info.h"
 #include "esp_flash.h"
 #include "esp_heap_caps.h"
@@ -22,6 +23,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "touch.h"
 
 static const char *TAG = "step0";
 
@@ -99,6 +101,105 @@ static bool report_psram(void)
     return ok;
 }
 
+// Step 1: prove the panel. The sequence is diagnostic, not decorative — each
+// stage isolates a different failure, so what you see on the glass says which
+// thing is wrong rather than just "it didn't work".
+static void step1_display(void)
+{
+    ESP_LOGI(TAG, "==== step 1: display ====");
+
+    esp_err_t err = display_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "display init failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "  check wiring: SCK=12 MOSI=11 CS=10 DC=9 RST=14 LED=21, VCC=3V3");
+        return;
+    }
+    display_set_backlight(100);
+
+    // Stage 1 — full-screen primaries. If these come up in the wrong colours the
+    // fault is the BGR/RGB element order, not the wiring.
+    const struct { const char *name; uint16_t colour; } primaries[] = {
+        {"red",   display_rgb(255, 0, 0)},
+        {"green", display_rgb(0, 255, 0)},
+        {"blue",  display_rgb(0, 0, 255)},
+    };
+    for (size_t i = 0; i < sizeof(primaries) / sizeof(primaries[0]); i++) {
+        ESP_LOGI(TAG, "  filling %s", primaries[i].name);
+        display_fill(primaries[i].colour);
+        ESP_ERROR_CHECK_WITHOUT_ABORT(display_flush());
+        vTaskDelay(pdMS_TO_TICKS(700));
+    }
+
+    // Stage 2 — an orientation chart that stays up. Each corner is a different
+    // colour, so which corner is which tells us whether swap_xy and mirror are
+    // right without guessing.
+    display_fill(display_rgb(16, 16, 24));
+    const int cw = 60, ch = 45;
+    display_fill_rect(0, 0, cw, ch, display_rgb(255, 0, 0));                                   // TL red
+    display_fill_rect(DISPLAY_WIDTH - cw, 0, cw, ch, display_rgb(0, 255, 0));                  // TR green
+    display_fill_rect(0, DISPLAY_HEIGHT - ch, cw, ch, display_rgb(0, 80, 255));                // BL blue
+    display_fill_rect(DISPLAY_WIDTH - cw, DISPLAY_HEIGHT - ch, cw, ch, display_rgb(255, 255, 255)); // BR white
+
+    // A 3px border proves the full extent is addressable — a panel with a row or
+    // column offset shows it here as a missing or doubled edge.
+    const uint16_t edge = display_rgb(255, 200, 0);
+    display_fill_rect(0, 0, DISPLAY_WIDTH, 3, edge);
+    display_fill_rect(0, DISPLAY_HEIGHT - 3, DISPLAY_WIDTH, 3, edge);
+    display_fill_rect(0, 0, 3, DISPLAY_HEIGHT, edge);
+    display_fill_rect(DISPLAY_WIDTH - 3, 0, 3, DISPLAY_HEIGHT, edge);
+
+    // A greyscale ramp across the middle — banding here means the RGB565 packing
+    // or byte order is off.
+    for (int x = 0; x < DISPLAY_WIDTH; x++) {
+        uint8_t v = (uint8_t)(x * 255 / (DISPLAY_WIDTH - 1));
+        display_fill_rect(x, DISPLAY_HEIGHT / 2 - 20, 1, 40, display_rgb(v, v, v));
+    }
+    ESP_ERROR_CHECK_WITHOUT_ABORT(display_flush());
+
+    ESP_LOGI(TAG, "  expect: RED top-left, GREEN top-right, BLUE bottom-left,");
+    ESP_LOGI(TAG, "          WHITE bottom-right, amber border, grey ramp centre");
+    ESP_LOGI(TAG, "==== step 1 done — report what is on the glass ====");
+}
+
+// Step 2: touch. Draws where you press, which tests touch and display together
+// and makes any calibration offset visible rather than a number to interpret.
+static void step2_touch(void)
+{
+    ESP_LOGI(TAG, "==== step 2: touch ====");
+
+    esp_err_t err = touch_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "touch init failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "  check wiring: T_CLK=18 T_DIN=17 T_DO=8 T_CS=15 T_IRQ=16");
+        return;
+    }
+
+    ESP_LOGI(TAG, "  press the panel — dots follow your finger, coords go to the log");
+    ESP_LOGI(TAG, "  resistive touch needs FIRM pressure; a light brush reads as nothing");
+
+    display_fill(display_rgb(16, 16, 24));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(display_flush());
+
+    bool was_pressed = false;
+    while (true) {
+        int x = 0, y = 0;
+        uint16_t rx = 0, ry = 0;
+
+        if (touch_read(&x, &y, &rx, &ry)) {
+            if (!was_pressed) {
+                ESP_LOGI(TAG, "  press   x=%3d y=%3d (raw %u,%u)", x, y, rx, ry);
+            }
+            was_pressed = true;
+            display_fill_rect(x - 4, y - 4, 9, 9, display_rgb(255, 120, 0));
+            ESP_ERROR_CHECK_WITHOUT_ABORT(display_flush());
+        } else if (was_pressed) {
+            was_pressed = false;
+            ESP_LOGI(TAG, "  release");
+        }
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
 void app_main(void)
 {
     // A blank line and banner make the start of a boot obvious in a noisy console.
@@ -122,10 +223,13 @@ void app_main(void)
              (320 * 240 * 2) / 1024, (320 * 240 * 2 * 2) / 1024);
 
     if (psram_ok) {
-        ESP_LOGI(TAG, "==== step 0 PASSED — safe to wire the display ====");
+        ESP_LOGI(TAG, "==== step 0 PASSED ====");
     } else {
-        ESP_LOGE(TAG, "==== step 0 FAILED — fix PSRAM before wiring anything ====");
+        ESP_LOGE(TAG, "==== step 0 FAILED — fix PSRAM before trusting anything below ====");
     }
+
+    step1_display();
+    step2_touch();  // does not return while touch is up
 
     // Heartbeat: proves the console link is live and the board has not reset.
     uint32_t tick = 0;
