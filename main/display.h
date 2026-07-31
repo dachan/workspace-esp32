@@ -28,6 +28,12 @@ esp_err_t display_flush(void);
 // so this is a power control as much as a comfort one.
 esp_err_t display_set_backlight(uint8_t percent);
 
+// Drives the backlight pin as a plain push-pull GPIO, on/off, `cycles` times.
+// Diagnostic only: it removes LEDC from the picture so a dark panel means the
+// pin is not reaching the board, rather than the PWM being misconfigured.
+// Call before display_init().
+void display_backlight_selftest(int cycles);
+
 // Packs RGB565 *byte-swapped* for the panel. The ILI9341 takes pixels MSB-first
 // while the ESP32 is little-endian, so a raw uint16_t would arrive with its
 // bytes reversed — the classic "colours are nearly right but wrong" bug.

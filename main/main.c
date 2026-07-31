@@ -108,6 +108,10 @@ static void step1_display(void)
 {
     ESP_LOGI(TAG, "==== step 1: display ====");
 
+    // Backlight before anything else. It is the only part of the panel that is
+    // independent of SPI, so it separates "no power / no pin" from "no data".
+    display_backlight_selftest(3);
+
     esp_err_t err = display_init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "display init failed: %s", esp_err_to_name(err));

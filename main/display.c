@@ -12,6 +12,8 @@
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static const char *TAG = "display";
 
@@ -36,6 +38,31 @@ static const char *TAG = "display";
 
 static esp_lcd_panel_handle_t s_panel;
 static uint16_t *s_fb;
+
+void display_backlight_selftest(int cycles)
+{
+    gpio_config_t cfg = {
+        .pin_bit_mask = 1ULL << PIN_BL,
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_config(&cfg));
+
+    ESP_LOGW(TAG, "backlight selftest on GPIO%d — watch the panel", PIN_BL);
+    for (int i = 0; i < cycles; i++) {
+        gpio_set_level(PIN_BL, 1);
+        ESP_LOGW(TAG, "  GPIO%d = HIGH (backlight should be ON)", PIN_BL);
+        vTaskDelay(pdMS_TO_TICKS(800));
+        gpio_set_level(PIN_BL, 0);
+        ESP_LOGW(TAG, "  GPIO%d = LOW  (backlight should be OFF)", PIN_BL);
+        vTaskDelay(pdMS_TO_TICKS(800));
+    }
+    gpio_set_level(PIN_BL, 1);
+    ESP_LOGW(TAG, "  left HIGH. No change at all means GPIO%d never reaches the", PIN_BL);
+    ESP_LOGW(TAG, "  board — check it is broken out and the wire is seated.");
+}
 
 static esp_err_t backlight_init(void)
 {
