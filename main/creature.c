@@ -72,6 +72,14 @@ static inline float clampf(float v, float lo, float hi)
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+// The framebuffer is opaque RGB565 — there is no alpha channel and nothing
+// blends at draw time. Where a shape always sits on a known background, the
+// blend can simply be resolved once at startup and stored as a flat colour.
+static inline uint8_t mix8(uint8_t fg, uint8_t bg, float a)
+{
+    return (uint8_t)(fg * a + bg * (1.0f - a) + 0.5f);
+}
+
 void creature_init(void)
 {
     C_BG     = display_rgb(246, 244, 248);
@@ -80,7 +88,11 @@ void creature_init(void)
     C_MOUTH  = display_rgb(74, 38, 82);
     C_TONGUE = display_rgb(205, 145, 200);
     C_EDGE   = display_rgb(24, 14, 28);
-    C_PUPIL  = display_rgb(255, 255, 255);
+    // 90% white over the eye colour, pre-blended.
+    const float pupil_alpha = 0.90f;
+    C_PUPIL = display_rgb(mix8(255, 24, pupil_alpha),
+                          mix8(255, 14, pupil_alpha),
+                          mix8(255, 28, pupil_alpha));
 
     c.valence = 0.6f;
     c.arousal = 0.25f;
@@ -399,7 +411,7 @@ void creature_draw(void)
         float side = (i == 0) ? -1.0f : 1.0f;
         float squeeze = 1.0f - 0.35f * fabsf(c.facing) * ((side * c.facing > 0) ? 1.0f : 0.0f);
         float ex = cx + side * 27.0f * s + gx;
-        float erx = 6.5f * s * squeeze, ery = 9.0f * s * c.eye_open;
+        float erx = 7.6f * s * squeeze, ery = 10.5f * s * c.eye_open;
         gfx_fill_ellipse(ex, ey + gy, erx, ery, C_EDGE);
 
         // Pupil highlight, offset up and toward the turn so it catches a
