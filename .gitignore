@@ -37,4 +37,6 @@ Thumbs.db
 # Simulator build output
 sim/creature_sim
 sim/out.bmp
+sim/film.bmp
+sim/creature_live
 sim/out.png

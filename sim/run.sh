@@ -1,28 +1,32 @@
 #!/bin/bash
-# Builds and runs the desktop creature renderer.
-# No ESP-IDF, no board, no flash cycle — same creature.c and gfx.c as the firmware.
+# Desktop builds of the creature. Same creature.c and gfx.c as the firmware —
+# no ESP-IDF, no board, no flash cycle.
 #
-#   ./sim/run.sh          render stills + animation
-#   ./sim/run.sh --open   ...and open the animation in a browser
+#   ./sim/run.sh          build both, render stills
+#   ./sim/run.sh --live   build both, then serve the interactive emulator
+#
+# Note the simulator cannot catch embedded resource limits: a desktop process has
+# megabytes of stack, so code that reboots the board on a stack overflow will run
+# here quite happily. Use it for artwork and motion, not for proving the firmware.
 set -e
 cd "$(dirname "$0")/.."
 
-cc -O2 -std=gnu17 -Imain -Wall \
-   sim/sim.c main/creature.c main/gfx.c main/canvas.c \
-   -lm -o sim/creature_sim
+CFLAGS="-O2 -std=gnu17 -Imain -Wall"
+SHARED="main/creature.c main/gfx.c main/canvas.c"
 
-GEOM=$(./sim/creature_sim)
+cc $CFLAGS sim/sim.c  $SHARED -lm -o sim/creature_sim
+cc $CFLAGS sim/live.c $SHARED -lm -o sim/creature_live
 
-# Stills, for looking at shapes frame by frame.
+if [ "$1" = "--live" ]; then
+    exec python3 sim/serve.py
+fi
+
+./sim/creature_sim >/dev/null
+
 if command -v sips >/dev/null 2>&1; then
     sips -s format png sim/out.bmp --out sim/out.png >/dev/null 2>&1
+    echo "stills:      sim/out.png"
 fi
-rm -f sim/out.bmp
+rm -f sim/out.bmp sim/film.bmp
 
-# Animation, for judging motion — which is most of what matters here.
-python3 sim/make_page.py $GEOM
-rm -f sim/film.bmp
-
-echo "open sim/creature.html"
-[ "$1" = "--open" ] && open sim/creature.html
-exit 0
+echo "interactive: ./sim/run.sh --live"

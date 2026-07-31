@@ -1,15 +1,12 @@
 // Desktop renderer for the creature.
 //
 // Compiles the *same* creature.c and gfx.c the firmware uses, against a malloc'd
-// framebuffer instead of PSRAM. Two outputs:
+// framebuffer instead of PSRAM.
 //
-//   sim/out.bmp   six curated stills, for inspecting shapes frame by frame
-//   sim/film.bmp  a grid of consecutive frames, turned into a looping animation
-//                 by sim/make_page.py so the motion can be judged in a browser
-//
-// Motion is the point: breathing, blink timing, saccades and the recoil from a
-// poke are all things a still cannot show. Iterating here takes a second, where
-// a flash cycle takes a minute and a half.
+// Writes sim/out.bmp: six curated stills for inspecting shapes frame by frame.
+// For motion and interaction use the live emulator instead — sim/live.c plus
+// sim/serve.py run this same code in real time with the mouse as the touch
+// panel, which is the only way to judge blink timing, saccades and recoil.
 //
 // Deliberately no SDL or emscripten — a BMP writer is thirty lines and needs
 // nothing installed.
@@ -21,11 +18,6 @@
 
 #include "canvas.h"
 #include "creature.h"
-
-#define FILM_FPS    30
-#define FILM_COLS   10
-#define FILM_ROWS   12
-#define FILM_FRAMES (FILM_COLS * FILM_ROWS)
 
 static uint8_t *sheet;
 static int sheet_w, sheet_h;
@@ -97,7 +89,7 @@ static void write_bmp(const char *path)
 
 static void advance(float seconds, bool touched, int tx, int ty)
 {
-    const float step = 1.0f / (float)FILM_FPS;
+    const float step = 1.0f / 30.0f;
     for (float t = 0; t < seconds; t += step) {
         creature_update(step, touched, tx, ty);
     }
@@ -120,42 +112,12 @@ static void render_stills(uint16_t *fb)
     free(sheet);
 }
 
-// A continuous run with scripted pokes, laid out as a grid of consecutive
-// frames. make_page.py turns it into a looping animation.
-static void render_film(uint16_t *fb)
-{
-    sheet_alloc(FILM_COLS, FILM_ROWS);
-    creature_init();
-    advance(2.0f, false, 0, 0);   // let it settle before recording
-
-    const float step = 1.0f / (float)FILM_FPS;
-    for (int i = 0; i < FILM_FRAMES; i++) {
-        float t = (float)i * step;
-
-        // Two pokes, in different places, far enough apart to see the full
-        // recoil and the slow drift back to baseline.
-        bool touched = false;
-        int tx = 0, ty = 0;
-        if (t > 1.0f && t < 1.18f)  { touched = true; tx = 245; ty = 95; }
-        if (t > 2.40f && t < 2.58f) { touched = true; tx = 80;  ty = 185; }
-
-        creature_update(step, touched, tx, ty);
-        creature_draw();
-        copy_frame(fb, i % FILM_COLS, i / FILM_COLS);
-    }
-
-    write_bmp("sim/film.bmp");
-    printf("%d %d %d %d\n", FILM_COLS, FILM_ROWS, FILM_FRAMES, FILM_FPS);
-    free(sheet);
-}
-
 int main(void)
 {
     uint16_t *fb = calloc(DISPLAY_WIDTH * DISPLAY_HEIGHT, sizeof(uint16_t));
     canvas_set_framebuffer(fb);
 
     render_stills(fb);
-    render_film(fb);
 
     free(fb);
     return 0;
