@@ -27,3 +27,9 @@ CONFIG_SPIRAM_SPEED_80M=y
 # change needed to switch between them.
 CONFIG_ESP_CONSOLE_UART_DEFAULT=y
 CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+
+# Touch: give us the raw ADC counts, not the driver's own conversion. Its
+# built-in mapping assumes the panel swings the full 0-4096, which no real
+# resistive panel does — the result is coordinates that are squashed and offset.
+# We calibrate against the actual range instead. See touch.c.
+CONFIG_XPT2046_CONVERT_ADC_TO_COORDS=n

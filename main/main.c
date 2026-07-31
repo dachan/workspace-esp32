@@ -23,6 +23,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "nvs_flash.h"
 #include "touch.h"
 
 static const char *TAG = "step0";
@@ -178,6 +179,22 @@ static void step2_touch(void)
         return;
     }
 
+    // Calibrate when there is nothing stored, or when the panel is already being
+    // held at boot — that press-to-recalibrate gesture is the recovery path once
+    // the drift AGENTS.md warns about sets in.
+    bool held_at_boot = touch_read(NULL, NULL, NULL, NULL);
+    esp_err_t loaded = touch_load_calibration();
+
+    if (loaded != ESP_OK || held_at_boot) {
+        ESP_LOGI(TAG, "  %s — running calibration",
+                 held_at_boot ? "panel held at boot" : "no stored calibration");
+        if (touch_calibrate() != ESP_OK) {
+            ESP_LOGE(TAG, "  calibration failed; coordinates will be raw ADC counts");
+        }
+    } else {
+        ESP_LOGI(TAG, "  hold the panel while resetting to recalibrate");
+    }
+
     ESP_LOGI(TAG, "  press the panel — dots follow your finger, coords go to the log");
     ESP_LOGI(TAG, "  resistive touch needs FIRM pressure; a light brush reads as nothing");
 
@@ -206,6 +223,15 @@ static void step2_touch(void)
 
 void app_main(void)
 {
+    // NVS holds the touch calibration. Erase and retry on the usual first-boot
+    // and layout-change errors rather than failing the whole bring-up.
+    esp_err_t nvs_err = nvs_flash_init();
+    if (nvs_err == ESP_ERR_NVS_NO_FREE_PAGES || nvs_err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK_WITHOUT_ABORT(nvs_flash_erase());
+        nvs_err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK_WITHOUT_ABORT(nvs_err);
+
     // A blank line and banner make the start of a boot obvious in a noisy console.
     printf("\n");
     ESP_LOGI(TAG, "==== super-tamagotchi step 0: board bring-up ====");
