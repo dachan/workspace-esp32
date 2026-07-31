@@ -2,7 +2,7 @@
 
 #include <math.h>
 
-#include "display.h"
+#include "canvas.h"
 #include "gfx.h"
 
 #define PI 3.14159265f
@@ -13,9 +13,18 @@ static uint16_t C_BG, C_BODY, C_SHADE, C_MOUTH, C_TONGUE, C_EDGE;
 
 // Where the creature sits. Everything else is expressed relative to this.
 #define BODY_CX 160.0f
-#define BODY_CY 148.0f
-#define BODY_RX 78.0f
-#define BODY_RY 80.0f
+#define BODY_CY 140.0f
+#define BODY_RX 82.0f
+#define BODY_RY 92.0f
+
+// Widens the base and narrows the crown, turning the circle into the egg-shaped
+// dome of the reference art.
+#define BODY_TAPER 0.16f
+
+// Thickness of the underside shadow, in pixels. The shadow is the lower arc of
+// the body paired with the same arc pulled inward, so its edge curves along the
+// body rather than cutting across it at an angle.
+#define SHADOW_DEPTH 20.0f
 
 typedef struct {
     // Continuous emotion. Everything visible is derived from these two.
@@ -138,35 +147,81 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
     c.gaze_y = approach(c.gaze_y, c.gaze_ty, 14.0f, dt);
 }
 
-// A tapered blade: out along the top edge to the tip, back along the bottom.
-// Used for the ear-fin and the stubby limbs.
-static void draw_blade(float bx, float by, float tipx, float tipy, float w)
+// A tapered fin. The spine is a quadratic bezier so it curves rather than
+// running straight, the width falls off as a cosine so the edges never kink, and
+// the tip is capped with a small arc — nothing on the creature is a hard corner.
+static void draw_blade(float bx, float by, float tipx, float tipy, float w, float bend)
 {
+    const int steps = 12;
+    const float tip_u = 0.88f;      // stop short of the point and cap it
+
     float dx = tipx - bx, dy = tipy - by;
     float len = sqrtf(dx * dx + dy * dy);
     if (len < 1.0f) {
         return;
     }
-    float nx = -dy / len, ny = dx / len;   // unit normal
+    // Bezier control point, pushed off the chord to curve the fin.
+    float ctlx = bx + dx * 0.5f - dy / len * bend;
+    float ctly = by + dy * 0.5f + dx / len * bend;
 
-    gfx_pt_t p[6];
-    p[0] = (gfx_pt_t){bx + nx * w, by + ny * w};
-    p[1] = (gfx_pt_t){bx + dx * 0.45f + nx * w * 0.75f, by + dy * 0.45f + ny * w * 0.75f};
-    p[2] = (gfx_pt_t){tipx, tipy};
-    p[3] = (gfx_pt_t){bx + dx * 0.45f - nx * w * 0.62f, by + dy * 0.45f - ny * w * 0.62f};
-    p[4] = (gfx_pt_t){bx - nx * w, by - ny * w};
-    p[5] = (gfx_pt_t){bx, by + w * 0.4f};
-    gfx_fill_poly_outlined(p, 6, C_BODY, C_EDGE, 3.0f);
+    gfx_pt_t p[GFX_MAX_POLY_PTS];
+    int n = 0;
+
+    float sx[steps + 1], sy[steps + 1], sw[steps + 1];
+    for (int i = 0; i <= steps; i++) {
+        float u = tip_u * (float)i / (float)steps;
+        float m = 1.0f - u;
+        sx[i] = m * m * bx + 2.0f * m * u * ctlx + u * u * tipx;
+        sy[i] = m * m * by + 2.0f * m * u * ctly + u * u * tipy;
+        sw[i] = w * cosf(u * PI * 0.5f);
+    }
+
+    // Out along one side...
+    for (int i = 0; i <= steps; i++) {
+        int j = (i == steps) ? i - 1 : i;
+        float tx = sx[j + 1 > steps ? steps : j + 1] - sx[j];
+        float ty = sy[j + 1 > steps ? steps : j + 1] - sy[j];
+        float tl = sqrtf(tx * tx + ty * ty);
+        if (tl < 0.001f) { tl = 1.0f; }
+        p[n++] = (gfx_pt_t){sx[i] - ty / tl * sw[i], sy[i] + tx / tl * sw[i]};
+    }
+    // ...round the tip...
+    {
+        float tx = tipx - sx[steps], ty = tipy - sy[steps];
+        float tl = sqrtf(tx * tx + ty * ty);
+        if (tl < 0.001f) { tl = 1.0f; }
+        float ang0 = atan2f(tx / tl, -ty / tl);
+        for (int i = 1; i < 5; i++) {
+            float a = ang0 - PI * (float)i / 5.0f;
+            p[n++] = (gfx_pt_t){sx[steps] + sinf(a) * sw[steps],
+                                sy[steps] - cosf(a) * sw[steps]};
+        }
+    }
+    // ...and back along the other.
+    for (int i = steps; i >= 0; i--) {
+        int j = (i == steps) ? i - 1 : i;
+        float tx = sx[j + 1 > steps ? steps : j + 1] - sx[j];
+        float ty = sy[j + 1 > steps ? steps : j + 1] - sy[j];
+        float tl = sqrtf(tx * tx + ty * ty);
+        if (tl < 0.001f) { tl = 1.0f; }
+        p[n++] = (gfx_pt_t){sx[i] + ty / tl * sw[i], sy[i] - tx / tl * sw[i]};
+    }
+
+    gfx_fill_poly_outlined(p, n, C_BODY, C_EDGE, 3.0f);
 }
 
 static void draw_mouth(void)
 {
-    const int teeth = 9;                       // zigzag segments per edge
-    const float half_w = 56.0f + c.smile * 4.0f;
-    const float corner_y = 126.0f - c.smile * 9.0f;
-    const float sag_top = 8.0f + c.smile * 5.0f;
-    const float depth = 18.0f + c.mouth_open * 46.0f;
-    const float tooth = 8.0f;
+    // Few, large teeth. Many small ones read as noise at this resolution rather
+    // than as a grin — the reference has about five to a side.
+    const int teeth = 5;
+    const float half_w = 66.0f + c.smile * 6.0f;
+    const float corner_y = 124.0f - c.smile * 10.0f;
+    const float sag_top = 10.0f + c.smile * 6.0f;
+    // Kept comfortably deeper than twice the tooth height so the upper and lower
+    // scallops can never meet and tangle the outline.
+    const float depth = 42.0f + c.mouth_open * 46.0f;
+    const float tooth = 13.0f;
 
     gfx_pt_t p[GFX_MAX_POLY_PTS];
     int n = 0;
@@ -174,19 +229,27 @@ static void draw_mouth(void)
     float x0 = BODY_CX - half_w + c.lean * 0.5f;
     float x1 = BODY_CX + half_w + c.lean * 0.5f;
 
-    // Upper edge, left to right, teeth pointing down into the mouth.
-    for (int i = 0; i <= teeth; i++) {
-        float u = (float)i / (float)teeth;
+    // Teeth are a raised cosine rather than a zigzag: same toothy read, but the
+    // tips and valleys are rounded instead of being sharp vertices. Sampled
+    // several times per tooth so the curve stays smooth on screen.
+    const int per_tooth = 5;
+    const int steps = teeth * per_tooth;
+
+    // Upper edge, left to right, teeth hanging down into the mouth.
+    for (int i = 0; i <= steps; i++) {
+        float u = (float)i / (float)steps;
         float x = x0 + (x1 - x0) * u;
         float base = corner_y + (126.0f + sag_top - corner_y) * sinf(PI * u);
-        p[n++] = (gfx_pt_t){x, base + ((i & 1) ? tooth : 0.0f)};
+        float bump = 0.5f - 0.5f * cosf(u * (float)teeth * 2.0f * PI);
+        p[n++] = (gfx_pt_t){x, base + tooth * bump};
     }
-    // Lower edge, right back to left, teeth pointing up.
-    for (int i = teeth; i >= 0; i--) {
-        float u = (float)i / (float)teeth;
+    // Lower edge, right back to left, teeth rising from the jaw.
+    for (int i = steps; i >= 0; i--) {
+        float u = (float)i / (float)steps;
         float x = x0 + (x1 - x0) * u;
         float base = corner_y + (126.0f + depth - corner_y) * sinf(PI * u);
-        p[n++] = (gfx_pt_t){x, base - ((i & 1) ? tooth : 0.0f)};
+        float bump = 0.5f - 0.5f * cosf(u * (float)teeth * 2.0f * PI);
+        p[n++] = (gfx_pt_t){x, base - tooth * bump};
     }
 
     gfx_fill_poly_outlined(p, n, C_MOUTH, C_EDGE, 3.0f);
@@ -213,23 +276,42 @@ void creature_draw(void)
 
     // Limbs and fin sit behind the body so their bases are hidden by it.
     draw_blade(BODY_CX - 62.0f + c.lean * 0.6f, cy - 34.0f,
-               BODY_CX - 108.0f + c.lean * 1.4f, cy - 88.0f, 13.0f);
+               BODY_CX - 108.0f + c.lean * 1.4f, cy - 88.0f, 13.0f, 10.0f);
     draw_blade(BODY_CX - 40.0f + c.lean * 0.3f, cy + ry * 0.80f,
-               BODY_CX - 58.0f, cy + ry * 1.06f, 12.0f);
+               BODY_CX - 58.0f, cy + ry * 1.06f, 12.0f, 6.0f);
     draw_blade(BODY_CX + 40.0f + c.lean * 0.3f, cy + ry * 0.80f,
-               BODY_CX + 60.0f, cy + ry * 1.04f, 12.0f);
+               BODY_CX + 60.0f, cy + ry * 1.04f, 12.0f, -6.0f);
 
-    // Body: fill the whole silhouette in the shade tone, then lay a slightly
-    // smaller, offset copy of the light tone on top. The crescent left over is
-    // the underside shadow — two fills instead of any clipping.
-    gfx_pt_t body[56];
-    int n = gfx_blob_points(body, 56, BODY_CX, cy, rx, ry,
-                            c.lean, 0.018f, c.wobble_phase);
-    gfx_fill_poly_outlined(body, n, C_SHADE, C_EDGE, 3.0f);
+    const int BODY_PTS = 56;
+    gfx_pt_t body[GFX_MAX_POLY_PTS];
+    int n = gfx_blob_points(body, BODY_PTS, BODY_CX, cy, rx, ry,
+                            c.lean, 0.018f, c.wobble_phase, BODY_TAPER);
+    gfx_fill_poly_outlined(body, n, C_BODY, C_EDGE, 3.0f);
 
-    n = gfx_blob_points(body, 56, BODY_CX + 3.0f, cy - 6.0f,
-                        rx * 0.945f, ry * 0.945f, c.lean, 0.018f, c.wobble_phase);
-    gfx_fill_poly(body, n, C_BODY);
+    // Underside shadow: the body's lower arc, closed off by the same arc pulled
+    // inward toward the centre. Both edges follow the silhouette, so the shadow
+    // curves along the body and stays symmetric — an offset second blob would
+    // instead skew the boundary in whatever direction it was offset.
+    {
+        const int half = BODY_PTS / 2;   // t in [0, PI) traces the lower half
+        gfx_pt_t sh[GFX_MAX_POLY_PTS];
+        int m = 0;
+        for (int i = 0; i <= half; i++) {
+            sh[m++] = body[i];
+        }
+        for (int i = half; i >= 0; i--) {
+            // Depth fades to nothing at the two ends, so the crescent tapers to
+            // points instead of being cut off with a blunt vertical edge.
+            float u = (float)i / (float)half;
+            float depth = SHADOW_DEPTH * sinf(PI * u);
+            float dx = body[i].x - BODY_CX, dy = body[i].y - cy;
+            float d = sqrtf(dx * dx + dy * dy);
+            float k = (d > 0.001f) ? (d - depth) / d : 0.0f;
+            if (k < 0.0f) { k = 0.0f; }
+            sh[m++] = (gfx_pt_t){BODY_CX + dx * k, cy + dy * k};
+        }
+        gfx_fill_poly(sh, m, C_SHADE);
+    }
 
     // Eyes: small dark ovals. Blink collapses height, so no separate lid shape.
     float ex = 27.0f, ey = cy - ry * 0.52f;

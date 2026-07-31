@@ -33,3 +33,8 @@ Thumbs.db
 # Keys and certificates
 *.pem
 *.key
+
+# Simulator build output
+sim/creature_sim
+sim/out.bmp
+sim/out.png

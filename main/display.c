@@ -149,15 +149,11 @@ esp_err_t display_init(void)
         return ESP_ERR_NO_MEM;
     }
     memset(s_fb, 0, fb_bytes);
+    canvas_set_framebuffer(s_fb);
     ESP_LOGI(TAG, "framebuffer: %zu KB in PSRAM at %p", fb_bytes / 1024, s_fb);
 
     ESP_RETURN_ON_ERROR(backlight_init(), TAG, "backlight");
     return ESP_OK;
-}
-
-uint16_t *display_framebuffer(void)
-{
-    return s_fb;
 }
 
 esp_err_t display_flush(void)
@@ -165,28 +161,3 @@ esp_err_t display_flush(void)
     return esp_lcd_panel_draw_bitmap(s_panel, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, s_fb);
 }
 
-void display_fill_rect(int x, int y, int w, int h, uint16_t colour)
-{
-    if (s_fb == NULL) {
-        return;
-    }
-    if (x < 0) { w += x; x = 0; }
-    if (y < 0) { h += y; y = 0; }
-    if (x + w > DISPLAY_WIDTH)  { w = DISPLAY_WIDTH - x; }
-    if (y + h > DISPLAY_HEIGHT) { h = DISPLAY_HEIGHT - y; }
-    if (w <= 0 || h <= 0) {
-        return;
-    }
-
-    for (int row = y; row < y + h; row++) {
-        uint16_t *line = s_fb + (size_t)row * DISPLAY_WIDTH + x;
-        for (int col = 0; col < w; col++) {
-            line[col] = colour;
-        }
-    }
-}
-
-void display_fill(uint16_t colour)
-{
-    display_fill_rect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, colour);
-}

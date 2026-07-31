@@ -2,7 +2,7 @@
 
 #include <math.h>
 
-#include "display.h"
+#include "canvas.h"
 
 static uint32_t s_rng = 0x1234abcdu;
 
@@ -98,23 +98,50 @@ void gfx_fill_poly_outlined(const gfx_pt_t *pts, int n, uint16_t fill,
         return;
     }
 
-    float cx = 0, cy = 0;
-    for (int i = 0; i < n; i++) {
-        cx += pts[i].x;
-        cy += pts[i].y;
+    // Offset every vertex along the average of its two adjoining edge normals.
+    //
+    // The obvious shortcut — pushing points radially away from the centroid —
+    // only holds for convex shapes. On something concave like the scalloped
+    // mouth it flings the outermost teeth into spikes, because "away from the
+    // centre" stops meaning "outward" the moment the boundary turns back on
+    // itself.
+    float area = 0.0f;
+    for (int i = 0, j = n - 1; i < n; j = i++) {
+        area += pts[j].x * pts[i].y - pts[i].x * pts[j].y;
     }
-    cx /= (float)n;
-    cy /= (float)n;
+    const float sign = (area > 0.0f) ? 1.0f : -1.0f;
 
-    // Push each point outward along its own radius from the centroid. Exact only
-    // for convex shapes, which is all the creature uses.
     gfx_pt_t big[GFX_MAX_POLY_PTS];
     for (int i = 0; i < n; i++) {
-        float dx = pts[i].x - cx, dy = pts[i].y - cy;
-        float d = sqrtf(dx * dx + dy * dy);
-        float k = (d > 0.001f) ? (d + px) / d : 1.0f;
-        big[i].x = cx + dx * k;
-        big[i].y = cy + dy * k;
+        int prev = (i + n - 1) % n, next = (i + 1) % n;
+
+        float e1x = pts[i].x - pts[prev].x, e1y = pts[i].y - pts[prev].y;
+        float e2x = pts[next].x - pts[i].x, e2y = pts[next].y - pts[i].y;
+        float l1 = sqrtf(e1x * e1x + e1y * e1y);
+        float l2 = sqrtf(e2x * e2x + e2y * e2y);
+        if (l1 < 0.0001f) { l1 = 1.0f; }
+        if (l2 < 0.0001f) { l2 = 1.0f; }
+
+        float n1x = e1y / l1 * sign, n1y = -e1x / l1 * sign;
+        float n2x = e2y / l2 * sign, n2y = -e2x / l2 * sign;
+
+        float nx = n1x + n2x, ny = n1y + n2y;
+        float nl = sqrtf(nx * nx + ny * ny);
+        if (nl < 0.0001f) {
+            nx = n1x; ny = n1y;
+        } else {
+            nx /= nl; ny /= nl;
+        }
+
+        // Miter: a sharp corner needs to travel further than px to keep the
+        // stroke an even thickness. Capped so near-reversals do not shoot off.
+        float cosang = n1x * n2x + n1y * n2y;
+        float denom = (1.0f + cosang > 0.25f) ? (1.0f + cosang) : 0.25f;
+        float miter = sqrtf(2.0f / denom);
+        if (miter > 2.2f) { miter = 2.2f; }
+
+        big[i].x = pts[i].x + nx * px * miter;
+        big[i].y = pts[i].y + ny * px * miter;
     }
 
     gfx_fill_poly(big, n, edge);
@@ -143,7 +170,7 @@ void gfx_fill_ellipse(float cx, float cy, float rx, float ry, uint16_t colour)
 }
 
 int gfx_blob_points(gfx_pt_t *out, int n, float cx, float cy, float rx, float ry,
-                    float lean, float wobble, float phase)
+                    float lean, float wobble, float phase, float taper)
 {
     if (n > GFX_MAX_POLY_PTS) {
         n = GFX_MAX_POLY_PTS;
@@ -154,7 +181,10 @@ int gfx_blob_points(gfx_pt_t *out, int n, float cx, float cy, float rx, float ry
         // run per frame, and never repeating exactly because phase drifts.
         float r = 1.0f + wobble * (sinf(3.0f * t + phase) * 0.6f
                                    + sinf(2.0f * t - phase * 0.7f) * 0.4f);
-        float x = cosf(t) * rx * r;
+        // sin(t) > 0 is the lower half, so a positive taper widens the base and
+        // narrows the crown into a dome.
+        float wide = 1.0f + taper * sinf(t);
+        float x = cosf(t) * rx * r * wide;
         float y = sinf(t) * ry * r;
         // Shear grows toward the top of the shape, so the body leans rather than
         // slides.
