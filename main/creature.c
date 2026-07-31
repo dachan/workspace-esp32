@@ -9,7 +9,7 @@
 
 // Palette lifted from the reference art: flat fills, one darker tone for the
 // underside, heavy near-black outline.
-static uint16_t C_BG, C_BODY, C_SHADE, C_MOUTH, C_TONGUE, C_EDGE, C_PUPIL;
+static uint16_t C_BG, C_BODY, C_SHADE, C_MOUTH, C_TONGUE, C_EDGE, C_PUPIL, C_FOOT;
 
 // Where the creature sits. Everything else is expressed relative to this.
 #define BODY_CX 160.0f
@@ -85,6 +85,9 @@ void creature_init(void)
     C_BG     = display_rgb(246, 244, 248);
     C_BODY   = display_rgb(186, 108, 190);
     C_SHADE  = display_rgb(148, 76, 154);
+    // A shade under the underside tone: the feet sit below the body and read
+    // as being in its shadow, which also stops them competing with the face.
+    C_FOOT   = display_rgb(132, 66, 138);
     C_MOUTH  = display_rgb(74, 38, 82);
     C_TONGUE = display_rgb(205, 145, 200);
     C_EDGE   = display_rgb(24, 14, 28);
@@ -107,6 +110,19 @@ void creature_init(void)
     c.depth_timer = 4.0f;
 }
 
+// Where the body sits on screen this frame. Shared by update and draw so that
+// hit-testing a touch and rendering can never disagree about where it is.
+static void body_frame(float *cx, float *cy, float *rx, float *ry, float *scale)
+{
+    float s = 0.66f + 0.34f * c.depth;
+    float breath = sinf(c.breathe) * 0.022f;
+    *scale = s;
+    *cx = BODY_CX;
+    *cy = BODY_CY - (1.0f - c.depth) * 30.0f + c.squash * 8.0f * s;
+    *rx = BODY_RX * s * (1.0f + breath * 0.5f + c.squash * 0.10f);
+    *ry = BODY_RY * s * (1.0f + breath - c.squash * 0.13f);
+}
+
 void creature_update(float dt, bool touched, int touch_x, int touch_y)
 {
     c.breathe += dt * 1.1f;
@@ -116,25 +132,42 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
     // Being poked is a jolt first and a feeling second. The squash and the gaze
     // snap happen on the same frame as the touch; the mood catches up after.
     if (touched) {
-        float tx = clampf((float)touch_x, 0, DISPLAY_WIDTH);
-        float ty = clampf((float)touch_y, 0, DISPLAY_HEIGHT);
-        c.gaze_tx = clampf((tx - BODY_CX) / BODY_RX, -1.0f, 1.0f);
-        c.gaze_ty = clampf((ty - BODY_CY) / BODY_RY, -1.0f, 1.0f);
+        float cx, cy, rx, ry, s;
+        body_frame(&cx, &cy, &rx, &ry, &s);
+
+        float nx = ((float)touch_x - cx) / rx;
+        float ny = ((float)touch_y - cy) / ry;
+        bool on_body = (nx * nx + ny * ny) <= 1.0f;
+
         c.saccade_timer = 0.6f;
 
-        if (!c.was_touched) {
-            c.squash += 0.5f;              // impulse on the leading edge only
-            c.arousal = clampf(c.arousal + 0.45f, 0, 1);
-            c.valence = clampf(c.valence + 0.12f, 0, 1);
-        }
-        c.arousal = clampf(c.arousal + dt * 0.35f, 0, 1);
-        c.lean = approach(c.lean, c.gaze_tx * 9.0f, 8.0f, dt);
+        if (on_body) {
+            // Touched. React physically.
+            c.gaze_tx = clampf(nx, -1.0f, 1.0f);
+            c.gaze_ty = clampf(ny, -1.0f, 1.0f);
+            c.lean = approach(c.lean, c.gaze_tx * 9.0f, 8.0f, dt);
+            c.facing_target = (c.gaze_tx > 0.0f) ? -1.0f : 1.0f;
+            c.depth_target = 1.0f;
+            c.turn_timer = 2.5f;
+            c.depth_timer = 3.0f;
 
-        // Turn away from the poke and lean in toward the viewer.
-        c.facing_target = (c.gaze_tx > 0.0f) ? -1.0f : 1.0f;
-        c.depth_target = 1.0f;
-        c.turn_timer = 2.5f;
-        c.depth_timer = 3.0f;
+            if (!c.was_touched) {
+                c.squash += 0.5f;
+                c.arousal = clampf(c.arousal + 0.45f, 0, 1);
+                c.valence = clampf(c.valence + 0.12f, 0, 1);
+            }
+            c.arousal = clampf(c.arousal + dt * 0.35f, 0, 1);
+        } else {
+            // Something happening nearby but not to it. Watch, do not flinch.
+            // Divided by a screen-sized span rather than the body radius so the
+            // look is graded by direction instead of pinning to the limit the
+            // moment the point leaves the body.
+            c.gaze_tx = clampf(((float)touch_x - cx) / 95.0f, -1.0f, 1.0f);
+            c.gaze_ty = clampf(((float)touch_y - cy) / 75.0f, -1.0f, 1.0f);
+            c.lean = approach(c.lean, c.gaze_tx * 5.0f, 5.0f, dt);
+            // Mild curiosity only — enough to widen the eyes, not to startle.
+            c.arousal = clampf(c.arousal + dt * 0.18f, 0, 1);
+        }
     } else {
         c.lean = approach(c.lean, sinf(c.breathe * 0.31f) * 3.0f, 1.5f, dt);
     }
@@ -199,7 +232,8 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
 // the tip is capped with a small arc — nothing on the creature is a hard corner.
 #define BLADE_STEPS 12
 
-static void draw_blade(float bx, float by, float tipx, float tipy, float w, float bend)
+static void draw_blade(float bx, float by, float tipx, float tipy, float w, float bend,
+                       uint16_t fill)
 {
     const int steps = BLADE_STEPS;
     const float tip_u = 0.88f;      // stop short of the point and cap it
@@ -264,7 +298,7 @@ static void draw_blade(float bx, float by, float tipx, float tipy, float w, floa
         p[n++] = (gfx_pt_t){sx[i] + tany[i] * sw[i], sy[i] - tanx[i] * sw[i]};
     }
 
-    gfx_fill_poly_outlined(p, n, C_BODY, C_EDGE, 3.0f);
+    gfx_fill_poly_outlined(p, n, fill, C_EDGE, 3.0f);
 }
 
 // `cx`/`cy` are the body centre and `s` the overall depth scale, so the mouth
@@ -342,16 +376,10 @@ void creature_draw(void)
 
     // One scale carries the whole creature, and moving away also lifts it up the
     // screen — the two cues together read as distance far more convincingly than
-    // scale alone.
-    const float s = 0.66f + 0.34f * c.depth;
-    const float cx = BODY_CX;
-
-    // Breathing scales the body very slightly; squash trades height for width so
-    // volume looks conserved when it reacts.
-    float breath = sinf(c.breathe) * 0.022f;
-    float rx = BODY_RX * s * (1.0f + breath * 0.5f + c.squash * 0.10f);
-    float ry = BODY_RY * s * (1.0f + breath - c.squash * 0.13f);
-    float cy = BODY_CY - (1.0f - c.depth) * 30.0f + c.squash * 8.0f * s;
+    // scale alone. Breathing scales the body very slightly; squash trades height
+    // for width so volume looks conserved when it reacts.
+    float cx, cy, rx, ry, s;
+    body_frame(&cx, &cy, &rx, &ry, &s);
 
     // The fin sweeps across with `facing`, passing behind the body at the
     // midpoint. Thinning it as it crosses sells the swap as a turn rather than a
@@ -361,15 +389,15 @@ void creature_draw(void)
         float w = 19.0f * s * (0.30f + 0.70f * fabsf(f));
         draw_blade(cx - f * 58.0f * s + c.lean * 0.6f, cy - 30.0f * s,
                    cx - f * 96.0f * s + c.lean * 1.4f, cy - 74.0f * s,
-                   w, f * 7.0f);
+                   w, f * 7.0f, C_BODY);
     }
 
     // Feet shift a little with the turn so the body does not look bolted down.
     float fx = c.facing * 6.0f * s;
     draw_blade(cx - 36.0f * s + fx + c.lean * 0.3f, cy + ry * 0.74f,
-               cx - 62.0f * s + fx, cy + ry * 1.00f, 17.0f * s, 7.0f);
+               cx - 62.0f * s + fx, cy + ry * 1.00f, 17.0f * s, 7.0f, C_FOOT);
     draw_blade(cx + 36.0f * s + fx + c.lean * 0.3f, cy + ry * 0.74f,
-               cx + 64.0f * s + fx, cy + ry * 0.98f, 17.0f * s, -7.0f);
+               cx + 64.0f * s + fx, cy + ry * 0.98f, 17.0f * s, -7.0f, C_FOOT);
 
     const int BODY_PTS = 56;
     static gfx_pt_t body[GFX_MAX_POLY_PTS];
@@ -405,8 +433,8 @@ void creature_draw(void)
     // Eyes: small dark ovals. Blink collapses height, so no separate lid shape.
     // They slide with the turn, and the trailing one narrows as it goes round.
     float ey = cy - ry * 0.52f;
-    float gx = (c.gaze_x * 4.5f + c.lean * 0.6f + c.facing * 9.0f) * s;
-    float gy = c.gaze_y * 3.0f * s;
+    float gx = (c.gaze_x * 3.0f + c.lean * 0.6f + c.facing * 9.0f) * s;
+    float gy = c.gaze_y * 2.0f * s;
     for (int i = 0; i < 2; i++) {
         float side = (i == 0) ? -1.0f : 1.0f;
         float squeeze = 1.0f - 0.35f * fabsf(c.facing) * ((side * c.facing > 0) ? 1.0f : 0.0f);
@@ -418,7 +446,11 @@ void creature_draw(void)
         // consistent light. It rides the blink with the eye, and disappears
         // entirely once the lid is nearly shut rather than sitting on a slit.
         if (c.eye_open > 0.45f) {
-            gfx_fill_ellipse(ex + erx * 0.30f + c.facing * s, ey + gy - ery * 0.32f,
+            // Tracking happens mostly here rather than by sliding the whole
+            // eye: a pupil moving inside a fixed eye is what reads as looking
+            // at something.
+            gfx_fill_ellipse(ex + erx * 0.30f + c.facing * s + c.gaze_x * erx * 0.34f,
+                             ey + gy - ery * 0.32f + c.gaze_y * ery * 0.26f,
                              erx * 0.42f, ery * 0.34f, C_PUPIL);
         }
     }
