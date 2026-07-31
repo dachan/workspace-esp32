@@ -42,9 +42,8 @@ typedef struct {
     float eye_open;
     float gaze_x, gaze_y;
 
-    // `facing` sweeps the fin horizontally: at 0 it is directly behind the
-    // body and hidden, which reads as facing the viewer, and it emerges on
-    // whichever side the creature has turned away from.
+    // `facing` is the signed Y turn: at 0 the tail is behind the body and
+    // hidden; away from 0 it emerges opposite the look direction.
     float facing, facing_target;
     float turn_timer;
 
@@ -145,15 +144,19 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
             // Touched. React physically.
             c.gaze_tx = clampf(nx, -1.0f, 1.0f);
             c.gaze_ty = clampf(ny, -1.0f, 1.0f);
-            c.lean = approach(c.lean, c.gaze_tx * 9.0f, 8.0f, dt);
-            c.facing_target = (c.gaze_tx > 0.0f) ? -1.0f : 1.0f;
+            c.lean = approach(c.lean, c.gaze_tx * 11.0f, 9.5f, dt);
+            if (fabsf(c.gaze_tx) > 0.08f) {
+                // Positive facing is looking right. The tail is drawn at
+                // `cx - facing * …`, keeping it on the opposite side.
+                c.facing_target = (c.gaze_tx > 0.0f) ? 1.0f : -1.0f;
+            }
             c.turn_timer = 2.5f;
 
             if (!c.was_on_body) {
                 // An impulse into a damped spring is smooth from the first
                 // frame, then gives a tiny elastic rebound as it settles.
-                c.squash_velocity += 7.0f;
-                c.arousal = clampf(c.arousal + 0.45f, 0, 1);
+                c.squash_velocity += 9.0f;
+                c.arousal = clampf(c.arousal + 0.50f, 0, 1);
                 c.valence = clampf(c.valence + 0.12f, 0, 1);
             }
             c.arousal = clampf(c.arousal + dt * 0.35f, 0, 1);
@@ -165,6 +168,10 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
             c.gaze_tx = clampf(((float)touch_x - cx) / 95.0f, -1.0f, 1.0f);
             c.gaze_ty = clampf(((float)touch_y - cy) / 75.0f, -1.0f, 1.0f);
             c.lean = approach(c.lean, c.gaze_tx * 5.0f, 5.0f, dt);
+            if (fabsf(c.gaze_tx) > 0.08f) {
+                c.facing_target = (c.gaze_tx > 0.0f) ? 1.0f : -1.0f;
+                c.turn_timer = 2.5f;
+            }
             // Mild curiosity only — enough to widen the eyes, not to startle.
             c.arousal = clampf(c.arousal + dt * 0.18f, 0, 1);
         }
@@ -306,72 +313,94 @@ static void draw_blade(float bx, float by, float tipx, float tipy, float w, floa
 // remains correctly attached when the body breathes or squashes.
 static void draw_mouth(float cx, float cy, float s)
 {
-    const int teeth = 4;
     const float turn = 1.0f - 0.16f * fabsf(c.facing);
-    const float half_w = (66.0f + c.smile * 6.0f) * s * turn;
-    const float m0 = cy - 14.0f * s;
-    const float corner_y = m0 - (2.0f + c.smile * 10.0f) * s;
-    const float sag_top = (10.0f + c.smile * 6.0f) * s;
-    const float depth = (42.0f + c.mouth_open * 46.0f) * s;
-    const float tooth = 9.0f * s;
     float mx = cx + (c.lean * 0.5f + c.facing * 7.0f) * s;
-    float x0 = mx - half_w, x1 = mx + half_w;
-    const int steps = teeth * 9;
-    // Keep the upper and lower scallops well clear of each other at the two
-    // ends, rather than relying on an overlaid patch to hide a collision.
-    const float end_inset = 0.10f;
+
+    const int teeth = 4;
+    const int top_steps = teeth * 10;
+    const int side_steps = 12;
+    const int bowl_steps = 32;
+    const float top_rx = (61.0f + c.smile * 7.0f) * s * turn;
+    const float bowl_rx = top_rx - 8.0f * s;
+    const float top_y = cy - 15.0f * s;
+    const float bowl_y = top_y + (17.0f + c.mouth_open * 4.0f) * s;
+    const float bowl_depth = (28.0f + c.mouth_open * 18.0f) * s;
+    const float tooth_depth = 8.5f * s;
+    const float sag = (3.0f + c.smile * 2.0f) * s;
+    const float corner_dx = 8.0f * s;
+    const float side_tangent = 12.0f * s;
+
     static gfx_pt_t p[GFX_MAX_POLY_PTS];
     int n = 0;
 
-    for (int i = 0; i <= steps; i++) {
-        float u = end_inset + (1.0f - 2.0f * end_inset) * (float)i / (float)steps;
-        float x = x0 + (x1 - x0) * u;
-        float base = corner_y + (m0 + sag_top - corner_y) * sinf(PI * u);
-        float raised = 0.5f - 0.5f * cosf(u * (float)teeth * 2.0f * PI);
-        p[n++] = (gfx_pt_t){x, base + tooth * raised * raised};
+    // Four scalloped teeth across the top. At each end the tooth term has zero
+    // slope, so the remaining tangent is known and can be matched by the side.
+    for (int i = 0; i <= top_steps; i++) {
+        float q = (float)i / (float)top_steps;
+        float u = q * 2.0f - 1.0f;
+        float raised = 0.5f - 0.5f * cosf(q * (float)teeth * 2.0f * PI);
+        float arch = 1.0f - u * u;
+        float y = top_y + sag * arch * arch
+                        + tooth_depth * raised * raised;
+        p[n++] = (gfx_pt_t){mx + u * top_rx, y};
     }
 
-    // Round cap on the right: an actual semicircle joining the upper and lower
-    // contours, rather than two lines meeting at a pointed corner.
+    // The cubic side leaves the top along its exact tangent and reaches the
+    // bowl vertically. Matching both tangents removes the visible corner.
     gfx_pt_t right_top = p[n - 1];
-    float right_u = 1.0f - end_inset;
-    float right_x = x0 + (x1 - x0) * right_u;
-    float right_base = corner_y + (m0 + depth - corner_y) * sinf(PI * right_u);
-    float right_raised = 0.5f - 0.5f * cosf(right_u * (float)teeth * 2.0f * PI);
-    gfx_pt_t right_bottom = {right_x, right_base - tooth * right_raised * right_raised};
-    float cap_cy = (right_top.y + right_bottom.y) * 0.5f;
-    float cap_ry = (right_bottom.y - right_top.y) * 0.5f;
-    float cap_rx = 4.0f * s;
-    const int cap_steps = 6;
-    for (int i = 1; i <= cap_steps; i++) {
-        float a = -PI * 0.5f + PI * (float)i / (float)cap_steps;
-        p[n++] = (gfx_pt_t){right_x + cap_rx * cosf(a), cap_cy + cap_ry * sinf(a)};
+    gfx_pt_t right_bowl = {mx + bowl_rx, bowl_y};
+    gfx_pt_t right_c1 = {right_top.x + corner_dx, right_top.y};
+    gfx_pt_t right_c2 = {right_bowl.x, right_bowl.y - side_tangent};
+    for (int i = 1; i <= side_steps; i++) {
+        float t = (float)i / (float)side_steps;
+        float v = 1.0f - t;
+        p[n++] = (gfx_pt_t){
+            v * v * v * right_top.x
+                + 3.0f * v * v * t * right_c1.x
+                + 3.0f * v * t * t * right_c2.x
+                + t * t * t * right_bowl.x,
+            v * v * v * right_top.y
+                + 3.0f * v * v * t * right_c1.y
+                + 3.0f * v * t * t * right_c2.y
+                + t * t * t * right_bowl.y,
+        };
     }
 
-    for (int i = steps - 1; i >= 0; i--) {
-        float u = end_inset + (1.0f - 2.0f * end_inset) * (float)i / (float)steps;
-        float x = x0 + (x1 - x0) * u;
-        float base = corner_y + (m0 + depth - corner_y) * sinf(PI * u);
-        float raised = 0.5f - 0.5f * cosf(u * (float)teeth * 2.0f * PI);
-        p[n++] = (gfx_pt_t){x, base - tooth * raised * raised};
+    // One uninterrupted elliptical bowl, right to left.
+    for (int i = 1; i <= bowl_steps; i++) {
+        float a = PI * (float)i / (float)bowl_steps;
+        p[n++] = (gfx_pt_t){
+            mx + bowl_rx * cosf(a),
+            bowl_y + bowl_depth * sinf(a),
+        };
     }
 
-    // Mirror the rounded cap on the left; its final point is the first upper
-    // point, supplied by the polygon close.
-    gfx_pt_t left_bottom = p[n - 1];
+    // Mirror the tangent-matched side on the left. The final curve sample is
+    // omitted because the polygon close supplies the shared top point.
+    gfx_pt_t left_bowl = p[n - 1];
     gfx_pt_t left_top = p[0];
-    cap_cy = (left_top.y + left_bottom.y) * 0.5f;
-    cap_ry = (left_bottom.y - left_top.y) * 0.5f;
-    float left_x = left_top.x;
-    for (int i = 1; i < cap_steps; i++) {
-        float a = PI * 0.5f + PI * (float)i / (float)cap_steps;
-        p[n++] = (gfx_pt_t){left_x + cap_rx * cosf(a), cap_cy + cap_ry * sinf(a)};
+    gfx_pt_t left_c1 = {left_bowl.x, left_bowl.y - side_tangent};
+    gfx_pt_t left_c2 = {left_top.x - corner_dx, left_top.y};
+    for (int i = 1; i < side_steps; i++) {
+        float t = (float)i / (float)side_steps;
+        float v = 1.0f - t;
+        p[n++] = (gfx_pt_t){
+            v * v * v * left_bowl.x
+                + 3.0f * v * v * t * left_c1.x
+                + 3.0f * v * t * t * left_c2.x
+                + t * t * t * left_top.x,
+            v * v * v * left_bowl.y
+                + 3.0f * v * v * t * left_c1.y
+                + 3.0f * v * t * t * left_c2.y
+                + t * t * t * left_top.y,
+        };
     }
+
     gfx_fill_poly_outlined(p, n, C_MOUTH, C_EDGE, 2.0f * s);
 
     if (c.mouth_open > 0.32f) {
         float t = (c.mouth_open - 0.32f) / 0.68f;
-        gfx_fill_ellipse(mx - 6.0f * s, m0 + depth * 0.62f,
+        gfx_fill_ellipse(mx - 4.0f * s, bowl_y + bowl_depth * 0.58f,
                          (26.0f * t + 10.0f) * s * turn, (15.0f * t + 5.0f) * s,
                          C_TONGUE);
     }
@@ -387,9 +416,9 @@ void creature_draw(void)
     float cx, cy, rx, ry, s;
     body_frame(&cx, &cy, &rx, &ry, &s);
 
-    // The fin sweeps across with `facing`, passing behind the body at the
-    // midpoint. Thinning it as it crosses sells the swap as a turn rather than a
-    // teleport, since an edge-on fin should almost vanish.
+    // The tail sweeps to the side opposite `facing`, passing behind the body at
+    // the midpoint. Thinning it as it crosses sells the Y turn rather than a
+    // teleport, since an edge-on tail should almost vanish.
     {
         float f = c.facing;
         float w = 19.0f * s * (0.30f + 0.70f * fabsf(f));
