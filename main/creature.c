@@ -9,7 +9,7 @@
 
 // Palette lifted from the reference art: flat fills, one darker tone for the
 // underside, heavy near-black outline.
-static uint16_t C_BG, C_BODY, C_SHADE, C_MOUTH, C_TONGUE, C_EDGE;
+static uint16_t C_BG, C_BODY, C_SHADE, C_MOUTH, C_TONGUE, C_EDGE, C_PUPIL;
 
 // Where the creature sits. Everything else is expressed relative to this.
 #define BODY_CX 160.0f
@@ -40,6 +40,14 @@ typedef struct {
     float smile;
     float eye_open;
     float gaze_x, gaze_y;
+
+    // Cheap pseudo-depth. `facing` sweeps the fin horizontally: at 0 it is
+    // directly behind the body and hidden, which reads as facing the viewer, and
+    // it emerges on whichever side the creature has turned away from. `depth`
+    // is 0 far / 1 near and drives one overall scale.
+    float facing, facing_target;
+    float depth, depth_target;
+    float turn_timer, depth_timer;
 
     // Blink and saccade timers. Both intervals are randomised every time: a
     // fixed-period blink reads as a machine immediately.
@@ -72,6 +80,7 @@ void creature_init(void)
     C_MOUTH  = display_rgb(74, 38, 82);
     C_TONGUE = display_rgb(205, 145, 200);
     C_EDGE   = display_rgb(24, 14, 28);
+    C_PUPIL  = display_rgb(255, 255, 255);
 
     c.valence = 0.6f;
     c.arousal = 0.25f;
@@ -80,6 +89,10 @@ void creature_init(void)
     c.smile = 0.6f;
     c.blink_timer = 2.0f;
     c.saccade_timer = 1.0f;
+    c.facing = c.facing_target = 1.0f;
+    c.depth = c.depth_target = 0.85f;
+    c.turn_timer = 3.0f;
+    c.depth_timer = 4.0f;
 }
 
 void creature_update(float dt, bool touched, int touch_x, int touch_y)
@@ -104,10 +117,32 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
         }
         c.arousal = clampf(c.arousal + dt * 0.35f, 0, 1);
         c.lean = approach(c.lean, c.gaze_tx * 9.0f, 8.0f, dt);
+
+        // Turn away from the poke and lean in toward the viewer.
+        c.facing_target = (c.gaze_tx > 0.0f) ? -1.0f : 1.0f;
+        c.depth_target = 1.0f;
+        c.turn_timer = 2.5f;
+        c.depth_timer = 3.0f;
     } else {
         c.lean = approach(c.lean, sinf(c.breathe * 0.31f) * 3.0f, 1.5f, dt);
     }
     c.was_touched = touched;
+
+    // --- idle turning and drifting nearer / further ----------------------
+    // Both intervals randomised, like the blink: anything on a fixed period
+    // starts to read as a mechanism rather than a creature.
+    c.turn_timer -= dt;
+    if (c.turn_timer <= 0.0f) {
+        c.facing_target = (gfx_randf() < 0.5f) ? -1.0f : 1.0f;
+        c.turn_timer = 2.5f + gfx_randf() * 6.0f - c.arousal * 1.5f;
+    }
+    c.depth_timer -= dt;
+    if (c.depth_timer <= 0.0f) {
+        c.depth_target = 0.18f + gfx_randf() * 0.82f;
+        c.depth_timer = 3.0f + gfx_randf() * 7.0f;
+    }
+    c.facing = approach(c.facing, c.facing_target, 2.2f + c.arousal * 2.0f, dt);
+    c.depth = approach(c.depth, c.depth_target, 0.8f, dt);
 
     // --- cognition layer: slow drift back to baseline --------------------
     c.arousal = approach(c.arousal, 0.22f, 0.35f, dt);
@@ -220,56 +255,72 @@ static void draw_blade(float bx, float by, float tipx, float tipy, float w, floa
     gfx_fill_poly_outlined(p, n, C_BODY, C_EDGE, 3.0f);
 }
 
-static void draw_mouth(void)
+// `cx`/`cy` are the body centre and `s` the overall depth scale, so the mouth
+// tracks the creature as it moves nearer and further rather than sitting at
+// fixed screen coordinates.
+static void draw_mouth(float cx, float cy, float s)
 {
     // Few, large teeth. Many small ones read as noise at this resolution rather
     // than as a grin — the reference has about five to a side.
-    const int teeth = 5;
-    const float half_w = 66.0f + c.smile * 6.0f;
-    const float corner_y = 124.0f - c.smile * 10.0f;
-    const float sag_top = 10.0f + c.smile * 6.0f;
+    const int teeth = 4;
+    // Turning narrows the grin, the same foreshortening a real turn would give.
+    const float turn = 1.0f - 0.16f * fabsf(c.facing);
+    const float half_w = (66.0f + c.smile * 6.0f) * s * turn;
+    const float m0 = cy - 14.0f * s;                  // mouth reference line
+    const float corner_y = m0 - (2.0f + c.smile * 10.0f) * s;
+    const float sag_top = (10.0f + c.smile * 6.0f) * s;
     // Kept comfortably deeper than twice the tooth height so the upper and lower
     // scallops can never meet and tangle the outline.
-    const float depth = 42.0f + c.mouth_open * 46.0f;
-    const float tooth = 13.0f;
+    const float depth = (42.0f + c.mouth_open * 46.0f) * s;
+    const float tooth = 9.0f * s;
 
     static gfx_pt_t p[GFX_MAX_POLY_PTS];
     int n = 0;
 
-    float x0 = BODY_CX - half_w + c.lean * 0.5f;
-    float x1 = BODY_CX + half_w + c.lean * 0.5f;
+    float mx = cx + (c.lean * 0.5f + c.facing * 7.0f) * s;
+    float x0 = mx - half_w;
+    float x1 = mx + half_w;
 
     // Teeth are a raised cosine rather than a zigzag: same toothy read, but the
     // tips and valleys are rounded instead of being sharp vertices. Sampled
     // several times per tooth so the curve stays smooth on screen.
-    const int per_tooth = 5;
+    const int per_tooth = 9;
     const int steps = teeth * per_tooth;
+
+    // The two edges are sampled just inside the ends rather than all the way to
+    // them. Meeting exactly would make each corner a cusp, where the outline
+    // offset has no well-defined direction and throws a thin spike across the
+    // face; a few pixels of separation turns each corner into a short rounded
+    // edge instead.
+    const float end_inset = 0.035f;
 
     // Upper edge, left to right, teeth hanging down into the mouth.
     for (int i = 0; i <= steps; i++) {
-        float u = (float)i / (float)steps;
+        float u = end_inset + (1.0f - 2.0f * end_inset) * (float)i / (float)steps;
         float x = x0 + (x1 - x0) * u;
-        float base = corner_y + (126.0f + sag_top - corner_y) * sinf(PI * u);
-        float bump = 0.5f - 0.5f * cosf(u * (float)teeth * 2.0f * PI);
+        float base = corner_y + (m0 + sag_top - corner_y) * sinf(PI * u);
+        float raised = 0.5f - 0.5f * cosf(u * (float)teeth * 2.0f * PI);
+        float bump = raised * raised;
         p[n++] = (gfx_pt_t){x, base + tooth * bump};
     }
     // Lower edge, right back to left, teeth rising from the jaw.
     for (int i = steps; i >= 0; i--) {
-        float u = (float)i / (float)steps;
+        float u = end_inset + (1.0f - 2.0f * end_inset) * (float)i / (float)steps;
         float x = x0 + (x1 - x0) * u;
-        float base = corner_y + (126.0f + depth - corner_y) * sinf(PI * u);
-        float bump = 0.5f - 0.5f * cosf(u * (float)teeth * 2.0f * PI);
+        float base = corner_y + (m0 + depth - corner_y) * sinf(PI * u);
+        float raised = 0.5f - 0.5f * cosf(u * (float)teeth * 2.0f * PI);
+        float bump = raised * raised;
         p[n++] = (gfx_pt_t){x, base - tooth * bump};
     }
 
-    gfx_fill_poly_outlined(p, n, C_MOUTH, C_EDGE, 3.0f);
+    gfx_fill_poly_outlined(p, n, C_MOUTH, C_EDGE, 3.0f * s);
 
     // Tongue, only once the mouth is open enough to see into.
     if (c.mouth_open > 0.32f) {
         float t = (c.mouth_open - 0.32f) / 0.68f;
-        gfx_fill_ellipse(BODY_CX + c.lean * 0.5f - 6.0f,
-                         126.0f + depth * 0.62f,
-                         26.0f * t + 10.0f, 15.0f * t + 5.0f, C_TONGUE);
+        gfx_fill_ellipse(mx - 6.0f * s, m0 + depth * 0.62f,
+                         (26.0f * t + 10.0f) * s * turn, (15.0f * t + 5.0f) * s,
+                         C_TONGUE);
     }
 }
 
@@ -277,26 +328,42 @@ void creature_draw(void)
 {
     display_fill(C_BG);
 
+    // One scale carries the whole creature, and moving away also lifts it up the
+    // screen — the two cues together read as distance far more convincingly than
+    // scale alone.
+    const float s = 0.66f + 0.34f * c.depth;
+    const float cx = BODY_CX;
+
     // Breathing scales the body very slightly; squash trades height for width so
     // volume looks conserved when it reacts.
     float breath = sinf(c.breathe) * 0.022f;
-    float rx = BODY_RX * (1.0f + breath * 0.5f + c.squash * 0.10f);
-    float ry = BODY_RY * (1.0f + breath - c.squash * 0.13f);
-    float cy = BODY_CY + c.squash * 8.0f;
+    float rx = BODY_RX * s * (1.0f + breath * 0.5f + c.squash * 0.10f);
+    float ry = BODY_RY * s * (1.0f + breath - c.squash * 0.13f);
+    float cy = BODY_CY - (1.0f - c.depth) * 30.0f + c.squash * 8.0f * s;
 
-    // Limbs and fin sit behind the body so their bases are hidden by it.
-    draw_blade(BODY_CX - 58.0f + c.lean * 0.6f, cy - 30.0f,
-               BODY_CX - 96.0f + c.lean * 1.4f, cy - 74.0f, 19.0f, 7.0f);
-    draw_blade(BODY_CX - 36.0f + c.lean * 0.3f, cy + ry * 0.74f,
-               BODY_CX - 62.0f, cy + ry * 1.00f, 17.0f, 7.0f);
-    draw_blade(BODY_CX + 36.0f + c.lean * 0.3f, cy + ry * 0.74f,
-               BODY_CX + 64.0f, cy + ry * 0.98f, 17.0f, -7.0f);
+    // The fin sweeps across with `facing`, passing behind the body at the
+    // midpoint. Thinning it as it crosses sells the swap as a turn rather than a
+    // teleport, since an edge-on fin should almost vanish.
+    {
+        float f = c.facing;
+        float w = 19.0f * s * (0.30f + 0.70f * fabsf(f));
+        draw_blade(cx - f * 58.0f * s + c.lean * 0.6f, cy - 30.0f * s,
+                   cx - f * 96.0f * s + c.lean * 1.4f, cy - 74.0f * s,
+                   w, f * 7.0f);
+    }
+
+    // Feet shift a little with the turn so the body does not look bolted down.
+    float fx = c.facing * 6.0f * s;
+    draw_blade(cx - 36.0f * s + fx + c.lean * 0.3f, cy + ry * 0.74f,
+               cx - 62.0f * s + fx, cy + ry * 1.00f, 17.0f * s, 7.0f);
+    draw_blade(cx + 36.0f * s + fx + c.lean * 0.3f, cy + ry * 0.74f,
+               cx + 64.0f * s + fx, cy + ry * 0.98f, 17.0f * s, -7.0f);
 
     const int BODY_PTS = 56;
     static gfx_pt_t body[GFX_MAX_POLY_PTS];
-    int n = gfx_blob_points(body, BODY_PTS, BODY_CX, cy, rx, ry,
+    int n = gfx_blob_points(body, BODY_PTS, cx, cy, rx, ry,
                             c.lean, 0.018f, c.wobble_phase, BODY_TAPER);
-    gfx_fill_poly_outlined(body, n, C_BODY, C_EDGE, 3.0f);
+    gfx_fill_poly_outlined(body, n, C_BODY, C_EDGE, 3.0f * s);
 
     // Underside shadow: the body's lower arc, closed off by the same arc pulled
     // inward toward the centre. Both edges follow the silhouette, so the shadow
@@ -313,21 +380,36 @@ void creature_draw(void)
             // Depth fades to nothing at the two ends, so the crescent tapers to
             // points instead of being cut off with a blunt vertical edge.
             float u = (float)i / (float)half;
-            float depth = SHADOW_DEPTH * sinf(PI * u);
-            float dx = body[i].x - BODY_CX, dy = body[i].y - cy;
-            float d = sqrtf(dx * dx + dy * dy);
-            float k = (d > 0.001f) ? (d - depth) / d : 0.0f;
+            float d = SHADOW_DEPTH * s * sinf(PI * u);
+            float dx = body[i].x - cx, dy = body[i].y - cy;
+            float dd = sqrtf(dx * dx + dy * dy);
+            float k = (dd > 0.001f) ? (dd - d) / dd : 0.0f;
             if (k < 0.0f) { k = 0.0f; }
-            sh[m++] = (gfx_pt_t){BODY_CX + dx * k, cy + dy * k};
+            sh[m++] = (gfx_pt_t){cx + dx * k, cy + dy * k};
         }
         gfx_fill_poly(sh, m, C_SHADE);
     }
 
     // Eyes: small dark ovals. Blink collapses height, so no separate lid shape.
-    float ex = 27.0f, ey = cy - ry * 0.52f;
-    float gx = c.gaze_x * 4.5f + c.lean * 0.6f, gy = c.gaze_y * 3.0f;
-    gfx_fill_ellipse(BODY_CX - ex + gx, ey + gy, 6.5f, 9.0f * c.eye_open, C_EDGE);
-    gfx_fill_ellipse(BODY_CX + ex + gx, ey + gy, 6.5f, 9.0f * c.eye_open, C_EDGE);
+    // They slide with the turn, and the trailing one narrows as it goes round.
+    float ey = cy - ry * 0.52f;
+    float gx = (c.gaze_x * 4.5f + c.lean * 0.6f + c.facing * 9.0f) * s;
+    float gy = c.gaze_y * 3.0f * s;
+    for (int i = 0; i < 2; i++) {
+        float side = (i == 0) ? -1.0f : 1.0f;
+        float squeeze = 1.0f - 0.35f * fabsf(c.facing) * ((side * c.facing > 0) ? 1.0f : 0.0f);
+        float ex = cx + side * 27.0f * s + gx;
+        float erx = 6.5f * s * squeeze, ery = 9.0f * s * c.eye_open;
+        gfx_fill_ellipse(ex, ey + gy, erx, ery, C_EDGE);
 
-    draw_mouth();
+        // Pupil highlight, offset up and toward the turn so it catches a
+        // consistent light. It rides the blink with the eye, and disappears
+        // entirely once the lid is nearly shut rather than sitting on a slit.
+        if (c.eye_open > 0.45f) {
+            gfx_fill_ellipse(ex + erx * 0.30f + c.facing * s, ey + gy - ery * 0.32f,
+                             erx * 0.42f, ery * 0.34f, C_PUPIL);
+        }
+    }
+
+    draw_mouth(cx, cy, s);
 }

@@ -143,10 +143,12 @@ void gfx_fill_poly_outlined(const gfx_pt_t *pts, int n, uint16_t fill,
         float cosang = n1x * n2x + n1y * n2y;
         float denom = (1.0f + cosang > 0.25f) ? (1.0f + cosang) : 0.25f;
         float miter = sqrtf(2.0f / denom);
-        // Kept tight: the mouth ends in a near-degenerate point where its
-        // upper and lower edges meet, and a generous mitre turns that into a
-        // spike shooting out past the face.
-        if (miter > 1.35f) { miter = 1.35f; }
+        // No mitre extension at all. Its purpose is to keep the outline an even
+        // thickness around a corner, but the mouth ends in a cusp where its
+        // upper and lower edges meet, and any extension there becomes a thin
+        // spike shooting out across the face. Corners come out marginally
+        // thinner instead, which is invisible; the spikes were not.
+        if (miter > 1.0f) { miter = 1.0f; }
 
         big[i].x = pts[i].x + nx * px * miter;
         big[i].y = pts[i].y + ny * px * miter;
