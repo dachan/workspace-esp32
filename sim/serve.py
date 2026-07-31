@@ -38,14 +38,36 @@ BINARY = os.path.join(ROOT, "sim", "creature_live")
 _lock = threading.Lock()
 _proc = None
 _next_frame = 0.0
+_binary_mtime = 0.0
 
 
 def start_creature():
-    global _proc
+    global _proc, _binary_mtime
     if not os.path.exists(BINARY):
         sys.exit(f"{BINARY} not found — run ./sim/run.sh first")
+    if _proc is not None:
+        _proc.terminate()
+        _proc.wait()
+    _binary_mtime = os.path.getmtime(BINARY)
     _proc = subprocess.Popen([BINARY], stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE, bufsize=0)
+
+
+def reload_if_rebuilt():
+    """Picks up a rebuild without needing the server restarted.
+
+    The creature runs as a long-lived subprocess, so recompiling while the server
+    is up leaves it happily serving the old code — which looks exactly like a
+    change that did not work, and wastes a lot of time before anyone suspects the
+    tooling instead of the edit.
+    """
+    try:
+        mtime = os.path.getmtime(BINARY)
+    except OSError:
+        return
+    if mtime != _binary_mtime:
+        print("binary changed — reloading creature")
+        start_creature()
 
 
 def step(touched, x, y):
@@ -56,6 +78,7 @@ def step(touched, x, y):
     """
     global _next_frame
     with _lock:
+        reload_if_rebuilt()
         now = time.monotonic()
         if now < _next_frame:
             time.sleep(_next_frame - now)
