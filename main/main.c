@@ -108,7 +108,13 @@ void app_main(void)
     report_chip();
     bool psram_ok = report_psram();
 
-    ESP_LOGI(TAG, "heap free : %" PRIu32 " KB internal", esp_get_free_heap_size() / 1024);
+    // esp_get_free_heap_size() counts PSRAM too once it joins the allocator, so it
+    // reports ~8.5MB and reads as internal RAM at a glance. Internal is the scarce
+    // pool and the one worth watching — ask for it explicitly.
+    ESP_LOGI(TAG, "heap free : %zu KB internal, %zu KB total (internal + PSRAM)",
+             heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024,
+             heap_caps_get_free_size(MALLOC_CAP_DEFAULT) / 1024);
+    ESP_LOGI(TAG, "cpu       : %d MHz configured", CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ);
 
     // 320x240x16bpp = 150KB per framebuffer. Sanity-check the render budget now,
     // while it is cheap to discover a problem.

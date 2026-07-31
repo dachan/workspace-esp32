@@ -4,6 +4,11 @@
 
 CONFIG_IDF_TARGET="esp32s3"
 
+# 240MHz, not the 160MHz default. This device has to render an animated creature
+# and run audio DSP within a ~200ms reflex budget; the headroom is worth the mA,
+# and the screen-off doze state is where power actually gets saved.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
 # 16MB flash
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
