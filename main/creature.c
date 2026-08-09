@@ -41,6 +41,9 @@ typedef struct {
     float smile;
     float eye_open;
     float gaze_x, gaze_y;
+    float tap_x, tap_y;
+    float tap_pulse;
+    bool tap_on_body;
 
     // `facing` is the signed Y turn: at 0 the tail is behind the body and
     // hidden; away from 0 it emerges opposite the look direction.
@@ -54,6 +57,7 @@ typedef struct {
     float gaze_tx, gaze_ty;
 
     bool was_on_body;
+    bool was_touched;
 } creature_t;
 
 static creature_t c;
@@ -100,6 +104,7 @@ void creature_init(void)
     c.eye_open = 1.0f;
     c.mouth_open = 0.35f;
     c.smile = 0.6f;
+    c.tap_pulse = 0.0f;
     c.blink_timer = 2.0f;
     c.saccade_timer = 1.0f;
     c.facing = c.facing_target = 1.0f;
@@ -121,6 +126,15 @@ static void body_frame(float *cx, float *cy, float *rx, float *ry, float *scale)
     *ry = BODY_RY * s * (1.0f + breath - c.squash * 0.13f);
 }
 
+bool creature_contains_point(int x, int y)
+{
+    float cx, cy, rx, ry, scale;
+    body_frame(&cx, &cy, &rx, &ry, &scale);
+    float nx = ((float)x - cx) / rx;
+    float ny = ((float)y - cy) / ry;
+    return (nx * nx + ny * ny) <= 1.0f;
+}
+
 void creature_update(float dt, bool touched, int touch_x, int touch_y)
 {
     c.breathe += dt * 1.1f;
@@ -129,16 +143,24 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
     // --- reflex layer: immediate, no decisions ---------------------------
     // Being poked is a jolt first and a feeling second. Gaze has a fast target
     // response; the body carries the physical response through a spring.
-    bool on_body = false;
+    bool on_body = touched && creature_contains_point(touch_x, touch_y);
     if (touched) {
         float cx, cy, rx, ry, s;
         body_frame(&cx, &cy, &rx, &ry, &s);
 
         float nx = ((float)touch_x - cx) / rx;
         float ny = ((float)touch_y - cy) / ry;
-        on_body = (nx * nx + ny * ny) <= 1.0f;
 
         c.saccade_timer = 0.6f;
+
+        // The visual contact response belongs to the panel, so it appears for
+        // every new touch — whether it lands on the creature or the backdrop.
+        if (!c.was_touched) {
+            c.tap_x = (float)touch_x;
+            c.tap_y = (float)touch_y;
+            c.tap_pulse = 1.0f;
+            c.tap_on_body = on_body;
+        }
 
         if (on_body) {
             // Touched. React physically.
@@ -179,6 +201,9 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
         c.lean = approach(c.lean, sinf(c.breathe * 0.31f) * 3.0f, 1.5f, dt);
     }
     c.was_on_body = on_body;
+    c.was_touched = touched;
+    c.tap_pulse -= dt * 3.4f;
+    if (c.tap_pulse < 0.0f) { c.tap_pulse = 0.0f; }
 
     // --- idle turning -----------------------------------------------------
     // The interval is randomised like the blink: a fixed period starts to read
@@ -241,7 +266,7 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
 #define BLADE_STEPS 12
 
 static void draw_blade(float bx, float by, float tipx, float tipy, float w, float bend,
-                       uint16_t fill)
+                       uint16_t fill, bool outlined, float lower_bias)
 {
     const int steps = BLADE_STEPS;
     const float tip_u = 0.88f;      // stop short of the point and cap it
@@ -281,7 +306,12 @@ static void draw_blade(float bx, float by, float tipx, float tipy, float w, floa
 
     // Out along the left side...
     for (int i = 0; i <= steps; i++) {
-        p[n++] = (gfx_pt_t){sx[i] - tany[i] * sw[i], sy[i] + tanx[i] * sw[i]};
+        float lnx = -tany[i], lny = tanx[i];
+        if (lny < 0.0f) { lnx = -lnx; lny = -lny; }
+        float ox = lnx * sw[i] * lower_bias;
+        float oy = lny * sw[i] * lower_bias;
+        p[n++] = (gfx_pt_t){sx[i] + ox - tany[i] * sw[i],
+                            sy[i] + oy + tanx[i] * sw[i]};
     }
     // ...semicircle around the tip...
     //
@@ -294,19 +324,32 @@ static void draw_blade(float bx, float by, float tipx, float tipy, float w, floa
     {
         const int cap = 7;
         float nlx = -tany[steps], nly = tanx[steps];
+        float lox = nlx, loy = nly;
+        if (loy < 0.0f) { lox = -lox; loy = -loy; }
+        float ox = lox * sw[steps] * lower_bias;
+        float oy = loy * sw[steps] * lower_bias;
         for (int i = 1; i < cap; i++) {
             float s = (float)i / (float)cap;
             float cs = cosf(s * PI), sn = sinf(s * PI);
-            p[n++] = (gfx_pt_t){sx[steps] + (nlx * cs + tanx[steps] * sn) * sw[steps],
-                                sy[steps] + (nly * cs + tany[steps] * sn) * sw[steps]};
+            p[n++] = (gfx_pt_t){sx[steps] + ox + (nlx * cs + tanx[steps] * sn) * sw[steps],
+                                sy[steps] + oy + (nly * cs + tany[steps] * sn) * sw[steps]};
         }
     }
     // ...and back along the right.
     for (int i = steps; i >= 0; i--) {
-        p[n++] = (gfx_pt_t){sx[i] + tany[i] * sw[i], sy[i] - tanx[i] * sw[i]};
+        float lnx = -tany[i], lny = tanx[i];
+        if (lny < 0.0f) { lnx = -lnx; lny = -lny; }
+        float ox = lnx * sw[i] * lower_bias;
+        float oy = lny * sw[i] * lower_bias;
+        p[n++] = (gfx_pt_t){sx[i] + ox + tany[i] * sw[i],
+                            sy[i] + oy - tanx[i] * sw[i]};
     }
 
-    gfx_fill_poly_outlined(p, n, fill, C_EDGE, 3.0f);
+    if (outlined) {
+        gfx_fill_poly_outlined(p, n, fill, C_EDGE, 3.0f);
+    } else {
+        gfx_fill_poly(p, n, fill);
+    }
 }
 
 // `cx`/`cy` are the body centre and `s` the shared creature scale, so the mouth
@@ -406,6 +449,34 @@ static void draw_mouth(float cx, float cy, float s)
     }
 }
 
+static void draw_tap_pulse(float s)
+{
+    if (c.tap_pulse <= 0.0f) {
+        return;
+    }
+
+    // A contact is a fleeting disturbance, not a UI cursor: small bright
+    // motes expand from the exact touch point and disappear within a third of
+    // a second. On the creature they are bright; on the white canvas they use
+    // the body colour so they remain visible without becoming a UI cursor.
+    float age = 1.0f - c.tap_pulse;
+    float radius = (3.0f + age * 17.0f) * s * 0.75f;
+    float dot = (2.6f - age * 1.4f) * s * 0.75f;
+    float phase = age * 0.55f;
+    uint16_t colour = c.tap_on_body ? C_PUPIL : C_BODY;
+    for (int layer = 0; layer < 2; layer++) {
+        float layer_radius = radius * (layer ? 0.58f : 1.0f);
+        float layer_dot = dot * (layer ? 0.78f : 1.0f);
+        float layer_phase = phase + (layer ? PI / 8.0f : 0.0f);
+        for (int i = 0; i < 8; i++) {
+            float a = layer_phase + (float)i * PI / 4.0f;
+            gfx_fill_ellipse(c.tap_x + cosf(a) * layer_radius,
+                             c.tap_y + sinf(a) * layer_radius,
+                             layer_dot, layer_dot, colour);
+        }
+    }
+}
+
 void creature_draw(void)
 {
     display_fill(C_BG);
@@ -422,17 +493,25 @@ void creature_draw(void)
     {
         float f = c.facing;
         float w = 19.0f * s * (0.30f + 0.70f * fabsf(f));
-        draw_blade(cx - f * 58.0f * s + c.lean * 0.6f, cy - 30.0f * s,
-                   cx - f * 96.0f * s + c.lean * 1.4f, cy - 74.0f * s,
-                   w, f * 7.0f, C_BODY);
+        float bx = cx - f * 58.0f * s + c.lean * 0.6f;
+        float by = cy - 30.0f * s;
+        float tipx = cx - f * 96.0f * s + c.lean * 1.4f;
+        float tipy = cy - 74.0f * s;
+        // The regular tail keeps its outline. A narrow, unoutlined blade laid
+        // into the lower edge is the shadow: roughly the lower quarter only.
+        draw_blade(bx, by, tipx, tipy, w, f * 7.0f, C_BODY, true, 0.0f);
+        // The shadow blade is one quarter as wide, so biasing its centre by
+        // three of its own widths places it over the outer lower quarter of
+        // the full tail rather than leaving it centred on the spine.
+        draw_blade(bx, by, tipx, tipy, w * 0.25f, f * 7.0f, C_SHADE, false, 3.0f);
     }
 
     // Feet shift a little with the turn so the body does not look bolted down.
     float fx = c.facing * 6.0f * s;
     draw_blade(cx - 36.0f * s + fx + c.lean * 0.3f, cy + ry * 0.74f,
-               cx - 62.0f * s + fx, cy + ry * 1.00f, 17.0f * s, 7.0f, C_FOOT);
+               cx - 62.0f * s + fx, cy + ry * 1.00f, 17.0f * s, 7.0f, C_FOOT, true, 0.0f);
     draw_blade(cx + 36.0f * s + fx + c.lean * 0.3f, cy + ry * 0.74f,
-               cx + 64.0f * s + fx, cy + ry * 0.98f, 17.0f * s, -7.0f, C_FOOT);
+               cx + 64.0f * s + fx, cy + ry * 0.98f, 17.0f * s, -7.0f, C_FOOT, true, 0.0f);
 
     const int BODY_PTS = 56;
     static gfx_pt_t body[GFX_MAX_POLY_PTS];
@@ -504,4 +583,5 @@ void creature_draw(void)
     }
 
     draw_mouth(cx, cy, s);
+    draw_tap_pulse(s);
 }

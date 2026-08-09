@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "audio.h"
 #include "creature.h"
 #include "display.h"
 #include "esp_chip_info.h"
@@ -118,7 +119,7 @@ static void step1_display(void)
     esp_err_t err = display_init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "display init failed: %s", esp_err_to_name(err));
-        ESP_LOGE(TAG, "  check wiring: SCK=12 MOSI=11 CS=10 DC=9 RST=14 LED=21, VCC=3V3");
+        ESP_LOGE(TAG, "  check wiring: CS=10 RST=14 DC=9 MOSI=11 SCK=12 LED=7 VCC=3V3");
         return;
     }
     display_set_backlight(100);
@@ -177,7 +178,7 @@ static void step2_touch(void)
     esp_err_t err = touch_init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "touch init failed: %s", esp_err_to_name(err));
-        ESP_LOGE(TAG, "  check wiring: T_CLK=18 T_DIN=17 T_DO=8 T_CS=15 T_IRQ=16");
+        ESP_LOGE(TAG, "  check wiring: T_CLK=18 T_CS=15 T_DIN=17 T_DO=8 T_IRQ=16");
         return;
     }
 
@@ -207,9 +208,22 @@ static void step3_creature(void)
     ESP_LOGI(TAG, "==== step 3: creature ====");
     creature_init();
 
+    size_t heap_before_audio = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    esp_err_t audio_err = audio_init();
+    if (audio_err == ESP_OK) {
+        size_t heap_after_audio = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+        ESP_LOGI(TAG, "  audio ready — startup chirp, then chirp on each new touch");
+        ESP_LOGI(TAG, "  audio heap: %zu KB internal free, %zu KB used by I2S DMA + task",
+                 heap_after_audio / 1024, (heap_before_audio - heap_after_audio) / 1024);
+        audio_play_touch(true);
+    } else {
+        ESP_LOGE(TAG, "  audio init failed: %s", esp_err_to_name(audio_err));
+    }
+
     int64_t prev = esp_timer_get_time();
     int frames = 0;
     int64_t fps_mark = prev;
+    bool was_touched = false;
 
     while (true) {
         int64_t now = esp_timer_get_time();
@@ -219,6 +233,11 @@ static void step3_creature(void)
 
         int tx = 0, ty = 0;
         bool touched = touch_read(&tx, &ty, NULL, NULL);
+
+        if (touched && !was_touched) {
+            audio_play_touch(creature_contains_point(tx, ty));
+        }
+        was_touched = touched;
 
         creature_update(dt, touched, tx, ty);
         creature_draw();

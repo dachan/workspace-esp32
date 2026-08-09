@@ -21,5 +21,8 @@ void creature_init(void);
 // coordinates, or touched=false when the panel is idle.
 void creature_update(float dt, bool touched, int touch_x, int touch_y);
 
+// Uses the same current-frame body geometry as rendering and reactions.
+bool creature_contains_point(int x, int y);
+
 // Renders the current state into the framebuffer. Does not flush.
 void creature_draw(void);

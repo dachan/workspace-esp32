@@ -17,16 +17,18 @@
 
 static const char *TAG = "display";
 
-// Pinout — see the table in AGENTS.md. GPIO10-13 are the ESP32-S3's native
-// IOMUX pins for SPI2, which keeps the bus off the GPIO matrix and lets it clock
-// at full speed. Touch shares SCK/MOSI/MISO and is not wired yet.
-#define PIN_SCK  12
-#define PIN_MOSI 11
-#define PIN_MISO 13  // optional; the ILI9341 is write-only in normal use
+// Pinout — see the table in AGENTS.md, in the display header's own silkscreen
+// order (VCC, GND, CS, RESET, DC, SDI/MOSI, SCK, LED, SDO/MISO — VCC/GND are
+// power, not GPIO). GPIO10-13 are the ESP32-S3's native IOMUX pins for SPI2,
+// which keeps the bus off the GPIO matrix and lets it clock at full speed.
+// Touch shares SCK/MOSI/MISO and is not wired yet.
 #define PIN_CS   10
-#define PIN_DC    9
 #define PIN_RST  14
-#define PIN_BL   21
+#define PIN_DC    9
+#define PIN_MOSI 11
+#define PIN_SCK  12
+#define PIN_BL    7
+#define PIN_MISO 13  // optional; the ILI9341 is write-only in normal use
 
 #define LCD_HOST      SPI2_HOST
 #define LCD_PIXEL_CLK (40 * 1000 * 1000)
@@ -160,4 +162,3 @@ esp_err_t display_flush(void)
 {
     return esp_lcd_panel_draw_bitmap(s_panel, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, s_fb);
 }
-

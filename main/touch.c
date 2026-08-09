@@ -14,11 +14,12 @@
 
 static const char *TAG = "touch";
 
-// Own bus — see the note in touch.h.
+// Own bus — see the note in touch.h. Order matches the display header's own
+// silkscreen: T_CLK, T_CS, T_DIN, T_DO, T_IRQ.
 #define PIN_T_CLK 18
+#define PIN_T_CS  15
 #define PIN_T_DIN 17
 #define PIN_T_DO   8
-#define PIN_T_CS  15
 #define PIN_T_IRQ 16
 
 #define TOUCH_HOST SPI3_HOST
@@ -62,8 +63,8 @@ esp_err_t touch_init(void)
     };
     ESP_RETURN_ON_ERROR(esp_lcd_touch_new_spi_xpt2046(io, &cfg, &s_touch), TAG, "xpt2046");
 
-    ESP_LOGI(TAG, "XPT2046 ready on SPI3 (CLK=%d DIN=%d DO=%d CS=%d IRQ=%d)",
-             PIN_T_CLK, PIN_T_DIN, PIN_T_DO, PIN_T_CS, PIN_T_IRQ);
+    ESP_LOGI(TAG, "XPT2046 ready on SPI3 (CLK=%d CS=%d DIN=%d DO=%d IRQ=%d)",
+             PIN_T_CLK, PIN_T_CS, PIN_T_DIN, PIN_T_DO, PIN_T_IRQ);
     return ESP_OK;
 }
 
