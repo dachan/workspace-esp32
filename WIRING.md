@@ -84,30 +84,32 @@ The display module's separate microSD connector is intentionally not wired.
 
 ## MAX98357 amplifier and speaker
 
+In the breakout's own silkscreen order:
+
 | MAX98357 pin | Connection | Notes |
 |---|---|---|
-| `VIN` | ESP32 `5V` | Amplifier power |
-| `GND` | ESP32 `GND` | Must share ground with the ESP32 |
-| `BCLK` | GPIO38 | I2S bit clock |
 | `LRC` | GPIO39 | I2S word-select clock |
+| `BCLK` | GPIO38 | I2S bit clock |
 | `DIN` | GPIO40 | I2S audio data |
-| `SD` | GPIO42 | Firmware hard-mutes the amp between sounds |
 | `GAIN` | Not connected | Uses the breakout's default gain |
+| `SD` | GPIO42 | Firmware hard-mutes the amp between sounds |
+| `GND` | ESP32 `GND` | Must share ground with the ESP32 |
+| `VIN` | ESP32 `5V` | Amplifier power |
 | `OUT+` | Speaker `+` | Green screw terminal |
 | `OUT-` | Speaker `-` | Green screw terminal; never connect to ground |
 
 ```text
 ESP32-S3                         MAX98357                  Speaker
 ---------                        ---------                 -------
-5V     ------------------------> VIN
-GND    ------------------------> GND
-GPIO38 ------------------------> BCLK
 GPIO39 ------------------------> LRC
+GPIO38 ------------------------> BCLK
 GPIO40 ------------------------> DIN
+                                  GAIN   (not connected)
 GPIO42 ------------------------> SD
+GND    ------------------------> GND
+5V     ------------------------> VIN
                                   OUT+ -------------------> +
                                   OUT- -------------------> -
-                                  GAIN   (not connected)
 ```
 
 Never leave `VIN` disconnected while `BCLK`, `LRC`, `DIN`, or `SD` remain driven.
