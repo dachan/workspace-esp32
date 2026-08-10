@@ -142,7 +142,13 @@ esp_err_t display_init(void)
     // The panel is natively 240x320 portrait; swapping axes gives the 320x240
     // landscape the creature is designed for.
     ESP_RETURN_ON_ERROR(esp_lcd_panel_swap_xy(s_panel, true), TAG, "swap_xy");
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, true, false), TAG, "mirror");
+    // With swap_xy active, these two arguments' visual effect is transposed:
+    // mirror_x(false) here is what actually reads as up/down on the panel, and
+    // mirror_y(false) as left/right. (true,false) was left-right mirrored only,
+    // (false,false) was 180 degrees off — both flipped — which only fits if
+    // mirror_x actually controls the vertical axis and mirror_y the horizontal
+    // one post-swap. (true,true) is the remaining combination.
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, true, true), TAG, "mirror");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "disp on");
 
     s_fb = heap_caps_malloc(fb_bytes, MALLOC_CAP_SPIRAM);

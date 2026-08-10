@@ -1,7 +1,7 @@
 # Super Tamagotchi wiring
 
-Current connector map for the ESP32-S3, ILI9341/XPT2046 display, and MAX98357
-speaker amplifier.
+Current connector map for the ESP32-S3, ILI9341/XPT2046 display, MAX98357
+speaker amplifier, and LSM6DS3 IMU.
 
 > **Disconnect USB power before moving any wire.** All logic signals are 3.3V.
 > The display is powered from 3.3V; only the MAX98357 `VIN` uses 5V.
@@ -15,6 +15,7 @@ flowchart LR
     TOUCH["XPT2046 touch controller"]
     AMP["MAX98357 I2S amplifier"]
     SPEAKER["1W / 8 ohm speaker"]
+    IMU["LSM6DS3 accel/gyro"]
 
     ESP -- "3V3 + GND" --> TFT
     ESP -- "GPIO7, 9-14" --> TFT
@@ -22,6 +23,8 @@ flowchart LR
     ESP -- "5V + GND" --> AMP
     ESP -- "GPIO38, 39, 40, 42" --> AMP
     AMP -- "OUT+ and OUT-" --> SPEAKER
+    ESP -- "3V3 + GND" --> IMU
+    ESP -- "GPIO4, 5, 6" --> IMU
 ```
 
 ## ESP32-S3 expansion headers
@@ -58,8 +61,11 @@ Side B
 | 39 | MAX98357 `LRC` | I2S word/left-right clock |
 | 40 | MAX98357 `DIN` | I2S audio data to amplifier |
 | 42 | MAX98357 `SD` | Amplifier enable/mute |
+| 4 | LSM6DS3 `SCL` | IMU I2C clock |
+| 5 | LSM6DS3 `SDA` | IMU I2C data |
+| 6 | LSM6DS3 `INT1` | IMU interrupt |
 
-GPIO21 is now free; the display backlight moved from GPIO21 to GPIO7.
+The display backlight moved from GPIO21 to GPIO7, so GPIO21 is free.
 
 ## Display and touch connector
 
@@ -116,12 +122,40 @@ Never leave `VIN` disconnected while `BCLK`, `LRC`, `DIN`, or `SD` remain driven
 The amplifier can otherwise be phantom-powered through its signal inputs, causing
 distortion and potentially damaging the hardware.
 
+## LSM6DS3 IMU
+
+I2C, on its own bus rather than shared with the display's SPI. `SDO` is tied to
+`GND` so the part sits at I2C address `0x6A`.
+
+| LSM6DS3 pin | Connection | Notes |
+|---|---|---|
+| `VIN` | `3V3` | **3.3V only** — not 5V tolerant |
+| `GND` | `GND` | Shared ground |
+| `SCL` | GPIO4 | I2C clock |
+| `SDA` | GPIO5 | I2C data |
+| `INT1` | GPIO6 | Interrupt (tap, wake, free-fall, etc.) |
+| `SDO/SA0` | `GND` | Selects I2C address `0x6A` |
+| `CS` | `3V3` | Ties the part into I2C mode |
+
+```text
+ESP32-S3                         LSM6DS3
+---------                        -------
+3V3    ------------------------> VIN
+GND    ------------------------> GND
+GPIO4  ------------------------> SCL
+GPIO5  ------------------------> SDA
+GPIO6  ------------------------> INT1
+GND    ------------------------> SDO/SA0
+3V3    ------------------------> CS
+```
+
 ## Reserved and avoided pins
 
 | GPIO | Status | Reason |
 |---:|---|---|
 | 3 | Do not use | Boot-strapping pin |
 | 19, 20 | Reserved | Native USB data connection |
+| 48 | Do not use | Onboard addressable RGB LED, confirmed by the board silkscreen |
 | 21 | Free | Former display backlight pin |
 | 41 | Reserved | Future microphone I2S data |
 | 45, 46 | Not broken out / do not use | Boot-strapping pins |

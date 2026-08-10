@@ -215,7 +215,7 @@ static void step3_creature(void)
         ESP_LOGI(TAG, "  audio ready — startup chirp, then chirp on each new touch");
         ESP_LOGI(TAG, "  audio heap: %zu KB internal free, %zu KB used by I2S DMA + task",
                  heap_after_audio / 1024, (heap_before_audio - heap_after_audio) / 1024);
-        audio_play_touch(true);
+        audio_play_startup();
     } else {
         ESP_LOGE(TAG, "  audio init failed: %s", esp_err_to_name(audio_err));
     }
@@ -224,6 +224,7 @@ static void step3_creature(void)
     int frames = 0;
     int64_t fps_mark = prev;
     bool was_touched = false;
+    int touched_frames = 0;
 
     while (true) {
         int64_t now = esp_timer_get_time();
@@ -237,7 +238,11 @@ static void step3_creature(void)
         if (touched && !was_touched) {
             audio_play_touch(creature_contains_point(tx, ty));
         }
+        if (touched != was_touched) {
+            ESP_LOGW(TAG, "  touch %s at %d,%d", touched ? "DOWN" : "up", tx, ty);
+        }
         was_touched = touched;
+        if (touched) { touched_frames++; }
 
         creature_update(dt, touched, tx, ty);
         creature_draw();
@@ -246,9 +251,11 @@ static void step3_creature(void)
         // Frame rate is worth watching: the SPI flush of a full 150KB frame at
         // 40MHz costs ~31ms on its own, so that is the ceiling to beat.
         if (++frames >= 60) {
-            ESP_LOGI(TAG, "  %.1f fps", 60.0f * 1000000.0f / (float)(now - fps_mark));
+            ESP_LOGI(TAG, "  %.1f fps, touched on %d/60 frames",
+                     60.0f * 1000000.0f / (float)(now - fps_mark), touched_frames);
             fps_mark = now;
             frames = 0;
+            touched_frames = 0;
         }
     }
 }
@@ -290,6 +297,9 @@ void app_main(void)
         ESP_LOGE(TAG, "==== step 0 FAILED — fix PSRAM before trusting anything below ====");
     }
 
+    // Before the display, so the amp cannot amplify floating-pin noise while the
+    // colour test runs.
+    ESP_ERROR_CHECK_WITHOUT_ABORT(audio_early_mute());
     step1_display();
     step2_touch();
     step3_creature();  // does not return
