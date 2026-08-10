@@ -26,6 +26,50 @@ static uint16_t C_BG, C_BODY, C_SHADE, C_MOUTH, C_TONGUE, C_EDGE, C_PUPIL, C_FOO
 // body rather than cutting across it at an angle.
 #define SHADOW_DEPTH 20.0f
 
+// --- feeding and life --------------------------------------------------------
+// A service control in the same spirit as the rotary encoder in AGENTS.md: it
+// sits outside the pet fiction in the corner rather than pretending to be part
+// of the animal, because "where the food comes from" has no honest in-body
+// answer the way a poke does.
+#define FEED_BTN_CX 30.0f
+#define FEED_BTN_CY 30.0f
+#define FEED_BTN_R  22.0f
+
+#define LIFE_TICK_SECONDS 3600.0f   // one real hour
+#define LIFE_DECAY_MIN    5.0f
+#define LIFE_DECAY_MAX    10.0f
+#define LIFE_FEED_AMOUNT  25.0f
+
+// Below this, breathing slows and the body desaturates as life drains toward
+// zero — both bottom out together at 1% life. See life_low_frac().
+#define LIFE_LOW_THRESHOLD  50.0f
+#define BREATH_RATE_NORMAL  1.1f    // matches the resting breathe rate below
+#define BREATH_RATE_BARE    0.12f   // barely breathing, at 1% life
+#define BODY_SAT_MIN        0.05f   // fraction of normal saturation at 1% life
+
+#define FEED_FLIGHT_TIME 0.45f   // pellet in the air, button to mouth
+#define FEED_ANIM_TOTAL  0.65f   // total lifetime including the chomp settle
+
+#define LIFE_BAR_W 60.0f
+#define LIFE_BAR_H 12.0f
+#define LIFE_BAR_X ((float)DISPLAY_WIDTH - 16.0f - LIFE_BAR_W)
+#define LIFE_BAR_Y 14.0f
+
+// Debug aid only: knocks life down 5 points per press so the low-life states
+// (slowed breathing, desaturated body) and death can be reached without an
+// hour of real time. Bottom-right corner, well clear of the body and of the
+// two real controls above. Pull this before considering the UI final.
+#define DEBUG_STARVE_BTN_CX ((float)DISPLAY_WIDTH - 30.0f)
+#define DEBUG_STARVE_BTN_CY ((float)DISPLAY_HEIGHT - 30.0f)
+#define DEBUG_STARVE_BTN_R  22.0f
+#define DEBUG_STARVE_DECREMENT 5.0f
+
+// The death sequence: hold the frozen pose this long before it starts falling
+// away, then ease `vanish` from 0 to 1 (or back to 0 on revival) at this rate.
+// One curve, run forward or backward — see the `vanish` field.
+#define DEATH_FREEZE_SECONDS 0.3f
+#define VANISH_RATE          2.2f
+
 typedef struct {
     // Continuous emotion. Everything visible is derived from these two.
     float valence;   // 0 distressed .. 1 delighted
@@ -58,6 +102,35 @@ typedef struct {
 
     bool was_on_body;
     bool was_touched;
+
+    // Life drains on its own; feeding and the death it forestalls are the only
+    // things that move it.
+    float life;         // 0..100
+    float life_timer;   // counts down to the next hourly loss
+    bool dead;
+
+    // The death sequence: frozen on the spot for a beat, then presses flat
+    // onto the ground like a sheet of paper falling — the view is at table
+    // height, so once it's paper-thin there's no cross-section left to see,
+    // and it simply fades from there. One continuous parameter drives all of
+    // it, so reviving mid-fall is just the same curve run in reverse rather
+    // than a separate animation.
+    float vanish;         // 0 present .. 1 fully flat and faded
+    float death_timer;    // seconds since death, for the freeze hold below
+
+    // How long this life has lasted. Counts up from 0 at boot and again from
+    // each revival; the value is copied into death_survival_seconds the
+    // instant it dies, so the readout has something fixed to show instead of
+    // a timer still running against a body that no longer moves.
+    float survival_timer;
+    float death_survival_seconds;
+
+    bool button_pressed;      // this frame, for the button's own press feedback
+    bool feed_anim_active;
+    float feed_t;              // seconds since the button was pressed
+    bool feed_chomped;         // chomp impulse fires once per animation
+
+    bool debug_starve_pressed;   // this frame, for its own press feedback
 } creature_t;
 
 static creature_t c;
@@ -74,6 +147,55 @@ static inline float clampf(float v, float lo, float hi)
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+// Colour only starts fading in the last stretch of vanish, once the fall has
+// finished and it's sitting fully flat — so it's visibly a flattened paper
+// shape for a beat before it fades, rather than fading while still falling.
+static inline float vanish_fade_frac(float vanish)
+{
+    return clampf((vanish - 0.7f) / 0.3f, 0.0f, 1.0f);
+}
+
+// Scales a point's height toward an anchor line without touching x or
+// rotating anything — the first half of the death sequence's flatten, a
+// cutout collapsing down onto the ground rather than toppling over. ky 1.0 =
+// untouched, 0.0 = pressed flat onto anchor_y.
+static inline gfx_pt_t flat_pt(float x, float y, float anchor_y, float ky)
+{
+    return (gfx_pt_t){x, anchor_y + (y - anchor_y) * ky};
+}
+
+// 0 at/above LIFE_LOW_THRESHOLD, ramping to 1 as life bottoms out at 1%. Both
+// the breathing slowdown and the body desaturation read from this so the two
+// bottom out together rather than drifting out of sync.
+static inline float life_low_frac(float life)
+{
+    return clampf((LIFE_LOW_THRESHOLD - life) / (LIFE_LOW_THRESHOLD - 1.0f), 0.0f, 1.0f);
+}
+
+// Background RGB, matching the literal in creature_init — kept as raw
+// components too since tint_rgb() needs to blend toward it.
+#define BG_R 246
+#define BG_G 244
+#define BG_B 248
+
+// Desaturates a colour toward its own luminance (sat_factor 1.0 = untouched,
+// 0.0 = grayscale), then fades what's left toward the background (fade 0.0 =
+// untouched, 1.0 = invisible against it). One pass so low life and dying both
+// read from the same pipeline instead of two separate colour states.
+static inline uint16_t tint_rgb(uint8_t r, uint8_t g, uint8_t b, float sat_factor, float fade)
+{
+    float gray = 0.299f * (float)r + 0.587f * (float)g + 0.114f * (float)b;
+    float dr = gray + ((float)r - gray) * sat_factor;
+    float dg = gray + ((float)g - gray) * sat_factor;
+    float db = gray + ((float)b - gray) * sat_factor;
+    float fr = dr + ((float)BG_R - dr) * fade;
+    float fg = dg + ((float)BG_G - dg) * fade;
+    float fb = db + ((float)BG_B - db) * fade;
+    return display_rgb((uint8_t)clampf(fr, 0.0f, 255.0f),
+                       (uint8_t)clampf(fg, 0.0f, 255.0f),
+                       (uint8_t)clampf(fb, 0.0f, 255.0f));
+}
+
 // The framebuffer is opaque RGB565 — there is no alpha channel and nothing
 // blends at draw time. Where a shape always sits on a known background, the
 // blend can simply be resolved once at startup and stored as a flat colour.
@@ -82,22 +204,34 @@ static inline uint8_t mix8(uint8_t fg, uint8_t bg, float a)
     return (uint8_t)(fg * a + bg * (1.0f - a) + 0.5f);
 }
 
-void creature_init(void)
+// Recomputes the whole palette — body, shade, feet, mouth, tongue, edge,
+// pupil — at the given desaturation and fade. Called once at init and again
+// every frame from creature_update, so low life reads as a fading creature
+// rather than a fixed low-life palette swap, and dying fades the whole
+// creature toward the background rather than just the skin tones.
+static void update_creature_colors(float low_frac, float fade)
 {
-    C_BG     = display_rgb(246, 244, 248);
-    C_BODY   = display_rgb(186, 108, 190);
-    C_SHADE  = display_rgb(148, 76, 154);
+    float sat = 1.0f - (1.0f - BODY_SAT_MIN) * low_frac;
+    C_BODY  = tint_rgb(186, 108, 190, sat, fade);
+    C_SHADE = tint_rgb(148, 76, 154, sat, fade);
     // A shade under the underside tone: the feet sit below the body and read
     // as being in its shadow, which also stops them competing with the face.
-    C_FOOT   = display_rgb(132, 66, 138);
-    C_MOUTH  = display_rgb(74, 38, 82);
-    C_TONGUE = display_rgb(205, 145, 200);
-    C_EDGE   = display_rgb(24, 14, 28);
-    // 90% white over the eye colour, pre-blended.
+    C_FOOT  = tint_rgb(132, 66, 138, sat, fade);
+    C_MOUTH  = tint_rgb(74, 38, 82, 1.0f, fade);
+    C_TONGUE = tint_rgb(205, 145, 200, 1.0f, fade);
+    C_EDGE   = tint_rgb(24, 14, 28, 1.0f, fade);
+    // 90% white over the eye colour, pre-blended, then faded like everything
+    // else.
     const float pupil_alpha = 0.90f;
-    C_PUPIL = display_rgb(mix8(255, 24, pupil_alpha),
-                          mix8(255, 14, pupil_alpha),
-                          mix8(255, 28, pupil_alpha));
+    C_PUPIL = tint_rgb(mix8(255, 24, pupil_alpha),
+                       mix8(255, 14, pupil_alpha),
+                       mix8(255, 28, pupil_alpha), 1.0f, fade);
+}
+
+void creature_init(void)
+{
+    C_BG = display_rgb(BG_R, BG_G, BG_B);
+    update_creature_colors(0.0f, 0.0f);
 
     c.valence = 0.6f;
     c.arousal = 0.25f;
@@ -109,6 +243,14 @@ void creature_init(void)
     c.saccade_timer = 1.0f;
     c.facing = c.facing_target = 1.0f;
     c.turn_timer = 3.0f;
+
+    c.life = 80.0f;
+    c.life_timer = LIFE_TICK_SECONDS;
+    c.dead = false;
+    c.vanish = 0.0f;
+    c.death_timer = 0.0f;
+    c.survival_timer = 0.0f;
+    c.death_survival_seconds = 0.0f;
 }
 
 // Where the body sits on screen this frame. Shared by update and draw so that
@@ -117,8 +259,11 @@ static void body_frame(float *cx, float *cy, float *rx, float *ry, float *scale)
 {
     // A fixed, slightly distant resting scale. Breathing and touch squash can
     // change the silhouette, but the pet never drifts toward or away from you.
+    // Death doesn't shrink or lift this — see the `vanish` field: it falls
+    // flat in place, at table height, and disappears there rather than
+    // shrinking off into the distance.
     const float s = 0.80f;
-    float breath = sinf(c.breathe) * 0.022f;
+    float breath = sinf(c.breathe) * 0.05f;
     *scale = s;
     *cx = BODY_CX;
     *cy = BODY_CY + c.squash * 8.0f * s;
@@ -135,16 +280,179 @@ bool creature_contains_point(int x, int y)
     return (nx * nx + ny * ny) <= 1.0f;
 }
 
+static inline bool point_in_feed_button(int x, int y)
+{
+    float dx = (float)x - FEED_BTN_CX, dy = (float)y - FEED_BTN_CY;
+    return (dx * dx + dy * dy) <= (FEED_BTN_R * FEED_BTN_R);
+}
+
+static inline bool point_in_debug_starve_button(int x, int y)
+{
+    float dx = (float)x - DEBUG_STARVE_BTN_CX, dy = (float)y - DEBUG_STARVE_BTN_CY;
+    return (dx * dx + dy * dy) <= (DEBUG_STARVE_BTN_R * DEBUG_STARVE_BTN_R);
+}
+
+// A no-op if already dead — a second starve while mid-collapse shouldn't
+// restart the freeze or snap the fall back to the beginning.
+static void trigger_death(void)
+{
+    if (c.dead) {
+        return;
+    }
+    c.dead = true;
+    c.death_timer = 0.0f;
+    // Freeze the lifespan reading right here — survival_timer keeps existing
+    // only so the next life has a value to start counting from again.
+    c.death_survival_seconds = c.survival_timer;
+    // Freeze on a fixed, settled dead face rather than whatever mid-blink or
+    // mid-turn pose it happened to be in — the fall reads as one decisive
+    // collapse only if it starts from the same expression every time.
+    c.eye_open = 1.0f;
+    c.gaze_tx = c.gaze_x = 0.0f;
+    c.gaze_ty = c.gaze_y = -1.0f;
+    // Mouth and smile are left as they were and eased shut gradually in the
+    // dead-state update below, rather than snapped here — a slack jaw closes
+    // over a beat, it doesn't teleport shut the instant life hits zero.
+    c.arousal = 0.0f;
+    c.valence = 0.0f;
+    c.squash = 0.15f;
+    c.squash_velocity = 0.0f;
+    c.lean = 0.0f;
+}
+
+// Real-time decay: 5-10 points every hour, paused once life bottoms out
+// rather than going negative.
+static void update_life(float dt)
+{
+    if (c.life <= 0.0f) {
+        c.life = 0.0f;
+        return;
+    }
+    c.life_timer -= dt;
+    if (c.life_timer <= 0.0f) {
+        float loss = LIFE_DECAY_MIN + gfx_randf() * (LIFE_DECAY_MAX - LIFE_DECAY_MIN);
+        c.life = clampf(c.life - loss, 0.0f, 100.0f);
+        c.life_timer += LIFE_TICK_SECONDS;
+        if (c.life <= 0.0f) {
+            trigger_death();
+        }
+    }
+}
+
+static void start_feed(void)
+{
+    if (c.feed_anim_active) {
+        return;   // one pellet in flight at a time
+    }
+    c.feed_anim_active = true;
+    c.feed_t = 0.0f;
+    c.feed_chomped = false;
+}
+
+// Drives the pellet's flight and, once it lands, the chomp: life rises and a
+// happy impulse is fed into the same spring/approach machinery a poke uses, so
+// it settles the same way rather than needing its own animation state. A press
+// while dead revives the creature instead of triggering a chomp.
+static void update_feed_anim(float dt)
+{
+    if (!c.feed_anim_active) {
+        return;
+    }
+    c.feed_t += dt;
+
+    if (!c.feed_chomped && c.feed_t >= FEED_FLIGHT_TIME) {
+        c.feed_chomped = true;
+        c.life = clampf(c.life + LIFE_FEED_AMOUNT, 0.0f, 100.0f);
+
+        if (c.dead) {
+            if (c.life > 0.0f) {
+                c.dead = false;
+                c.survival_timer = 0.0f;
+                c.eye_open = 1.0f;
+                c.arousal = clampf(c.arousal + 0.40f, 0.0f, 1.0f);
+                c.valence = clampf(c.valence + 0.30f, 0.0f, 1.0f);
+            }
+        } else {
+            c.squash_velocity += 6.0f;
+            c.arousal = clampf(c.arousal + 0.30f, 0.0f, 1.0f);
+            c.valence = clampf(c.valence + 0.25f, 0.0f, 1.0f);
+            // Snaps open for the bite; the normal per-frame approach() toward
+            // mouth_target eases it back down over the following frames.
+            c.mouth_open = 0.85f;
+        }
+    }
+
+    if (c.feed_t >= FEED_ANIM_TOTAL) {
+        c.feed_anim_active = false;
+        c.feed_chomped = false;
+        c.feed_t = 0.0f;
+    }
+}
+
 void creature_update(float dt, bool touched, int touch_x, int touch_y)
 {
-    c.breathe += dt * 1.1f;
+    update_life(dt);
+
+    bool on_button = touched && point_in_feed_button(touch_x, touch_y);
+    c.button_pressed = on_button;
+    if (on_button && !c.was_touched) {
+        start_feed();
+    }
+    update_feed_anim(dt);
+
+    bool on_debug_starve = touched && point_in_debug_starve_button(touch_x, touch_y);
+    c.debug_starve_pressed = on_debug_starve;
+    if (on_debug_starve && !c.was_touched) {
+        c.life = clampf(c.life - DEBUG_STARVE_DECREMENT, 0.0f, 100.0f);
+        if (c.life <= 0.0f) {
+            trigger_death();
+        }
+    }
+
+    // Body saturation fades out as life drains below the threshold — see
+    // life_low_frac(). low_frac itself only needs live life, so it's read
+    // regardless of alive/dead; the fade factor below is what differs.
+    float low_frac = life_low_frac(c.life);
+
+    // Starved: frozen on the spot, then presses flat and fades — see the
+    // `vanish` field. Only the feed button still does anything.
+    if (c.dead) {
+        c.death_timer += dt;
+        // Held at 0 through the freeze, then eased toward fully gone. Nothing
+        // else about the pose updates while dead, so it falls away exactly as
+        // frozen rather than continuing to blink or breathe mid-fall — except
+        // the mouth, which eases shut over the same beat instead of snapping
+        // closed on the frame life hits zero.
+        float vanish_target = (c.death_timer > DEATH_FREEZE_SECONDS) ? 1.0f : 0.0f;
+        c.vanish = approach(c.vanish, vanish_target, VANISH_RATE, dt);
+        c.mouth_open = approach(c.mouth_open, 0.0f, 3.0f, dt);
+        c.smile = approach(c.smile, 0.0f, 3.0f, dt);
+        update_creature_colors(low_frac, vanish_fade_frac(c.vanish));
+        c.tap_pulse -= dt * 3.4f;
+        if (c.tap_pulse < 0.0f) { c.tap_pulse = 0.0f; }
+        c.was_touched = touched;
+        c.was_on_body = false;
+        return;
+    }
+
+    // Reverses the fall smoothly on revival: the same curve eased back toward
+    // 0 rather than a separate un-death animation.
+    c.vanish = approach(c.vanish, 0.0f, VANISH_RATE, dt);
+    update_creature_colors(low_frac, vanish_fade_frac(c.vanish));
+
+    c.survival_timer += dt;
+
+    // Below LIFE_LOW_THRESHOLD, breathing slows toward barely-there as life
+    // approaches zero, rather than cutting off sharply at the death boundary.
+    float breath_rate = BREATH_RATE_NORMAL - (BREATH_RATE_NORMAL - BREATH_RATE_BARE) * low_frac;
+    c.breathe += dt * breath_rate;
     c.wobble_phase += dt * 0.55f;
 
     // --- reflex layer: immediate, no decisions ---------------------------
     // Being poked is a jolt first and a feeling second. Gaze has a fast target
     // response; the body carries the physical response through a spring.
-    bool on_body = touched && creature_contains_point(touch_x, touch_y);
-    if (touched) {
+    bool on_body = touched && !on_button && !on_debug_starve && creature_contains_point(touch_x, touch_y);
+    if (touched && !on_button && !on_debug_starve) {
         float cx, cy, rx, ry, s;
         body_frame(&cx, &cy, &rx, &ry, &s);
 
@@ -216,8 +524,13 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
     c.facing = approach(c.facing, c.facing_target, 2.2f + c.arousal * 2.0f, dt);
 
     // --- cognition layer: slow drift back to baseline --------------------
-    c.arousal = approach(c.arousal, 0.22f, 0.35f, dt);
-    c.valence = approach(c.valence, 0.55f, 0.12f, dt);
+    // Both baselines sag as life runs low, so a hungry creature drifts back
+    // toward a duller, sadder resting face instead of the same cheerful
+    // neutral regardless of health. The mouth is what actually shows this —
+    // see the emotion-to-mouth mapping below — since it carries the
+    // creature's expression while the eyes only do gaze and blinking.
+    c.arousal = approach(c.arousal, 0.22f - low_frac * 0.15f, 0.35f, dt);
+    c.valence = approach(c.valence, 0.55f - low_frac * 0.45f, 0.12f, dt);
     // A lightly underdamped spring replaces a hard squash followed by a
     // mechanical exponential decay. It makes each poke feel soft and alive.
     c.squash_velocity += -54.0f * c.squash * dt;
@@ -353,8 +666,11 @@ static void draw_blade(float bx, float by, float tipx, float tipy, float w, floa
 }
 
 // `cx`/`cy` are the body centre and `s` the shared creature scale, so the mouth
-// remains correctly attached when the body breathes or squashes.
-static void draw_mouth(float cx, float cy, float s)
+// remains correctly attached when the body breathes or squashes. `anchor_y`/
+// `ky` are the death flatten (identity when upright) — applied last, to the
+// finished point list, rather than threaded through the generation maths
+// above.
+static void draw_mouth(float cx, float cy, float s, float anchor_y, float ky)
 {
     const float turn = 1.0f - 0.16f * fabsf(c.facing);
     float mx = cx + (c.lean * 0.5f + c.facing * 7.0f) * s;
@@ -367,8 +683,15 @@ static void draw_mouth(float cx, float cy, float s)
     const float bowl_rx = top_rx - 8.0f * s;
     const float top_y = cy - 15.0f * s;
     const float bowl_y = top_y + (17.0f + c.mouth_open * 4.0f) * s;
-    const float bowl_depth = (28.0f + c.mouth_open * 18.0f) * s;
-    const float tooth_depth = 8.5f * s;
+    // Below this, both the bowl and the teeth scale down toward a flat closed
+    // line rather than staying a fixed-depth grin. This threshold must stay
+    // well under the lowest mouth_open ever reached by the arousal/valence
+    // baseline at 1% health (~0.25) — sitting right at that floor previously
+    // made the mouth flicker flat exactly when health was low, instead of
+    // only closing for the deliberate 0.0 the dead face freezes on.
+    const float open_shape = clampf(c.mouth_open / 0.06f, 0.0f, 1.0f);
+    const float bowl_depth = (28.0f + c.mouth_open * 18.0f) * s * open_shape;
+    const float tooth_depth = 8.5f * s * open_shape;
     const float sag = (3.0f + c.smile * 2.0f) * s;
     const float corner_dx = 8.0f * s;
     const float side_tangent = 12.0f * s;
@@ -439,12 +762,16 @@ static void draw_mouth(float cx, float cy, float s)
         };
     }
 
+    for (int i = 0; i < n; i++) {
+        p[i] = flat_pt(p[i].x, p[i].y, anchor_y, ky);
+    }
     gfx_fill_poly_outlined(p, n, C_MOUTH, C_EDGE, 2.0f * s);
 
     if (c.mouth_open > 0.32f) {
         float t = (c.mouth_open - 0.32f) / 0.68f;
-        gfx_fill_ellipse(mx - 4.0f * s, bowl_y + bowl_depth * 0.58f,
-                         (26.0f * t + 10.0f) * s * turn, (15.0f * t + 5.0f) * s,
+        gfx_pt_t tongue = flat_pt(mx - 4.0f * s, bowl_y + bowl_depth * 0.58f, anchor_y, ky);
+        gfx_fill_ellipse(tongue.x, tongue.y,
+                         (26.0f * t + 10.0f) * s * turn, (15.0f * t + 5.0f) * s * ky,
                          C_TONGUE);
     }
 }
@@ -477,6 +804,179 @@ static void draw_tap_pulse(float s)
     }
 }
 
+// The feed button: a bowl of kibble, outside the pet fiction like the rotary
+// encoder in AGENTS.md. Two circles for the outline, same trick the rest of
+// the creature uses for outlines, valid here because a circle is convex.
+static void draw_feed_button(void)
+{
+    float r = c.button_pressed ? FEED_BTN_R * 0.88f : FEED_BTN_R;
+    gfx_fill_ellipse(FEED_BTN_CX, FEED_BTN_CY, r, r, C_EDGE);
+    gfx_fill_ellipse(FEED_BTN_CX, FEED_BTN_CY, r - 3.0f, r - 3.0f, display_rgb(255, 205, 120));
+
+    const uint16_t kibble = display_rgb(150, 92, 40);
+    const float dot_r = r * 0.16f;
+    for (int i = 0; i < 3; i++) {
+        float a = -PI / 2.0f + (float)i * (2.0f * PI / 3.0f);
+        gfx_fill_ellipse(FEED_BTN_CX + cosf(a) * r * 0.36f,
+                         FEED_BTN_CY + sinf(a) * r * 0.36f,
+                         dot_r, dot_r, kibble);
+    }
+}
+
+// The pellet's flight only, arcing from the button to roughly where the mouth
+// is. The chomp itself is not drawn separately — it is the mouth_open spike in
+// update_feed_anim(), read back through the normal mouth drawing.
+static void draw_feed_pellet(float s)
+{
+    if (!c.feed_anim_active || c.feed_t >= FEED_FLIGHT_TIME) {
+        return;
+    }
+    float cx, cy, rx, ry, bs;
+    body_frame(&cx, &cy, &rx, &ry, &bs);
+
+    float t = c.feed_t / FEED_FLIGHT_TIME;
+    float x1 = cx - rx * 0.15f, y1 = cy - ry * 0.30f;
+    float x = FEED_BTN_CX + (x1 - FEED_BTN_CX) * t;
+    float y = FEED_BTN_CY + (y1 - FEED_BTN_CY) * t - sinf(t * PI) * 26.0f;
+
+    gfx_fill_ellipse(x, y, 5.0f * s, 5.0f * s, C_EDGE);
+    gfx_fill_ellipse(x, y, 3.5f * s, 3.5f * s, display_rgb(255, 205, 120));
+}
+
+// A minimal 3x5 bitmap font, just enough to show the life number. Nothing
+// else on the creature needs text, so this stays local rather than becoming a
+// shared module.
+// Indices 10-12 are the H/M/S unit letters the survival readout needs;
+// everything else in the creature only ever needed digits.
+#define FONT_H 10
+#define FONT_M 11
+#define FONT_S 12
+static const uint8_t FONT3X5[13][5] = {
+    {0x7, 0x5, 0x5, 0x5, 0x7},   // 0
+    {0x2, 0x6, 0x2, 0x2, 0x7},   // 1
+    {0x7, 0x1, 0x7, 0x4, 0x7},   // 2
+    {0x7, 0x1, 0x7, 0x1, 0x7},   // 3
+    {0x5, 0x5, 0x7, 0x1, 0x1},   // 4
+    {0x7, 0x4, 0x7, 0x1, 0x7},   // 5
+    {0x7, 0x4, 0x7, 0x5, 0x7},   // 6
+    {0x7, 0x1, 0x1, 0x1, 0x1},   // 7
+    {0x7, 0x5, 0x7, 0x5, 0x7},   // 8
+    {0x7, 0x5, 0x7, 0x1, 0x7},   // 9
+    {0x5, 0x5, 0x7, 0x5, 0x5},   // H
+    {0x5, 0x7, 0x5, 0x5, 0x5},   // M
+    {0x7, 0x4, 0x7, 0x1, 0x7},   // S
+};
+
+static void draw_digit(float x, float y, int digit, float cell, uint16_t colour)
+{
+    for (int row = 0; row < 5; row++) {
+        uint8_t bits = FONT3X5[digit][row];
+        for (int col = 0; col < 3; col++) {
+            if (bits & (0x4 >> col)) {
+                display_fill_rect((int)(x + (float)col * cell), (int)(y + (float)row * cell),
+                                  (int)cell, (int)cell, colour);
+            }
+        }
+    }
+}
+
+// Right-aligns so the number reads naturally against the bar beside it,
+// without pulling in a string library for three-digit integer formatting.
+static void draw_number_right_aligned(float right_x, float y, int value, float cell, uint16_t colour)
+{
+    if (value < 0) { value = 0; }
+    if (value > 100) { value = 100; }
+
+    int digits[3], n = 0;
+    int hundreds = value / 100, tens = (value / 10) % 10, ones = value % 10;
+    if (hundreds > 0) { digits[n++] = hundreds; }
+    if (n > 0 || tens > 0) { digits[n++] = tens; }
+    digits[n++] = ones;
+
+    float digit_w = 3.0f * cell, gap = cell;
+    float x = right_x - ((float)n * digit_w + (float)(n - 1) * gap);
+    for (int i = 0; i < n; i++) {
+        draw_digit(x, y, digits[i], cell, colour);
+        x += digit_w + gap;
+    }
+}
+
+static void draw_life_ui(void)
+{
+    const float x = LIFE_BAR_X, y = LIFE_BAR_Y, w = LIFE_BAR_W, h = LIFE_BAR_H;
+
+    display_fill_rect((int)(x - 2), (int)(y - 2), (int)(w + 4), (int)(h + 4), C_EDGE);
+    display_fill_rect((int)x, (int)y, (int)w, (int)h, display_rgb(235, 230, 225));
+
+    float frac = clampf(c.life / 100.0f, 0.0f, 1.0f);
+    float fill_w = w * frac;
+    uint16_t fill_colour = (c.life > 50.0f) ? display_rgb(96, 180, 90)
+                          : (c.life > 20.0f) ? display_rgb(230, 175, 60)
+                                             : display_rgb(205, 70, 60);
+    if (fill_w > 0.5f) {
+        display_fill_rect((int)x, (int)y, (int)fill_w, (int)h, fill_colour);
+    }
+
+    draw_number_right_aligned(x - 6.0f, y + 1.0f, (int)(c.life + 0.5f), 2.0f, C_EDGE);
+}
+
+// How long this life lasted, in the same tiny digit font as the life bar
+// number, plus H/M/S unit letters: seconds under a minute, minutes under an
+// hour, hours and minutes beyond that. Shown for the whole dead state rather
+// than only once it has faded, and drawn in a fixed ink colour independent of
+// the creature's own fade-out so it stays legible throughout.
+static void draw_survival_message(void)
+{
+    if (!c.dead) {
+        return;
+    }
+
+    int total_sec = (int)c.death_survival_seconds;
+    int total_min = total_sec / 60;
+    int codes[6];
+    int nc = 0;
+    if (total_sec < 60) {
+        if (total_sec >= 10) { codes[nc++] = total_sec / 10; }
+        codes[nc++] = total_sec % 10;
+        codes[nc++] = FONT_S;
+    } else if (total_min < 60) {
+        if (total_min >= 10) { codes[nc++] = total_min / 10; }
+        codes[nc++] = total_min % 10;
+        codes[nc++] = FONT_M;
+    } else {
+        int hours = total_min / 60;
+        int rem_min = total_min % 60;
+        if (hours >= 10) { codes[nc++] = hours / 10; }
+        codes[nc++] = hours % 10;
+        codes[nc++] = FONT_H;
+        codes[nc++] = rem_min / 10;
+        codes[nc++] = rem_min % 10;
+        codes[nc++] = FONT_M;
+    }
+
+    const float cell = 4.0f;
+    const float digit_w = 3.0f * cell, gap = cell;
+    float total_w = (float)nc * digit_w + (float)(nc - 1) * gap;
+    float x = (float)DISPLAY_WIDTH / 2.0f - total_w / 2.0f;
+    const float y = 70.0f;
+    const uint16_t colour = display_rgb(24, 14, 28);
+    for (int i = 0; i < nc; i++) {
+        draw_digit(x, y, codes[i], cell, colour);
+        x += digit_w + gap;
+    }
+}
+
+// Debug aid only — see the constant block above.
+static void draw_debug_starve_button(void)
+{
+    float r = c.debug_starve_pressed ? DEBUG_STARVE_BTN_R * 0.85f : DEBUG_STARVE_BTN_R;
+    gfx_fill_ellipse(DEBUG_STARVE_BTN_CX, DEBUG_STARVE_BTN_CY, r, r, C_EDGE);
+    gfx_fill_ellipse(DEBUG_STARVE_BTN_CX, DEBUG_STARVE_BTN_CY, r - 2.5f, r - 2.5f,
+                     display_rgb(200, 60, 60));
+    draw_digit(DEBUG_STARVE_BTN_CX - 3.0f, DEBUG_STARVE_BTN_CY - 5.0f, 0, 2.0f,
+               display_rgb(255, 255, 255));
+}
+
 void creature_draw(void)
 {
     display_fill(C_BG);
@@ -487,62 +987,82 @@ void creature_draw(void)
     float cx, cy, rx, ry, s;
     body_frame(&cx, &cy, &rx, &ry, &s);
 
+    // The whole silhouette presses down flat onto the ground over the full
+    // vanish range (see the `vanish` field) — a vertical scale about a fixed
+    // anchor, not a rotation, like paper falling flat rather than toppling.
+    // At table height a paper-thin sheet has no cross-section left to see, so
+    // this alone is what makes it disappear; colour only fades afterward, in
+    // vanish_fade_frac(), once it's already flat.
+    float ky = 1.0f - c.vanish;
+    float anchor_y = cy + ry * 0.9f;
+
     // The tail sweeps to the side opposite `facing`, passing behind the body at
     // the midpoint. Thinning it as it crosses sells the Y turn rather than a
     // teleport, since an edge-on tail should almost vanish.
     {
         float f = c.facing;
-        float w = 19.0f * s * (0.30f + 0.70f * fabsf(f));
-        float bx = cx - f * 58.0f * s + c.lean * 0.6f;
-        float by = cy - 30.0f * s;
-        float tipx = cx - f * 96.0f * s + c.lean * 1.4f;
-        float tipy = cy - 74.0f * s;
+        float w = 19.0f * s * (0.30f + 0.70f * fabsf(f)) * ky;
+        gfx_pt_t base = flat_pt(cx - f * 58.0f * s + c.lean * 0.6f, cy - 30.0f * s, anchor_y, ky);
+        gfx_pt_t tip = flat_pt(cx - f * 96.0f * s + c.lean * 1.4f, cy - 74.0f * s, anchor_y, ky);
         // The regular tail keeps its outline. A narrow, unoutlined blade laid
         // into the lower edge is the shadow: roughly the lower quarter only.
-        draw_blade(bx, by, tipx, tipy, w, f * 7.0f, C_BODY, true, 0.0f);
+        // Width and curve both scale with ky, so it collapses flat along with
+        // the rest of the silhouette instead of staying a fixed-width bar.
+        draw_blade(base.x, base.y, tip.x, tip.y, w, f * 7.0f * ky, C_BODY, true, 0.0f);
         // The shadow blade is one quarter as wide, so biasing its centre by
         // three of its own widths places it over the outer lower quarter of
         // the full tail rather than leaving it centred on the spine.
-        draw_blade(bx, by, tipx, tipy, w * 0.25f, f * 7.0f, C_SHADE, false, 3.0f);
+        draw_blade(base.x, base.y, tip.x, tip.y, w * 0.25f, f * 7.0f * ky, C_SHADE, false, 3.0f);
     }
 
     // Feet shift a little with the turn so the body does not look bolted down.
     float fx = c.facing * 6.0f * s;
-    draw_blade(cx - 36.0f * s + fx + c.lean * 0.3f, cy + ry * 0.74f,
-               cx - 62.0f * s + fx, cy + ry * 1.00f, 17.0f * s, 7.0f, C_FOOT, true, 0.0f);
-    draw_blade(cx + 36.0f * s + fx + c.lean * 0.3f, cy + ry * 0.74f,
-               cx + 64.0f * s + fx, cy + ry * 0.98f, 17.0f * s, -7.0f, C_FOOT, true, 0.0f);
+    {
+        gfx_pt_t lb = flat_pt(cx - 36.0f * s + fx + c.lean * 0.3f, cy + ry * 0.74f, anchor_y, ky);
+        gfx_pt_t lt = flat_pt(cx - 62.0f * s + fx, cy + ry * 1.00f, anchor_y, ky);
+        gfx_pt_t rb = flat_pt(cx + 36.0f * s + fx + c.lean * 0.3f, cy + ry * 0.74f, anchor_y, ky);
+        gfx_pt_t rt = flat_pt(cx + 64.0f * s + fx, cy + ry * 0.98f, anchor_y, ky);
+        draw_blade(lb.x, lb.y, lt.x, lt.y, 17.0f * s * ky, 7.0f * ky, C_FOOT, true, 0.0f);
+        draw_blade(rb.x, rb.y, rt.x, rt.y, 17.0f * s * ky, -7.0f * ky, C_FOOT, true, 0.0f);
+    }
 
     const int BODY_PTS = 56;
     static gfx_pt_t body[GFX_MAX_POLY_PTS];
     int n = gfx_blob_points(body, BODY_PTS, cx, cy, rx, ry,
                             c.lean, 0.018f, c.wobble_phase, BODY_TAPER);
-    gfx_fill_poly_outlined(body, n, C_BODY, C_EDGE, 3.0f * s);
 
     // Underside shadow: the body's lower arc, closed off by the same arc pulled
     // inward toward the centre. Both edges follow the silhouette, so the shadow
     // curves along the body and stays symmetric — an offset second blob would
-    // instead skew the boundary in whatever direction it was offset.
-    {
-        const int half = BODY_PTS / 2;   // t in [0, PI) traces the lower half
-        static gfx_pt_t sh[GFX_MAX_POLY_PTS];
-        int m = 0;
-        for (int i = 0; i <= half; i++) {
-            sh[m++] = body[i];
-        }
-        for (int i = half; i >= 0; i--) {
-            // Depth fades to nothing at the two ends, so the crescent tapers to
-            // points instead of being cut off with a blunt vertical edge.
-            float u = (float)i / (float)half;
-            float d = SHADOW_DEPTH * s * sinf(PI * u);
-            float dx = body[i].x - cx, dy = body[i].y - cy;
-            float dd = sqrtf(dx * dx + dy * dy);
-            float k = (dd > 0.001f) ? (dd - d) / dd : 0.0f;
-            if (k < 0.0f) { k = 0.0f; }
-            sh[m++] = (gfx_pt_t){cx + dx * k, cy + dy * k};
-        }
-        gfx_fill_poly(sh, m, C_SHADE);
+    // instead skew the boundary in whatever direction it was offset. Computed
+    // from the unflattened silhouette so the inward pull reads correctly; both
+    // polygons are flattened together afterward.
+    const int half = BODY_PTS / 2;   // t in [0, PI) traces the lower half
+    static gfx_pt_t sh[GFX_MAX_POLY_PTS];
+    int m = 0;
+    for (int i = 0; i <= half; i++) {
+        sh[m++] = body[i];
     }
+    for (int i = half; i >= 0; i--) {
+        // Depth fades to nothing at the two ends, so the crescent tapers to
+        // points instead of being cut off with a blunt vertical edge.
+        float u = (float)i / (float)half;
+        float d = SHADOW_DEPTH * s * sinf(PI * u);
+        float dx = body[i].x - cx, dy = body[i].y - cy;
+        float dd = sqrtf(dx * dx + dy * dy);
+        float k = (dd > 0.001f) ? (dd - d) / dd : 0.0f;
+        if (k < 0.0f) { k = 0.0f; }
+        sh[m++] = (gfx_pt_t){cx + dx * k, cy + dy * k};
+    }
+
+    for (int i = 0; i < n; i++) {
+        body[i] = flat_pt(body[i].x, body[i].y, anchor_y, ky);
+    }
+    for (int i = 0; i < m; i++) {
+        sh[i] = flat_pt(sh[i].x, sh[i].y, anchor_y, ky);
+    }
+    gfx_fill_poly_outlined(body, n, C_BODY, C_EDGE, 3.0f * s);
+    gfx_fill_poly(sh, m, C_SHADE);
 
     // Eyes: small dark ovals. Blink collapses height, so no separate lid shape.
     // They slide with the turn, and the trailing one narrows as it goes round.
@@ -555,8 +1075,9 @@ void creature_draw(void)
         float side = (i == 0) ? -1.0f : 1.0f;
         float squeeze = 1.0f - 0.35f * fabsf(c.facing) * ((side * c.facing > 0) ? 1.0f : 0.0f);
         float ex = cx + side * 27.0f * s + gx;
-        float erx = 7.6f * s * squeeze, ery = 10.5f * s * c.eye_open;
-        gfx_fill_ellipse(ex, ey + gy, erx, ery, C_EDGE);
+        float erx = 7.6f * s * squeeze, ery = 10.5f * s * c.eye_open * ky;
+        gfx_pt_t eye = flat_pt(ex, ey + gy, anchor_y, ky);
+        gfx_fill_ellipse(eye.x, eye.y, erx, ery, C_EDGE);
 
         // Pupil highlight, offset up and toward the turn so it catches a
         // consistent light. It rides the blink with the eye, and disappears
@@ -578,10 +1099,17 @@ void creature_draw(void)
                 dx /= distance;
                 dy /= distance;
             }
-            gfx_fill_ellipse(ex + dx, ey + gy + dy, prx, pry, C_PUPIL);
+            gfx_pt_t pupil = flat_pt(ex + dx, ey + gy + dy, anchor_y, ky);
+            gfx_fill_ellipse(pupil.x, pupil.y, prx, pry, C_PUPIL);
         }
     }
 
-    draw_mouth(cx, cy, s);
+    draw_mouth(cx, cy, s, anchor_y, ky);
     draw_tap_pulse(s);
+
+    draw_feed_button();
+    draw_feed_pellet(s);
+    draw_life_ui();
+    draw_debug_starve_button();
+    draw_survival_message();
 }
