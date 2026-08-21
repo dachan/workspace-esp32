@@ -45,7 +45,7 @@ static uint16_t C_BG, C_BODY, C_SHADE, C_MOUTH, C_TONGUE, C_EDGE, C_PUPIL, C_FOO
 #define LIFE_LOW_THRESHOLD  50.0f
 #define BREATH_RATE_NORMAL  1.1f    // matches the resting breathe rate below
 #define BREATH_RATE_BARE    0.12f   // barely breathing, at 1% life
-#define BODY_SAT_MIN        0.05f   // fraction of normal saturation at 1% life
+#define BODY_SAT_MIN        0.10f   // fraction of normal saturation at 1% life
 
 #define FEED_FLIGHT_TIME 0.45f   // pellet in the air, button to mouth
 #define FEED_ANIM_TOTAL  0.65f   // total lifetime including the chomp settle
@@ -155,6 +155,22 @@ static inline float vanish_fade_frac(float vanish)
     return clampf((vanish - 0.7f) / 0.3f, 0.0f, 1.0f);
 }
 
+// Bends a point vertically by a parabola in its horizontal distance from the
+// mouth centre, so the corners swing up for a smile and down for a frown while
+// the centre stays put. `lift` is positive for a smile.
+//
+// This is a pure vertical shear: every point at the same x moves by the same
+// amount, so vertical ordering is preserved and the outline can never fold
+// over itself no matter how hard it is bent. That is why it is applied as a
+// post-pass over the finished point list rather than threaded through the
+// mouth's generation maths, where it would have to be reasoned about
+// separately for the top edge, the corner beziers and the bowl.
+static inline gfx_pt_t bend_pt(float x, float y, float mx, float half_w, float lift)
+{
+    float u = (half_w > 0.001f) ? (x - mx) / half_w : 0.0f;
+    return (gfx_pt_t){x, y - lift * u * u};
+}
+
 // Scales a point's height toward an anchor line without touching x or
 // rotating anything — the first half of the death sequence's flatten, a
 // cutout collapsing down onto the ground rather than toppling over. ky 1.0 =
@@ -217,8 +233,11 @@ static void update_creature_colors(float low_frac, float fade)
     // A shade under the underside tone: the feet sit below the body and read
     // as being in its shadow, which also stops them competing with the face.
     C_FOOT  = tint_rgb(132, 66, 138, sat, fade);
-    C_MOUTH  = tint_rgb(74, 38, 82, 1.0f, fade);
-    C_TONGUE = tint_rgb(205, 145, 200, 1.0f, fade);
+    // The mouth and tongue are skin, not ink, so they fade with the rest of
+    // the body rather than staying saturated while everything around them
+    // goes gray.
+    C_MOUTH  = tint_rgb(74, 38, 82, sat, fade);
+    C_TONGUE = tint_rgb(205, 145, 200, sat, fade);
     C_EDGE   = tint_rgb(24, 14, 28, 1.0f, fade);
     // 90% white over the eye colour, pre-blended, then faded like everything
     // else.
@@ -529,8 +548,18 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
     // neutral regardless of health. The mouth is what actually shows this —
     // see the emotion-to-mouth mapping below — since it carries the
     // creature's expression while the eyes only do gaze and blinking.
-    c.arousal = approach(c.arousal, 0.22f - low_frac * 0.15f, 0.35f, dt);
-    c.valence = approach(c.valence, 0.55f - low_frac * 0.45f, 0.12f, dt);
+    // Health above the low-life threshold still has somewhere to go, so the
+    // mood keeps climbing over the top half of the bar rather than sitting
+    // pinned. That is what lets half health be the exact point where the mouth
+    // is neutral — with the baseline flat above 50 the creature would have to
+    // wear the same face from 100 down to 50, and the pivot could only be
+    // placed by making full health look no happier than half.
+    // Only the mood axes span the full range; breathing and colour still key
+    // off low_frac and so stay unchanged above 50.
+    float high_frac = clampf((c.life - LIFE_LOW_THRESHOLD)
+                             / (100.0f - LIFE_LOW_THRESHOLD), 0.0f, 1.0f);
+    c.arousal = approach(c.arousal, 0.22f - low_frac * 0.15f + high_frac * 0.06f, 0.35f, dt);
+    c.valence = approach(c.valence, 0.55f - low_frac * 0.45f + high_frac * 0.20f, 0.12f, dt);
     // A lightly underdamped spring replaces a hard squash followed by a
     // mechanical exponential decay. It makes each poke feel soft and alive.
     c.squash_velocity += -54.0f * c.squash * dt;
@@ -540,11 +569,14 @@ void creature_update(float dt, bool touched, int touch_x, int touch_y)
     // --- emotion drives the visible parameters ---------------------------
     float mouth_target = 0.20f + c.arousal * 0.55f + c.valence * 0.12f;
     float smile_target = 0.15f + c.valence * 0.85f;
-    // The mouth carries the creature's expression, so it should follow a
-    // feeling rather than jump to it. Slower easing makes each change read as
-    // a soft shift through the face instead of a separate animation state.
-    c.mouth_open = approach(c.mouth_open, mouth_target, 3.8f, dt);
-    c.smile = approach(c.smile, smile_target, 2.4f, dt);
+    // The mouth carries the creature's expression, so it follows a feeling
+    // rather than jumping to it — but it still has to keep up with the face.
+    // A real animal's mouth moves fast; easing this too slowly reads as the
+    // expression lagging behind whatever just happened, which is exactly the
+    // latency that makes a pet feel like a machine. The jaw outruns the mood
+    // it is expressing, so mouth_open eases faster than smile.
+    c.mouth_open = approach(c.mouth_open, mouth_target, 36.0f, dt);
+    c.smile = approach(c.smile, smile_target, 22.0f, dt);
 
     // --- blinking --------------------------------------------------------
     c.blink_timer -= dt;
@@ -675,26 +707,68 @@ static void draw_mouth(float cx, float cy, float s, float anchor_y, float ky)
     const float turn = 1.0f - 0.16f * fabsf(c.facing);
     float mx = cx + (c.lean * 0.5f + c.facing * 7.0f) * s;
 
+    // `smile` is the smoothed mood axis, and its measured range in play is
+    // roughly 0.28 when starving through 0.63 idle to 0.77 just after a feed.
+    // Mapping that onto a signed bend is what makes mood visible at all: it
+    // used to drive only the mouth's width, over a 5% span nobody could see,
+    // so the creature wore the same grin whether it was delighted or dying.
+    // Neutral sits between the starving and healthy readings, so a healthy
+    // creature is visibly smiling and a starving one visibly is not.
+    // Clamped asymmetrically: a full frown is worth reaching, but the happy
+    // end tops out short of the full swing, because the widest grin the maths
+    // allows overpowers the rest of the face. Feeding pins the mood axis to
+    // its ceiling, so without this cap the creature spends every fed moment
+    // at maximum grin and the expression stops meaning anything.
+    // The pivot is the resting `smile` at exactly half life, so half a bar of
+    // health is the moment the mouth crosses from a smile to a frown. It has
+    // to track the valence baseline in creature_update(): resting smile is
+    // 0.15 + 0.85 * valence, and valence rests at 0.55 when life is 50.
+    const float bend = clampf((c.smile - 0.6175f) * 3.8f, -1.0f, 0.65f);
+
     const int teeth = 4;
     const int top_steps = teeth * 10;
     const int side_steps = 12;
     const int bowl_steps = 32;
-    const float top_rx = (61.0f + c.smile * 7.0f) * s * turn;
-    const float bowl_rx = top_rx - 8.0f * s;
+    // Sad mouths are small ones, so width follows the bend too.
+    //
+    // The widest point is the bowl line, not the top edge: the top stops short
+    // by `corner_inset` and the corner curve runs outward and down to meet the
+    // bowl. Having it the other way round — a wide top over a narrower bowl —
+    // forced the corner to bulge out and then come back in, and that S-turn
+    // rendered as a horn jutting out of each corner of the mouth.
+    const float mouth_rx = (60.0f + bend * 7.0f) * s * turn;
+    const float corner_inset = 7.0f * s;
+    const float top_rx = mouth_rx - corner_inset;
+    const float bowl_rx = mouth_rx;
     const float top_y = cy - 15.0f * s;
     const float bowl_y = top_y + (17.0f + c.mouth_open * 4.0f) * s;
     // Below this, both the bowl and the teeth scale down toward a flat closed
     // line rather than staying a fixed-depth grin. This threshold must stay
     // well under the lowest mouth_open ever reached by the arousal/valence
-    // baseline at 1% health (~0.25) — sitting right at that floor previously
-    // made the mouth flicker flat exactly when health was low, instead of
-    // only closing for the deliberate 0.0 the dead face freezes on.
+    // baseline at 1% health (measured at 0.26) — sitting right at that floor
+    // previously made the mouth flicker flat exactly when health was low,
+    // instead of only closing for the 0.0 the dead face eases down to.
     const float open_shape = clampf(c.mouth_open / 0.06f, 0.0f, 1.0f);
-    const float bowl_depth = (28.0f + c.mouth_open * 18.0f) * s * open_shape;
-    const float tooth_depth = 8.5f * s * open_shape;
+    // Mood shrinks the mouth as well as bending it. Tilting a mouth that stays
+    // this deep just reads as a big mouth on a slant; a miserable creature
+    // needs a small one, and that is most of what sells the difference.
+    const float mood_open = clampf(0.40f + 0.62f * (bend * 0.5f + 0.5f), 0.0f, 1.0f);
+    // Shallower than it is wide, so the bottom reads as a broad straight-ish
+    // sweep rather than a deep sagging U. This is the safe way to flatten it —
+    // see the bowl loop below for why reshaping the curve itself is not.
+    const float bowl_depth = (21.0f + c.mouth_open * 14.0f) * s * open_shape * mood_open;
+    // Teeth are a grin's worth of expression on their own: a miserable
+    // creature keeps a smooth lip line, and the scallops only come out as the
+    // mood turns up. Without this a deep frown still reads as a toothy smile.
+    const float tooth_mood = clampf(bend * 0.55f + 0.62f, 0.0f, 1.0f);
+    const float tooth_depth = 8.5f * s * open_shape * tooth_mood;
     const float sag = (3.0f + c.smile * 2.0f) * s;
-    const float corner_dx = 8.0f * s;
+    // Kept under corner_inset so the corner curve's control hull cannot push
+    // it back outside the bowl's width — that overshoot is the horn.
+    const float corner_dx = 5.0f * s;
     const float side_tangent = 12.0f * s;
+    // How far the corners travel between a full frown and a full grin.
+    const float corner_lift = bend * 21.0f * s;
 
     static gfx_pt_t p[GFX_MAX_POLY_PTS];
     int n = 0;
@@ -732,7 +806,15 @@ static void draw_mouth(float cx, float cy, float s, float anchor_y, float ky)
         };
     }
 
-    // One uninterrupted elliptical bowl, right to left.
+    // One uninterrupted bowl, right to left.
+    //
+    // The depth profile must leave a=0 with a finite slope. Anything that
+    // approaches a vertical tangent there — sin(a) raised to a power below 1,
+    // for instance — makes the first segment almost purely vertical, and an
+    // outline built by offsetting along edge normals has nothing stable to
+    // work from on a segment that short and that steep: the outline drops out
+    // and the fill tears in half. Flattening is done by shortening the bowl,
+    // not by reshaping this curve.
     for (int i = 1; i <= bowl_steps; i++) {
         float a = PI * (float)i / (float)bowl_steps;
         p[n++] = (gfx_pt_t){
@@ -763,16 +845,49 @@ static void draw_mouth(float cx, float cy, float s, float anchor_y, float ky)
     }
 
     for (int i = 0; i < n; i++) {
-        p[i] = flat_pt(p[i].x, p[i].y, anchor_y, ky);
+        gfx_pt_t b = bend_pt(p[i].x, p[i].y, mx, mouth_rx, corner_lift);
+        p[i] = flat_pt(b.x, b.y, anchor_y, ky);
     }
     gfx_fill_poly_outlined(p, n, C_MOUTH, C_EDGE, 2.0f * s);
 
     if (c.mouth_open > 0.32f) {
         float t = (c.mouth_open - 0.32f) / 0.68f;
-        gfx_pt_t tongue = flat_pt(mx - 4.0f * s, bowl_y + bowl_depth * 0.58f, anchor_y, ky);
-        gfx_fill_ellipse(tongue.x, tongue.y,
-                         (26.0f * t + 10.0f) * s * turn, (15.0f * t + 5.0f) * s * ky,
-                         C_TONGUE);
+
+        // The tongue is sized by how open the mouth is, but the bowl holding
+        // it also shrinks with mood, so the two are not in fixed proportion:
+        // an unclamped tongue punches through the bottom lip on a small,
+        // unhappy mouth. Fit it to the room actually available instead.
+        const float offset_x = 4.0f * s;
+        const float margin = 3.0f * s;            // clears the mouth's outline
+        const float ty_off = bowl_depth * 0.55f;  // below the bowl's top line
+
+        float rx = (26.0f * t + 10.0f) * s * turn;
+        float ry = (15.0f * t + 5.0f) * s;
+
+        // A smile bends the bowl's sides upward but the tongue is a plain
+        // ellipse that does not bend with it, so the clearance it loses at its
+        // own edges has to come out of the budget. Computed from the unclamped
+        // rx, which only ever overstates the loss.
+        float u_edge = clampf((offset_x + rx) / mouth_rx, 0.0f, 1.0f);
+        float bend_loss = (corner_lift > 0.0f) ? corner_lift * u_edge * u_edge : 0.0f;
+
+        float ry_room = bowl_depth - ty_off - margin - bend_loss;
+        if (ry > ry_room) { ry = ry_room; }
+
+        // Half-width the bowl still has at the tongue's lowest point — the
+        // ellipse narrows as it deepens, so this is what actually bounds rx.
+        float deep = clampf((ty_off + ry) / bowl_depth, 0.0f, 1.0f);
+        float rx_room = bowl_rx * sqrtf(1.0f - deep * deep) - margin - offset_x;
+        if (rx > rx_room) { rx = rx_room; }
+
+        if (rx > 1.0f && ry > 1.0f) {
+            gfx_pt_t tb = bend_pt(mx - offset_x, bowl_y + ty_off,
+                                  mx, mouth_rx, corner_lift);
+            gfx_pt_t tongue = flat_pt(tb.x, tb.y, anchor_y, ky);
+            // ky scales the tongue exactly as flat_pt scales the mouth around
+            // the same anchor, so a fit proven here survives the flatten.
+            gfx_fill_ellipse(tongue.x, tongue.y, rx, ry * ky, C_TONGUE);
+        }
     }
 }
 
@@ -835,7 +950,12 @@ static void draw_feed_pellet(float s)
     body_frame(&cx, &cy, &rx, &ry, &bs);
 
     float t = c.feed_t / FEED_FLIGHT_TIME;
-    float x1 = cx - rx * 0.15f, y1 = cy - ry * 0.30f;
+
+    // Aim for the centre of the mouth rather than the upper-left edge of the
+    // body. Keep the horizontal turn offset in step with draw_mouth(), so the
+    // cookie still lands centrally when the creature is looking aside.
+    float x1 = cx + (c.lean * 0.5f + c.facing * 7.0f) * s;
+    float y1 = cy + 4.0f * s;
     float x = FEED_BTN_CX + (x1 - FEED_BTN_CX) * t;
     float y = FEED_BTN_CY + (y1 - FEED_BTN_CY) * t - sinf(t * PI) * 26.0f;
 
@@ -954,15 +1074,32 @@ static void draw_survival_message(void)
         codes[nc++] = FONT_M;
     }
 
+    // The unit letters are drawn at half the digits' cell size so the numbers
+    // stay the thing being read and H/M/S sit beside them as annotation. Half
+    // rather than some fraction in between because draw_digit truncates its
+    // cell to whole pixels, and a cell that lands on a fraction leaves gaps
+    // between the squares making up each glyph.
     const float cell = 4.0f;
-    const float digit_w = 3.0f * cell, gap = cell;
-    float total_w = (float)nc * digit_w + (float)(nc - 1) * gap;
+    const float unit_cell = cell * 0.5f;
+    const float gap = cell;
+
+    // Widths are summed rather than multiplied out: the glyphs are no longer
+    // all the same width, so the centring has to account for which is which.
+    float total_w = 0.0f;
+    for (int i = 0; i < nc; i++) {
+        total_w += 3.0f * (codes[i] >= FONT_H ? unit_cell : cell);
+        if (i > 0) { total_w += gap; }
+    }
+
     float x = (float)DISPLAY_WIDTH / 2.0f - total_w / 2.0f;
     const float y = 70.0f;
     const uint16_t colour = display_rgb(24, 14, 28);
     for (int i = 0; i < nc; i++) {
-        draw_digit(x, y, codes[i], cell, colour);
-        x += digit_w + gap;
+        float gc = (codes[i] >= FONT_H) ? unit_cell : cell;
+        // Every glyph is 5 cells tall, so offsetting by the difference sits
+        // the small letters on the digits' baseline instead of their top.
+        draw_digit(x, y + 5.0f * (cell - gc), codes[i], gc, colour);
+        x += 3.0f * gc + gap;
     }
 }
 
