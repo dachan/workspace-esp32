@@ -113,7 +113,7 @@ PAGE = """<!doctype html>
 </style>
 <canvas id="c" width="{w}" height="{h}"></canvas>
 <div class="hint">click and drag on the creature — the mouse is the touch panel</div>
-<div class="hint">paced to the board: {fps} fps, 8KB stack budget, touch jitter</div>
+<div class="hint">paced to the board: {fps} fps, 8KB stack budget, capacitive touch</div>
 <div><span id="fps"></span></div>
 <p class="hint"><code>creature.c</code> is running live; this is not a recording</p>
 <script>

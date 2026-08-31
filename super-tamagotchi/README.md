@@ -1,30 +1,46 @@
-# super-tamagotchi
+# Super Tamagotchi
 
-A portable, battery-powered virtual pet built on an ESP32-S3 — 2.8" colour TFT with touch, 6-axis
-IMU, and I2S audio in and out. Handled and spoken to like a living thing, with no menus.
+A portable, battery-powered virtual pet built on an ESP32-S3. It has no menus:
+the touchscreen is direct interaction with the creature, and the display and
+speaker are its primary outputs.
 
-Hardware inventory, wiring constraints, and project conventions live in [AGENTS.md](AGENTS.md).
+## Current status
 
-## Status
+The 2.8-inch ILI9341V display, FT6336G-family capacitive touch controller, and
+MAX98357 speaker output are wired and were verified on hardware on 2026-08-31.
+The creature renders at about 31.5 fps and touch contacts produce screen
+coordinates. The IMU, microphone input, and battery-power system are still to
+be brought up.
 
-**Step 0 bring-up only.** Nothing is wired yet. `main/main.c` validates the board and toolchain
-before any peripheral goes on: console, 16MB flash, and that the 8MB octal PSRAM both enumerates and
-correctly stores data.
+Hardware decisions, current pin assignments, and flashing conventions are in
+[AGENTS.md](AGENTS.md); use [WIRING.md](WIRING.md) as the authoritative wiring
+map.
 
-## Build
+## Build and flash
 
-Requires ESP-IDF v5.5 with the `esp32s3` target.
+The project targets `esp32s3` and uses the workspace ESP-IDF toolchain:
 
 ```bash
-. $HOME/esp/esp-idf/export.sh && idf.py set-target esp32s3 && idf.py build flash monitor
+source $IDF_PATH/export.sh
+idf.py set-target esp32s3
+idf.py build flash monitor
 ```
 
-Expected output ends with `step 0 PASSED — safe to wire the display`.
+`sdkconfig.defaults` carries board-specific settings. `sdkconfig`, build
+directories, managed components, and simulator binaries are generated locally
+and intentionally ignored.
 
-Board-specific settings live in `sdkconfig.defaults`; the generated `sdkconfig` is gitignored, so
-edit the defaults and rebuild rather than the generated file.
+## Desktop simulator
+
+`creature.c` and `gfx.c` render against a platform-neutral RGB565 canvas, so
+the creature can be inspected without hardware:
+
+```bash
+./sim/run.sh --live  # interactive display at http://localhost:8765
+./sim/run.sh         # renders stills to sim/out.png
+```
 
 ## Configuration
 
-WiFi credentials and any other secrets belong in NVS on the device or a local gitignored file —
-never in committed firmware sources. See [AGENTS.md](AGENTS.md).
+WiFi credentials and other secrets belong in NVS on the device or a local
+gitignored file—never in committed firmware sources.

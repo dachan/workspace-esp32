@@ -3,7 +3,6 @@ dependencies:
   # ILI9341 lives outside esp_lcd core in IDF 5.x — it moved to the component
   # registry. Pulling the maintained driver beats hand-rolling an init sequence.
   espressif/esp_lcd_ili9341: "^1.2.0"
-  # XPT2046 resistive touch. Note the namespace: Espressif ships esp_lcd_touch
-  # (the common interface) but not an XPT2046 driver — that one is community
-  # maintained by atanisoft, and implements the same esp_lcd_touch API.
-  atanisoft/esp_lcd_touch_xpt2046: "^1.0.6"
+  # FT6336G belongs to the FT5x06-compatible family and uses this official I2C
+  # driver at its default address, 0x38.
+  espressif/esp_lcd_touch_ft5x06: "^1.1.1"

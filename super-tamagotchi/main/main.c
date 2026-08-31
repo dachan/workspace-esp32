@@ -119,7 +119,7 @@ static void step1_display(void)
     esp_err_t err = display_init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "display init failed: %s", esp_err_to_name(err));
-        ESP_LOGE(TAG, "  check wiring: CS=10 RST=14 DC=9 MOSI=11 SCK=12 LED=7 VCC=3V3");
+        ESP_LOGE(TAG, "  check wiring: CS=11 RST=10 DC=9 MOSI=8 SCK=18 LED=17 VCC=3V3");
         return;
     }
     display_set_backlight(100);
@@ -178,27 +178,10 @@ static void step2_touch(void)
     esp_err_t err = touch_init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "touch init failed: %s", esp_err_to_name(err));
-        ESP_LOGE(TAG, "  check wiring: T_CLK=18 T_CS=15 T_DIN=17 T_DO=8 T_IRQ=16");
+        ESP_LOGE(TAG, "  check wiring: CTP_INT=5 CTP_SDA=6 CTP_RST=7 CTP_SCL=15");
         return;
     }
-
-    // Calibrate when there is nothing stored, or when the panel is already being
-    // held at boot — that press-to-recalibrate gesture is the recovery path once
-    // the drift AGENTS.md warns about sets in.
-    bool held_at_boot = touch_read(NULL, NULL, NULL, NULL);
-    esp_err_t loaded = touch_load_calibration();
-
-    if (loaded != ESP_OK || held_at_boot) {
-        ESP_LOGI(TAG, "  %s — running calibration",
-                 held_at_boot ? "panel held at boot" : "no stored calibration");
-        if (touch_calibrate() != ESP_OK) {
-            ESP_LOGE(TAG, "  calibration failed; coordinates will be raw ADC counts");
-        }
-    } else {
-        ESP_LOGI(TAG, "  hold the panel while resetting to recalibrate");
-    }
-
-    ESP_LOGI(TAG, "  touch calibrated — handing over to the creature");
+    ESP_LOGI(TAG, "  capacitive touch ready — factory calibrated");
 }
 
 // Step 3: the creature. Redraws every frame from parameters; touch feeds the
@@ -262,8 +245,8 @@ static void step3_creature(void)
 
 void app_main(void)
 {
-    // NVS holds the touch calibration. Erase and retry on the usual first-boot
-    // and layout-change errors rather than failing the whole bring-up.
+    // NVS is retained for creature state and future persisted settings. Erase
+    // and retry on the usual first-boot and layout-change errors.
     esp_err_t nvs_err = nvs_flash_init();
     if (nvs_err == ESP_ERR_NVS_NO_FREE_PAGES || nvs_err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK_WITHOUT_ABORT(nvs_flash_erase());

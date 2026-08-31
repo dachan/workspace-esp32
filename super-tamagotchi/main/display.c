@@ -17,18 +17,17 @@
 
 static const char *TAG = "display";
 
-// Pinout — see the table in AGENTS.md, in the display header's own silkscreen
-// order (VCC, GND, CS, RESET, DC, SDI/MOSI, SCK, LED, SDO/MISO — VCC/GND are
-// power, not GPIO). GPIO10-13 are the ESP32-S3's native IOMUX pins for SPI2,
-// which keeps the bus off the GPIO matrix and lets it clock at full speed.
-// Touch shares SCK/MOSI/MISO and is not wired yet.
-#define PIN_CS   10
-#define PIN_RST  14
-#define PIN_DC    9
-#define PIN_MOSI 11
-#define PIN_SCK  12
-#define PIN_BL    7
-#define PIN_MISO 13  // optional; the ILI9341 is write-only in normal use
+// New 2.8-inch IPS ILI9341V module. Order follows its 14-pin header:
+// VCC, GND, LCD_CS, LCD_RST, LCD_RS/DC, SDI/MOSI, SCK, LED, SDO/MISO,
+// CTP_SCL, CTP_RST, CTP_SDA, CTP_INT, SD_CS.
+#define PIN_SD_CS  4
+#define PIN_MOSI   8
+#define PIN_DC     9
+#define PIN_RST   10
+#define PIN_CS    11
+#define PIN_MISO  16
+#define PIN_BL    17
+#define PIN_SCK   18
 
 #define LCD_HOST      SPI2_HOST
 #define LCD_PIXEL_CLK (40 * 1000 * 1000)
@@ -102,6 +101,18 @@ esp_err_t display_init(void)
 {
     // One full frame is the largest transfer we will ever issue.
     const size_t fb_bytes = DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t);
+
+    // The microSD slot shares the LCD SPI bus. It is unused, so keep its chip
+    // select inactive even when a card is present and prevent MISO contention.
+    gpio_config_t sd_cs_cfg = {
+        .pin_bit_mask = 1ULL << PIN_SD_CS,
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    ESP_RETURN_ON_ERROR(gpio_config(&sd_cs_cfg), TAG, "SD CS GPIO");
+    ESP_RETURN_ON_ERROR(gpio_set_level(PIN_SD_CS, 1), TAG, "deselect SD");
 
     spi_bus_config_t bus = {
         .sclk_io_num = PIN_SCK,

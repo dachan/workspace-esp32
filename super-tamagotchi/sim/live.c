@@ -17,9 +17,8 @@
 //     device's CONFIG_ESP_MAIN_TASK_STACK_SIZE. A desktop process has megabytes,
 //     which is why a stack overflow that rebooted the board every twenty seconds
 //     ran perfectly well here. Now it is reported instead of hidden.
-//   * Touch coordinates get a pixel or two of jitter, because the XPT2046 is a
-//     noisy resistive panel and gestures should be designed against what it can
-//     actually deliver.
+//   * Touch is passed through directly, matching the current factory-calibrated
+//     capacitive panel.
 
 #include <pthread.h>
 #include <stdbool.h>
@@ -38,9 +37,6 @@
 // measured and reported rather than crashing the emulator.
 #define PROBE_STACK (512 * 1024)
 #define FILL_BYTE   0xA5
-
-// Peak-to-peak jitter of the touch position, in pixels.
-#define TOUCH_JITTER 3
 
 static uint8_t *stack_mem;
 
@@ -80,11 +76,6 @@ static void *frame_loop(void *unused)
         // cannot lurch the animation in a way the board never would.
         if (dt < 0.0f) { dt = 0.0f; }
         if (dt > 0.1f) { dt = 0.1f; }
-
-        if (touched) {
-            x += (rand() % (TOUCH_JITTER * 2 + 1)) - TOUCH_JITTER;
-            y += (rand() % (TOUCH_JITTER * 2 + 1)) - TOUCH_JITTER;
-        }
 
         creature_update(dt, touched != 0, x, y);
         creature_draw();

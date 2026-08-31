@@ -1,7 +1,7 @@
 # Super Tamagotchi wiring
 
-Current connector map for the ESP32-S3, ILI9341/XPT2046 display, MAX98357
-speaker amplifier, and LSM6DS3 IMU.
+Current connector map for the ESP32-S3, ILI9341V/FT6336G capacitive display,
+MAX98357 speaker amplifier, and future LSM6DS3 IMU.
 
 > **Disconnect USB power before moving any wire.** All logic signals are 3.3V.
 > The display is powered from 3.3V; only the MAX98357 `VIN` uses 5V.
@@ -11,20 +11,19 @@ speaker amplifier, and LSM6DS3 IMU.
 ```mermaid
 flowchart LR
     ESP["ESP32-S3 expansion board"]
-    TFT["ILI9341 display"]
-    TOUCH["XPT2046 touch controller"]
+    TFT["ILI9341V IPS display"]
+    TOUCH["FT6336G capacitive touch"]
     AMP["MAX98357 I2S amplifier"]
     SPEAKER["1W / 8 ohm speaker"]
     IMU["LSM6DS3 accel/gyro"]
 
     ESP -- "3V3 + GND" --> TFT
-    ESP -- "GPIO7, 9-14" --> TFT
-    ESP -- "GPIO8, 15-18" --> TOUCH
+    ESP -- "GPIO4, 8-11, 16-18" --> TFT
+    ESP -- "GPIO5-7, 15" --> TOUCH
     ESP -- "5V + GND" --> AMP
     ESP -- "GPIO38, 39, 40, 42" --> AMP
     AMP -- "OUT+ and OUT-" --> SPEAKER
-    ESP -- "3V3 + GND" --> IMU
-    ESP -- "GPIO4, 5, 6" --> IMU
+    ESP -. "not connected yet" .-> IMU
 ```
 
 ## ESP32-S3 expansion headers
@@ -45,27 +44,25 @@ Side B
 
 | GPIO | Connected to | Purpose |
 |---:|---|---|
-| 7 | Display `LED` | Backlight control |
-| 8 | Display `T_DO` | Touch MISO |
+| 4 | Display `SD_CS` | Hold unused microSD slot inactive |
+| 5 | Display `CTP_INT` | Capacitive-touch interrupt |
+| 6 | Display `CTP_SDA` | Capacitive-touch I2C data |
+| 7 | Display `CTP_RST` | Capacitive-touch reset |
+| 8 | Display `SDI(MOSI)` | Display MOSI |
 | 9 | Display `DC` | Display data/command |
-| 10 | Display `CS` | Display chip select |
-| 11 | Display `SDI(MOSI)` | Display MOSI |
-| 12 | Display `SCK` | Display clock |
-| 13 | Display `SDO(MISO)` | Display MISO |
-| 14 | Display `RESET` | Display reset |
-| 15 | Display `T_CS` | Touch chip select |
-| 16 | Display `T_IRQ` | Touch interrupt |
-| 17 | Display `T_DIN` | Touch MOSI |
-| 18 | Display `T_CLK` | Touch clock |
+| 10 | Display `LCD_RST` | Display reset |
+| 11 | Display `LCD_CS` | Display chip select |
+| 15 | Display `CTP_SCL` | Capacitive-touch I2C clock |
+| 16 | Display `SDO(MISO)` | Display MISO |
+| 17 | Display `LED` | Backlight PWM |
+| 18 | Display `SCK` | Display clock |
 | 38 | MAX98357 `BCLK` | I2S bit clock |
 | 39 | MAX98357 `LRC` | I2S word/left-right clock |
 | 40 | MAX98357 `DIN` | I2S audio data to amplifier |
 | 42 | MAX98357 `SD` | Amplifier enable/mute |
-| 4 | LSM6DS3 `SCL` | IMU I2C clock |
-| 5 | LSM6DS3 `SDA` | IMU I2C data |
-| 6 | LSM6DS3 `INT1` | IMU interrupt |
 
-The display backlight moved from GPIO21 to GPIO7, so GPIO21 is free.
+The new display occupies GPIO4-18 as one contiguous wiring block. The IMU is
+not connected yet and must be assigned a new three-pin group before step 3.
 
 ## Display and touch connector
 
@@ -73,20 +70,21 @@ The display backlight moved from GPIO21 to GPIO7, so GPIO21 is free.
 |---|---|---|
 | `VCC` | `3V3` | Do not use 5V for this build |
 | `GND` | `GND` | Shared ground |
-| `CS` | GPIO10 | Display chip select |
-| `RESET` | GPIO14 | Display reset |
-| `DC` | GPIO9 | Data/command |
-| `SDI(MOSI)` | GPIO11 | Display data from ESP32 |
-| `SCK` | GPIO12 | Display clock |
-| `LED` | GPIO7 | Backlight; moved from GPIO21 |
-| `SDO(MISO)` | GPIO13 | Display data to ESP32 |
-| `T_CLK` | GPIO18 | Touch clock |
-| `T_CS` | GPIO15 | Touch chip select |
-| `T_DIN` | GPIO17 | Touch data from ESP32 |
-| `T_DO` | GPIO8 | Touch data to ESP32 |
-| `T_IRQ` | GPIO16 | Touch interrupt |
+| `LCD_CS` | GPIO11 | Display chip select |
+| `LCD_RST` | GPIO10 | Display reset |
+| `LCD_RS (DC)` | GPIO9 | Data/command |
+| `SDI(MOSI)` | GPIO8 | Display data from ESP32 |
+| `SCK` | GPIO18 | Display clock |
+| `LED` | GPIO17 | Active-high backlight PWM |
+| `SDO(MISO)` | GPIO16 | Display data to ESP32 |
+| `CTP_SCL` | GPIO15 | FT6336G I2C clock |
+| `CTP_RST` | GPIO7 | Active-low touch reset |
+| `CTP_SDA` | GPIO6 | FT6336G I2C data |
+| `CTP_INT` | GPIO5 | Active-low touch interrupt |
+| `SD_CS` | GPIO4 | Firmware holds high; SD is unused |
 
-The display module's separate microSD connector is intentionally not wired.
+This display's microSD slot shares the LCD SPI lines. It remains unused, and
+the firmware actively holds `SD_CS` high to prevent bus contention.
 
 ## MAX98357 amplifier and speaker
 
@@ -124,16 +122,17 @@ distortion and potentially damaging the hardware.
 
 ## LSM6DS3 IMU
 
-I2C, on its own bus rather than shared with the display's SPI. `SDO` is tied to
-`GND` so the part sits at I2C address `0x6A`.
+Not connected yet. GPIO4-6 now belong to the new display, so the old IMU map
+below is retired. Choose and document a new I2C/interrupt group when IMU
+bring-up starts; `SDO` should still be tied to `GND` for address `0x6A`.
 
 | LSM6DS3 pin | Connection | Notes |
 |---|---|---|
 | `VIN` | `3V3` | **3.3V only** — not 5V tolerant |
 | `GND` | `GND` | Shared ground |
-| `SCL` | GPIO4 | I2C clock |
-| `SDA` | GPIO5 | I2C data |
-| `INT1` | GPIO6 | Interrupt (tap, wake, free-fall, etc.) |
+| `SCL` | Not assigned | I2C clock |
+| `SDA` | Not assigned | I2C data |
+| `INT1` | Not assigned | Interrupt (tap, wake, free-fall, etc.) |
 | `SDO/SA0` | `GND` | Selects I2C address `0x6A` |
 | `CS` | `3V3` | Ties the part into I2C mode |
 
@@ -142,9 +141,9 @@ ESP32-S3                         LSM6DS3
 ---------                        -------
 3V3    ------------------------> VIN
 GND    ------------------------> GND
-GPIO4  ------------------------> SCL
-GPIO5  ------------------------> SDA
-GPIO6  ------------------------> INT1
+TBD    ------------------------> SCL
+TBD    ------------------------> SDA
+TBD    ------------------------> INT1
 GND    ------------------------> SDO/SA0
 3V3    ------------------------> CS
 ```
@@ -163,4 +162,3 @@ GND    ------------------------> SDO/SA0
 GPIO45 is particularly unsuitable: its reset-time level selects the flash/PSRAM
 voltage. Do not move a display signal to GPIO3, GPIO45, or GPIO46 merely to fill
 an unused connector.
-

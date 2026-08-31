@@ -33,9 +33,3 @@ CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
 # scratch buffers are static rather than stack (see gfx.c), but keep headroom so
 # a stack overflow is not the way we find out about the next addition.
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
-
-# Touch: give us the raw ADC counts, not the driver's own conversion. Its
-# built-in mapping assumes the panel swings the full 0-4096, which no real
-# resistive panel does — the result is coordinates that are squashed and offset.
-# We calibrate against the actual range instead. See touch.c.
-CONFIG_XPT2046_CONVERT_ADC_TO_COORDS=n
