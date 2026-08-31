@@ -1,0 +1,41 @@
+# Board: Lonely Binary ESP32-S3 N16R8 — 16MB quad flash + 8MB OCTAL PSRAM.
+# The octal PSRAM setting is the one that matters: get it wrong and PSRAM either
+# fails to enumerate or enumerates and returns corrupt data. main.c checks both.
+
+CONFIG_IDF_TARGET="esp32s3"
+
+# 240MHz, not the 160MHz default. This device has to render an animated creature
+# and run audio DSP within a ~200ms reflex budget; the headroom is worth the mA,
+# and the screen-off doze state is where power actually gets saved.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# 16MB flash
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# 8MB octal PSRAM — the "R8" in N16R8
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_TYPE_AUTO=y
+CONFIG_SPIRAM_SPEED_80M=y
+
+# Console on UART0 (GPIO43/44) — the USB-C port behind the UART bridge.
+# ESP-IDF also enables USB Serial/JTAG as a *secondary* console by default, so
+# logs appear on the native USB-C port (GPIO19/20) too. Either port works; no
+# change needed to switch between them.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+
+# The render loop runs on the main task. 3584 bytes is the ESP-IDF default and
+# is not much once float maths and nested drawing calls are in flight; the large
+# scratch buffers are static rather than stack (see gfx.c), but keep headroom so
+# a stack overflow is not the way we find out about the next addition.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# Touch: give us the raw ADC counts, not the driver's own conversion. Its
+# built-in mapping assumes the panel swings the full 0-4096, which no real
+# resistive panel does — the result is coordinates that are squashed and offset.
+# We calibrate against the actual range instead. See touch.c.
+CONFIG_XPT2046_CONVERT_ADC_TO_COORDS=n

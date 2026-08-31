@@ -1,0 +1,42 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# ESP-IDF
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
+dependencies.lock
+
+# Arduino
+*.bin
+*.elf
+*.map
+
+# Environment — never commit real values
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Keys and certificates
+*.pem
+*.key
+
+# Simulator build output
+sim/creature_sim
+sim/out.bmp
+sim/film.bmp
+sim/creature_live
+sim/out.png
