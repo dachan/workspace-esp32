@@ -20,6 +20,11 @@ enum {
     TARGET_COUNT = 5,
     SAMPLE_COUNT = 10,
     POWER_OFF_HOLD_MS = 3000,
+    TOUCH_RELEASE_MS = 120,
+    GLYPH_WIDTH = 5,
+    GLYPH_HEIGHT = 7,
+    GLYPH_ADVANCE = 6,
+    LABEL_SCALE = 3,
 };
 
 typedef struct {
@@ -65,51 +70,239 @@ static void draw_target(esp_lcd_panel_handle_t panel, uint16_t x, uint16_t y)
     draw_rect(panel, x - 5, y - 5, 11, 11, rgb565_wire(255, 0, 0));
 }
 
-static bool read_raw_point(touch_read_fn_t touch_read, touch_hold_fn_t touch_hold,
-                           uint16_t *raw_x, uint16_t *raw_y)
+static uint8_t glyph_row(char character, int row)
 {
-    TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(60000);
+    static const uint8_t e[GLYPH_HEIGHT] = { 0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x1f };
+    static const uint8_t f[GLYPH_HEIGHT] = { 0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x10 };
+    static const uint8_t l[GLYPH_HEIGHT] = { 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1f };
+    static const uint8_t o[GLYPH_HEIGHT] = { 0x0e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e };
+    static const uint8_t p[GLYPH_HEIGHT] = { 0x1e, 0x11, 0x11, 0x1e, 0x10, 0x10, 0x10 };
+    static const uint8_t r[GLYPH_HEIGHT] = { 0x1e, 0x11, 0x11, 0x1e, 0x14, 0x12, 0x11 };
+    static const uint8_t s[GLYPH_HEIGHT] = { 0x0f, 0x10, 0x10, 0x0e, 0x01, 0x01, 0x1e };
+    static const uint8_t w[GLYPH_HEIGHT] = { 0x11, 0x11, 0x11, 0x15, 0x15, 0x1b, 0x11 };
+    const uint8_t *glyph = NULL;
+    switch (character) {
+    case 'E': glyph = e; break;
+    case 'F': glyph = f; break;
+    case 'L': glyph = l; break;
+    case 'O': glyph = o; break;
+    case 'P': glyph = p; break;
+    case 'R': glyph = r; break;
+    case 'S': glyph = s; break;
+    case 'W': glyph = w; break;
+    default: return 0;
+    }
+    return glyph[row];
+}
+
+static void draw_label(esp_lcd_panel_handle_t panel, int origin_x, int origin_y,
+                       const char *text, uint16_t color)
+{
+    // Characters and glyph bits are drawn mirrored in X. After MADCTL,
+    // framebuffer +X is visual left; this makes labels read LTR. See AGENTS.md.
+    int length = 0;
+    while (text[length] != '\0') {
+        ++length;
+    }
+    int glyph_w = GLYPH_WIDTH * LABEL_SCALE;
+    int glyph_h = GLYPH_HEIGHT * LABEL_SCALE;
+    uint16_t *pixels = heap_caps_malloc(glyph_w * glyph_h * sizeof(*pixels), MALLOC_CAP_DMA);
+    if (!pixels) {
+        return;
+    }
+    for (int i = 0; i < length; ++i) {
+        for (int row = 0; row < GLYPH_HEIGHT; ++row) {
+            uint8_t bits = glyph_row(text[i], row);
+            for (int sy = 0; sy < LABEL_SCALE; ++sy) {
+                uint16_t *dest = pixels + (row * LABEL_SCALE + sy) * glyph_w;
+                for (int col = 0; col < GLYPH_WIDTH; ++col) {
+                    uint16_t pixel = (bits & (1U << col)) ? color : 0;
+                    for (int sx = 0; sx < LABEL_SCALE; ++sx) {
+                        dest[col * LABEL_SCALE + sx] = pixel;
+                    }
+                }
+            }
+        }
+        int x = origin_x + (length - 1 - i) * GLYPH_ADVANCE * LABEL_SCALE;
+        ESP_ERROR_CHECK(display_sync_draw(panel, x, origin_y, x + glyph_w,
+                                          origin_y + glyph_h, pixels));
+    }
+    free(pixels);
+}
+
+static void choice_layout(int *x, int *width, int *height, int *sleep_y, int *power_y)
+{
+    int gap = LCD_HEIGHT / 16;
+    int margin = LCD_WIDTH / 16;
+    if (gap < 12) {
+        gap = 12;
+    }
+    if (margin < 10) {
+        margin = 10;
+    }
+    *x = margin;
+    *width = LCD_WIDTH - 2 * margin;
+    *height = (LCD_HEIGHT - 3 * gap) / 2;
+    *sleep_y = gap;
+    *power_y = gap * 2 + *height;
+}
+
+static void draw_choice_button(esp_lcd_panel_handle_t panel, int x, int y, int width,
+                               int height, const char *label, uint16_t green)
+{
+    const int border = 4;
+    draw_rect(panel, x, y, width, height, green);
+    draw_rect(panel, x + border, y + border, width - 2 * border, height - 2 * border,
+              rgb565_wire(0, 0, 0));
+    int length = 0;
+    while (label[length] != '\0') {
+        ++length;
+    }
+    int text_w = length * GLYPH_ADVANCE * LABEL_SCALE - LABEL_SCALE;
+    int text_h = GLYPH_HEIGHT * LABEL_SCALE;
+    int text_x = x + (width - text_w) / 2;
+    int text_y = y + (height - text_h) / 2;
+    draw_label(panel, text_x, text_y, label, green);
+}
+
+static void map_choice_touch(uint16_t raw_x, uint16_t raw_y, uint16_t *x, uint16_t *y)
+{
+    touch_calibration_t mapping;
+    if (touch_calibration_load(&mapping)) {
+        touch_calibration_apply(&mapping, raw_x, raw_y, x, y);
+        return;
+    }
+    display_profile_touch_to_view(raw_x, raw_y, x, y);
+}
+
+static void offer_hold_actions(esp_lcd_panel_handle_t panel, touch_read_fn_t touch_read,
+                               touch_hold_fn_t touch_hold)
+{
     uint16_t ignored_x;
     uint16_t ignored_y;
+    while (touch_read(&ignored_x, &ignored_y)) {
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+    vTaskDelay(pdMS_TO_TICKS(TOUCH_RELEASE_MS));
 
+    uint16_t green = rgb565_wire(0, 255, 0);
+    int x;
+    int width;
+    int height;
+    int sleep_y;
+    int power_y;
+    choice_layout(&x, &width, &height, &sleep_y, &power_y);
+    draw_rect(panel, 0, 0, LCD_WIDTH, LCD_HEIGHT, rgb565_wire(0, 0, 0));
+    draw_choice_button(panel, x, sleep_y, width, height, "SLEEP", green);
+    draw_choice_button(panel, x, power_y, width, height, "POWER OFF", green);
+    ESP_LOGI(TAG, "HOLD MENU: tap SLEEP or POWER OFF");
+
+    while (true) {
+        uint16_t raw_x;
+        uint16_t raw_y;
+        if (!touch_read(&raw_x, &raw_y)) {
+            vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
+        }
+        uint16_t screen_x;
+        uint16_t screen_y;
+        map_choice_touch(raw_x, raw_y, &screen_x, &screen_y);
+        bool in_x = screen_x >= (uint16_t)x && screen_x < (uint16_t)(x + width);
+        if (in_x && screen_y >= (uint16_t)sleep_y
+            && screen_y < (uint16_t)(sleep_y + height)) {
+            ESP_LOGI(TAG, "SLEEP requested");
+            touch_hold(TOUCH_HOLD_SLEEP);
+        } else if (in_x && screen_y >= (uint16_t)power_y
+                   && screen_y < (uint16_t)(power_y + height)) {
+            ESP_LOGI(TAG, "POWER OFF requested");
+            touch_hold(TOUCH_HOLD_POWER_OFF);
+        }
+        while (touch_read(&ignored_x, &ignored_y)) {
+            vTaskDelay(pdMS_TO_TICKS(20));
+        }
+    }
+}
+
+static void offer_hold_if_held(esp_lcd_panel_handle_t panel, touch_read_fn_t touch_read,
+                               touch_hold_fn_t touch_hold, TickType_t hold_started_at)
+{
+    if (!touch_hold || hold_started_at == 0) {
+        return;
+    }
+    if (xTaskGetTickCount() - hold_started_at < pdMS_TO_TICKS(POWER_OFF_HOLD_MS)) {
+        return;
+    }
+    ESP_LOGI(TAG, "CALIBRATION HOLD: three seconds");
+    offer_hold_actions(panel, touch_read, touch_hold);
+}
+
+static bool wait_until_released(esp_lcd_panel_handle_t panel, touch_read_fn_t touch_read,
+                                touch_hold_fn_t touch_hold, TickType_t deadline)
+{
+    TickType_t hold_started_at = 0;
+    TickType_t last_contact_at = 0;
+    bool in_contact = false;
     while (xTaskGetTickCount() < deadline) {
-        if (!touch_read(&ignored_x, &ignored_y)) {
-            break;
+        uint16_t ignored_x;
+        uint16_t ignored_y;
+        TickType_t now = xTaskGetTickCount();
+        if (touch_read(&ignored_x, &ignored_y)) {
+            if (!in_contact) {
+                hold_started_at = now;
+                in_contact = true;
+            }
+            last_contact_at = now;
+            offer_hold_if_held(panel, touch_read, touch_hold, hold_started_at);
+        } else if (!in_contact
+                   || now - last_contact_at >= pdMS_TO_TICKS(TOUCH_RELEASE_MS)) {
+            return true;
         }
         vTaskDelay(pdMS_TO_TICKS(20));
+    }
+    return false;
+}
+
+static bool read_raw_point(esp_lcd_panel_handle_t panel, touch_read_fn_t touch_read,
+                           touch_hold_fn_t touch_hold, uint16_t *raw_x, uint16_t *raw_y)
+{
+    TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(60000);
+    if (!wait_until_released(panel, touch_read, touch_hold, deadline)) {
+        return false;
     }
 
     uint32_t sum_x = 0;
     uint32_t sum_y = 0;
     unsigned int samples = 0;
-    TickType_t touch_started_at = 0;
+    TickType_t hold_started_at = 0;
+    TickType_t last_contact_at = 0;
+    bool in_contact = false;
     while (xTaskGetTickCount() < deadline) {
         uint16_t sample_x;
         uint16_t sample_y;
+        TickType_t now = xTaskGetTickCount();
         if (touch_read(&sample_x, &sample_y)) {
-            TickType_t now = xTaskGetTickCount();
-            if (touch_started_at == 0) {
-                touch_started_at = now;
+            if (!in_contact) {
+                hold_started_at = now;
+                sum_x = 0;
+                sum_y = 0;
+                samples = 0;
+                in_contact = true;
             }
+            last_contact_at = now;
             sum_x += sample_x;
             sum_y += sample_y;
             ++samples;
-            if (touch_hold
-                    && now - touch_started_at >= pdMS_TO_TICKS(POWER_OFF_HOLD_MS)) {
-                ESP_LOGI(TAG, "POWER OFF REQUESTED: three-second calibration hold");
-                touch_hold();
+            offer_hold_if_held(panel, touch_read, touch_hold, hold_started_at);
+        } else if (in_contact
+                   && now - last_contact_at >= pdMS_TO_TICKS(TOUCH_RELEASE_MS)) {
+            in_contact = false;
+            if (samples >= SAMPLE_COUNT) {
+                *raw_x = sum_x / samples;
+                *raw_y = sum_y / samples;
+                return true;
             }
-        } else if (samples >= SAMPLE_COUNT) {
-            *raw_x = sum_x / samples;
-            *raw_y = sum_y / samples;
-            return true;
-        } else {
-            sum_x = 0;
-            sum_y = 0;
-            samples = 0;
-            touch_started_at = 0;
         }
-        vTaskDelay(pdMS_TO_TICKS(25));
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
     return false;
 }
@@ -264,7 +457,7 @@ bool touch_calibration_run(esp_lcd_panel_handle_t panel, touch_read_fn_t touch_r
         points[i].screen_x = display_calibration_targets[i][0];
         points[i].screen_y = display_calibration_targets[i][1];
         draw_target(panel, points[i].screen_x, points[i].screen_y);
-        if (!read_raw_point(touch_read, touch_hold,
+        if (!read_raw_point(panel, touch_read, touch_hold,
                             &points[i].raw_x, &points[i].raw_y)) {
             ESP_LOGE(TAG, "CALIBRATION TIMEOUT at target %d", i + 1);
             gpio_set_level(backlight_pin, 0);

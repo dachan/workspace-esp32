@@ -8,7 +8,13 @@
 #include "esp_lcd_panel_ops.h"
 
 typedef bool (*touch_read_fn_t)(uint16_t *raw_x, uint16_t *raw_y);
-typedef void (*touch_hold_fn_t)(void);
+
+typedef enum {
+    TOUCH_HOLD_SLEEP = 0,
+    TOUCH_HOLD_POWER_OFF,
+} touch_hold_action_t;
+
+typedef void (*touch_hold_fn_t)(touch_hold_action_t action);
 
 typedef struct {
     float x_offset;

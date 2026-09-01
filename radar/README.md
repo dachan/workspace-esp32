@@ -86,7 +86,7 @@ LCD_CS                                GPIO11
 ```
 
 `original-2.8` uses the same FT6336U capacitive-touch wiring as the 3.2-inch
-profile, while retaining its own 240x320 LCD profile and calibration slot.
+profile, with a landscape 320x240 view and its own calibration slot.
 
 ### External 8-pixel rainbow bar
 
@@ -115,7 +115,8 @@ PREVIOUS OTHER SIDE    GND
 
 The palette order is Northern Lights, Deep Ocean, Desert Sunset, Tropical
 Lagoon, Forest Canopy, Molten Ember, Lavender Dawn, and Neon Arcade. GPIO2
-moves forward and GPIO21 moves backward. Both change the LED bar and display.
+moves forward and GPIO21 moves backward. Both change the LED bar only; the
+radar view stays black and green.
 
 ### LD2450 person tracking radar
 
@@ -167,18 +168,28 @@ Verify `VCC` against the display board's markings before changing its wiring.
 ## Behaviour
 
 - The backlight pulses off, then turns on.
-- The firmware sends six colour bands, then starts the screensaver immediately.
+- The firmware sends six colour bands, then starts the radar view immediately.
 - A three-second touch hold starts the five-point calibration:
   top-left, top-right, bottom-right, bottom-left, centre.
+- A three-second hold on the calibration screen shows SLEEP and POWER OFF.
+  Sleep is deep sleep with tap-to-wake. Power off is deep sleep with no wake
+  source; use EN/RESET or cycle power to start again.
 - Calibration is stored separately for each resolution, so switching profiles
   never applies 3.2-inch touch coordinates to the 3.5-inch display.
 - The test only reads microSD identity/capacity; it never writes to the card.
 - GPIO2 advances through eight palettes; GPIO21 returns to the previous palette.
+  Palettes affect the LED bar only.
 - The radar is black and green, with its sensor at the physical top centre,
-  distance at top-left, target coordinates near the bottom, and proportional
-  margins on both display sizes.
+  distance at visual top-left, target coordinates near the bottom-left, and
+  proportional margins on both display sizes. After the landscape MADCTL,
+  framebuffer +X is visual left; label origins come from `radar_text_left_x()`.
+  Do not place strings at framebuffer x=8. The locked mapping is in AGENTS.md.
 - An active target is shown as an 8x8 green dot. Every two seconds it expands
   to 48 px while fading to transparent in 0.25 seconds.
+- After 10 seconds with no detected person the display sleeps (panel and
+  backlight off). The next detected person or a tap wakes it and redraws the
+  view. The ESP32 stays running so the sensor UART or ESP-NOW link can still
+  arrive.
 
 ## Voice commands
 

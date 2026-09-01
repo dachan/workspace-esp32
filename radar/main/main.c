@@ -6,6 +6,7 @@
 
 #include "driver/gpio.h"
 #include "driver/i2c.h"
+#include "driver/rtc_io.h"
 #include "driver/sdspi_host.h"
 #include "driver/spi_master.h"
 #include "board_rgb_led.h"
@@ -27,13 +28,13 @@
 #include "microphone.h"
 #include "radar_link.h"
 #include "sdmmc_cmd.h"
-#include "screensaver.h"
+#include "radar_view.h"
 #include "speech_recognition.h"
 #include "touch_calibration.h"
 #include "display_profile.h"
 #include "rainbow_wave.h"
 
-static const char *TAG = "hardware_test";
+static const char *TAG = "radar";
 
 enum {
     PIN_SD_CS = 4,
@@ -53,6 +54,7 @@ enum {
 enum {
     LCD_TRANSFER_ROWS = 80,
     TOUCH_ADDR = 0x38,
+    DISPLAY_SLEEP_IDLE_MS = 10000,
 };
 
 #define LCD_HOST SPI2_HOST
@@ -72,6 +74,8 @@ static radar_link_frame_t s_link_frame;
 static TickType_t s_radar_last_frame;
 static TickType_t s_radar_last_report;
 static TickType_t s_radar_last_ping;
+static TickType_t s_radar_last_presence;
+static bool s_display_asleep;
 
 static uint16_t rgb565_wire(uint8_t red, uint8_t green, uint8_t blue)
 {
@@ -296,6 +300,7 @@ static void init_and_test_display(bool show_pattern)
     ESP_ERROR_CHECK(esp_lcd_panel_reset(s_panel));
     ESP_ERROR_CHECK(esp_lcd_panel_init(s_panel));
     ESP_ERROR_CHECK(esp_lcd_panel_invert_color(s_panel, true));
+    ESP_ERROR_CHECK(display_profile_apply_view_orientation(s_panel));
     ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(s_panel, true));
 
     uint8_t display_id[4] = {0};
@@ -350,34 +355,32 @@ static void test_sd_card(void)
     sdspi_host_remove_device(handle);
 }
 
-static void update_joystick(screensaver_t *screensaver)
+static void update_joystick(radar_view_t *view)
 {
     voice_command_t command = s_speech_ready ? speech_recognition_take_command() : VOICE_COMMAND_NONE;
-    int target_x = screensaver->cursor_x;
-    int target_y = screensaver->cursor_y;
+    int target_x = view->cursor_x;
+    int target_y = view->cursor_y;
 
     switch (command) {
     case VOICE_COMMAND_UP:
-        // The 2.8-inch panel is physically mounted a quarter-turn clockwise
-        // from its controller coordinate system.
-        target_x = 8;
-        target_y = LCD_HEIGHT / 2;
-        break;
-    case VOICE_COMMAND_DOWN:
-        target_x = LCD_WIDTH - 9;
-        target_y = LCD_HEIGHT / 2;
-        break;
-    case VOICE_COMMAND_LEFT:
         target_x = LCD_WIDTH / 2;
         target_y = 8;
         break;
-    case VOICE_COMMAND_RIGHT:
+    case VOICE_COMMAND_DOWN:
         target_x = LCD_WIDTH / 2;
         target_y = LCD_HEIGHT - 9;
         break;
-    case VOICE_COMMAND_UP_RIGHT:
+    case VOICE_COMMAND_LEFT:
         target_x = 8;
-        target_y = LCD_HEIGHT - 9;
+        target_y = LCD_HEIGHT / 2;
+        break;
+    case VOICE_COMMAND_RIGHT:
+        target_x = LCD_WIDTH - 9;
+        target_y = LCD_HEIGHT / 2;
+        break;
+    case VOICE_COMMAND_UP_RIGHT:
+        target_x = LCD_WIDTH - 9;
+        target_y = 8;
         break;
     case VOICE_COMMAND_UP_LEFT:
         target_x = 8;
@@ -388,8 +391,8 @@ static void update_joystick(screensaver_t *screensaver)
         target_y = LCD_HEIGHT - 9;
         break;
     case VOICE_COMMAND_DOWN_LEFT:
-        target_x = LCD_WIDTH - 9;
-        target_y = 8;
+        target_x = 8;
+        target_y = LCD_HEIGHT - 9;
         break;
     case VOICE_COMMAND_RESET:
         target_x = LCD_WIDTH / 2;
@@ -400,12 +403,12 @@ static void update_joystick(screensaver_t *screensaver)
     }
 
     if (command != VOICE_COMMAND_NONE) {
-        screensaver_set_cursor(screensaver, target_x, target_y);
+        radar_view_set_cursor(view, target_x, target_y);
         ESP_LOGI(TAG, "voice command %d -> cursor (%d, %d)", command, target_x, target_y);
     } else if (s_speech_ready && speech_recognition_take_sound_detected()) {
-        screensaver_set_cursor(screensaver, LCD_WIDTH / 2, LCD_HEIGHT / 2);
+        radar_view_set_cursor(view, LCD_WIDTH / 2, LCD_HEIGHT / 2);
     } else if (!s_speech_ready && s_microphone_ready && microphone_sound_detected()) {
-        screensaver_set_cursor(screensaver, LCD_WIDTH / 2, LCD_HEIGHT / 2);
+        radar_view_set_cursor(view, LCD_WIDTH / 2, LCD_HEIGHT / 2);
     }
     if (!s_joystick_ready) {
         return;
@@ -415,15 +418,15 @@ static void update_joystick(screensaver_t *screensaver)
     if (joystick_read(&s_joystick, &input) != ESP_OK) {
         return;
     }
-    screensaver_set_cursor(screensaver, screensaver->cursor_x + input.cursor_dx,
-                           screensaver->cursor_y + input.cursor_dy);
+    radar_view_set_cursor(view, view->cursor_x + input.cursor_dx,
+                          view->cursor_y + input.cursor_dy);
     if (input.switch_pressed) {
         rainbow_wave_next_palette();
         ESP_LOGI(TAG, "JOYSTICK PRESS: next palette");
     }
 }
 
-static void update_radar(screensaver_t *screensaver, TickType_t now)
+static void update_radar(radar_view_t *view, TickType_t now)
 {
 #if defined(RADAR_LINK_ROLE_RECEIVER)
     bool received = radar_link_receive(&s_link_frame);
@@ -461,27 +464,30 @@ static void update_radar(screensaver_t *screensaver, TickType_t now)
 
     bool connected = s_radar_has_frame
                   && now - s_radar_last_frame < pdMS_TO_TICKS(1500);
-    screensaver_person_t people[SCREENSAVER_MAX_PEOPLE] = {0};
+    radar_person_t people[RADAR_VIEW_MAX_PEOPLE] = {0};
     if (connected) {
-        for (int index = 0; index < SCREENSAVER_MAX_PEOPLE; ++index) {
-            people[index] = (screensaver_person_t) {
+        for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
+            people[index] = (radar_person_t) {
                 .x_mm = s_radar_frame.targets[index].x_mm,
                 .y_mm = s_radar_frame.targets[index].y_mm,
                 .active = s_radar_frame.targets[index].active,
             };
         }
     }
-    screensaver_set_people(screensaver, people, connected);
+    radar_view_set_people(view, people);
 
     bool has_target = false;
-    for (int index = 0; index < SCREENSAVER_MAX_PEOPLE; ++index) {
+    for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
         has_target = has_target || people[index].active;
+    }
+    if (has_target) {
+        s_radar_last_presence = now;
     }
     if (!connected || !has_target) {
         s_radar_last_ping = 0;
     } else if (s_radar_last_ping == 0
                || now - s_radar_last_ping >= pdMS_TO_TICKS(2000)) {
-        screensaver_trigger_radar_ping(screensaver);
+        radar_view_trigger_ping(view);
         s_radar_last_ping = now;
     }
 
@@ -500,15 +506,65 @@ static void update_radar(screensaver_t *screensaver, TickType_t now)
     }
 }
 
+static bool target_recent(TickType_t now)
+{
+    return now - s_radar_last_presence < pdMS_TO_TICKS(DISPLAY_SLEEP_IDLE_MS);
+}
+
+static void display_sleep(void)
+{
+    if (s_display_asleep) {
+        return;
+    }
+    ESP_LOGI(TAG, "display sleep: no person detected for 10 seconds");
+    gpio_set_level(PIN_BACKLIGHT, 0);
+    if (s_panel) {
+        esp_lcd_panel_disp_on_off(s_panel, false);
+    }
+    s_display_asleep = true;
+}
+
+static void display_wake(void)
+{
+    if (!s_display_asleep) {
+        return;
+    }
+    ESP_LOGI(TAG, "display wake");
+    if (s_panel) {
+        esp_lcd_panel_disp_on_off(s_panel, true);
+    }
+    vTaskDelay(pdMS_TO_TICKS(50));
+    gpio_set_level(PIN_BACKLIGHT, 1);
+    radar_view_restore(s_panel);
+    s_display_asleep = false;
+}
+
+static void radar_loop_tick(radar_view_t *view, TickType_t now)
+{
+    update_joystick(view);
+    update_radar(view, now);
+    rainbow_wave_step();
+    if (!target_recent(now)) {
+        display_sleep();
+        return;
+    }
+    if (s_display_asleep) {
+        display_wake();
+    }
+    radar_view_step(s_panel, view);
+}
+
 static bool monitor_touch(const touch_calibration_t *calibration)
 {
     uint32_t touch_count = 0;
     bool was_touched = false;
     TickType_t touch_started_at = 0;
     TickType_t last_report = xTaskGetTickCount();
-    TickType_t last_screensaver_step = last_report - pdMS_TO_TICKS(33);
-    screensaver_t screensaver;
-    screensaver_start(s_panel, &screensaver);
+    TickType_t last_view_step = last_report - pdMS_TO_TICKS(33);
+    radar_view_t view;
+    s_display_asleep = false;
+    s_radar_last_presence = last_report;
+    radar_view_start(s_panel, &view);
 
     while (true) {
         TickType_t now = xTaskGetTickCount();
@@ -524,7 +580,13 @@ static bool monitor_touch(const touch_calibration_t *calibration)
                 }
                 // Touch coordinates are calibrated to the display, so a tap
                 // or drag places the reticle exactly under the finger.
-                screensaver_set_cursor(&screensaver, screen_x, screen_y);
+                if (!s_display_asleep) {
+                    radar_view_set_cursor(&view, screen_x, screen_y);
+                }
+                if (s_display_asleep) {
+                    s_radar_last_presence = now;
+                    display_wake();
+                }
                 if (touched && !was_touched) {
                     touch_started_at = now;
                     ++touch_count;
@@ -532,7 +594,8 @@ static bool monitor_touch(const touch_calibration_t *calibration)
                     ESP_LOGI(TAG, "TOUCH #%" PRIu32 " raw=(%u,%u) screen=(%u,%u) INT=%d",
                              touch_count, x, y, screen_x, screen_y, gpio_get_level(PIN_TOUCH_INT));
                 }
-                if (touched && now - touch_started_at >= pdMS_TO_TICKS(3000)) {
+                if (!s_display_asleep
+                    && touched && now - touch_started_at >= pdMS_TO_TICKS(3000)) {
                     ESP_LOGI(TAG, "RECALIBRATION REQUESTED: three-second touch hold");
                     return true;
                 }
@@ -542,42 +605,130 @@ static bool monitor_touch(const touch_calibration_t *calibration)
             }
         }
 
-        if (now - last_screensaver_step >= pdMS_TO_TICKS(33)) {
+        if (now - last_view_step >= pdMS_TO_TICKS(33)) {
             // Apply joystick motion immediately before rendering so a fast
             // movement cannot accumulate multiple unseen position changes.
-            update_joystick(&screensaver);
-            update_radar(&screensaver, now);
-            rainbow_wave_step();
-            screensaver_set_palette(&screensaver, rainbow_wave_palette_index(),
-                                    rainbow_wave_color_phase());
-            screensaver_step(s_panel, &screensaver);
-            last_screensaver_step = now;
+            radar_loop_tick(&view, now);
+            last_view_step = now;
         }
         if (now - last_report >= pdMS_TO_TICKS(5000)) {
-            ESP_LOGI(TAG, "HEARTBEAT touches=%" PRIu32 " touch_INT=%d",
-                     touch_count, gpio_get_level(PIN_TOUCH_INT));
+            ESP_LOGI(TAG, "HEARTBEAT touches=%" PRIu32 " touch_INT=%d asleep=%d",
+                     touch_count, gpio_get_level(PIN_TOUCH_INT), s_display_asleep);
             last_report = now;
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
-static void power_off(void)
+static void release_sleep_holds(void)
 {
-    ESP_LOGW(TAG, "POWERING OFF: display, backlight, and LEDs off; entering deep sleep");
+    const gpio_num_t pins[] = {
+        (gpio_num_t)PIN_TOUCH_INT,
+        (gpio_num_t)PIN_TOUCH_RST,
+        (gpio_num_t)PIN_LCD_RST,
+        (gpio_num_t)PIN_BACKLIGHT,
+    };
+    gpio_deep_sleep_hold_dis();
+    for (size_t i = 0; i < sizeof(pins) / sizeof(pins[0]); ++i) {
+        gpio_hold_dis(pins[i]);
+        rtc_gpio_hold_dis(pins[i]);
+        rtc_gpio_deinit(pins[i]);
+    }
+}
+
+static void hold_digital_low(gpio_num_t pin)
+{
+    gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+    gpio_set_level(pin, 0);
+    gpio_hold_en(pin);
+}
+
+static void hold_rtc_output(gpio_num_t pin, int level)
+{
+    gpio_set_level(pin, level);
+    rtc_gpio_init(pin);
+    rtc_gpio_set_direction(pin, RTC_GPIO_MODE_OUTPUT_ONLY);
+    rtc_gpio_set_level(pin, level);
+    rtc_gpio_hold_en(pin);
+}
+
+static void wait_for_touch_release(void)
+{
+    ESP_LOGI(TAG, "waiting for touch release");
+    while (gpio_get_level(PIN_TOUCH_INT) == 0) {
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+    vTaskDelay(pdMS_TO_TICKS(50));
+}
+
+static void blank_outputs(void)
+{
     rainbow_wave_off();
     board_rgb_led_off();
     gpio_set_level(PIN_BACKLIGHT, 0);
     if (s_panel) {
         esp_lcd_panel_disp_on_off(s_panel, false);
     }
-    vTaskDelay(pdMS_TO_TICKS(100));
+}
+
+static void enter_sleep(void)
+{
+    ESP_LOGW(TAG, "SLEEP: deep sleep, tap to wake");
+    blank_outputs();
+    wait_for_touch_release();
+
+    gpio_num_t int_pin = (gpio_num_t)PIN_TOUCH_INT;
+    rtc_gpio_init(int_pin);
+    rtc_gpio_set_direction(int_pin, RTC_GPIO_MODE_INPUT_ONLY);
+    rtc_gpio_pullup_en(int_pin);
+    rtc_gpio_pulldown_dis(int_pin);
+    hold_rtc_output((gpio_num_t)PIN_TOUCH_RST, 1);
+
+    // Hold backlight as a digital pad, not an RTC pad. rtc_gpio_init(GPIO17)
+    // made EXT0 wake immediately. GPIO5 is already an RTC input, so it is
+    // not a digital pad for gpio_deep_sleep_hold_en to freeze.
+    hold_digital_low((gpio_num_t)PIN_BACKLIGHT);
+    gpio_deep_sleep_hold_en();
+
+    wait_for_touch_release();
+    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+    esp_sleep_enable_ext0_wakeup(int_pin, 0);
+    ESP_LOGI(TAG, "deep sleep: tap the screen to wake (INT=%d)",
+             gpio_get_level(int_pin));
     esp_deep_sleep_start();
+}
+
+static void enter_power_off(void)
+{
+    ESP_LOGW(TAG, "POWER OFF: no wake sources; RESET or power-cycle to start");
+    blank_outputs();
+    wait_for_touch_release();
+    hold_digital_low((gpio_num_t)PIN_BACKLIGHT);
+    hold_digital_low((gpio_num_t)PIN_LCD_RST);
+    gpio_deep_sleep_hold_en();
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
+    ESP_LOGI(TAG, "deep sleep with no wake source");
+    esp_deep_sleep_start();
+}
+
+static void calibration_hold(touch_hold_action_t action)
+{
+    if (action == TOUCH_HOLD_SLEEP) {
+        enter_sleep();
+    } else {
+        enter_power_off();
+    }
 }
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "ESP32-S3 DISPLAY/TOUCH/SD HARDWARE TEST START");
+    release_sleep_holds();
+    ESP_LOGI(TAG, "ESP32-S3 radar display start");
+    uint32_t wakeup = esp_sleep_get_wakeup_causes();
+    if (wakeup & ((1u << ESP_SLEEP_WAKEUP_EXT0) | (1u << ESP_SLEEP_WAKEUP_EXT1))) {
+        ESP_LOGI(TAG, "woke from deep sleep by touch");
+    }
     ESP_LOGI(TAG, "GPIO map: SD_CS=4 TOUCH_INT=5 SDA=6 RST=7 SCL=15 MISO=16 BL=17 SCK=18 MOSI=8 DC=9 LCD_RST=10 LCD_CS=11 JOY_X=12 JOY_Y=13 JOY_SW=14");
 
     board_rgb_led_off();
@@ -639,20 +790,17 @@ void app_main(void)
 
     if (!s_touch_found) {
         gpio_set_level(PIN_BACKLIGHT, 1);
-        screensaver_t screensaver;
-        screensaver_start(s_panel, &screensaver);
-        ESP_LOGW(TAG, "DISPLAY-ONLY MODE: starting screensaver without touch input");
-        TickType_t last_screensaver_step = xTaskGetTickCount() - pdMS_TO_TICKS(33);
+        radar_view_t view;
+        s_display_asleep = false;
+        s_radar_last_presence = xTaskGetTickCount();
+        radar_view_start(s_panel, &view);
+        ESP_LOGW(TAG, "DISPLAY-ONLY MODE: starting radar view without touch input");
+        TickType_t last_view_step = s_radar_last_presence - pdMS_TO_TICKS(33);
         while (true) {
             TickType_t now = xTaskGetTickCount();
-            if (now - last_screensaver_step >= pdMS_TO_TICKS(33)) {
-                update_joystick(&screensaver);
-                update_radar(&screensaver, now);
-                rainbow_wave_step();
-                screensaver_set_palette(&screensaver, rainbow_wave_palette_index(),
-                                        rainbow_wave_color_phase());
-                screensaver_step(s_panel, &screensaver);
-                last_screensaver_step = now;
+            if (now - last_view_step >= pdMS_TO_TICKS(33)) {
+                radar_loop_tick(&view, now);
+                last_view_step = now;
             }
             vTaskDelay(pdMS_TO_TICKS(10));
         }
@@ -660,21 +808,22 @@ void app_main(void)
 
     const touch_calibration_t *active_calibration = has_saved_calibration ? &calibration : NULL;
     if (!has_saved_calibration) {
-        ESP_LOGI(TAG, "NO SAVED CALIBRATION - starting screensaver; hold any touch for three seconds to calibrate");
+        ESP_LOGI(TAG, "NO SAVED CALIBRATION - starting radar view; hold any touch for three seconds to calibrate");
     }
     while (s_touch_found) {
         gpio_set_level(PIN_BACKLIGHT, 1);
-        ESP_LOGI(TAG, "STARTING SCREENSAVER");
+        s_display_asleep = false;
+        ESP_LOGI(TAG, "STARTING RADAR VIEW");
         if (!monitor_touch(active_calibration)) {
             break;
         }
         ESP_LOGI(TAG, "Starting touch calibration; lift your finger, then tap each target");
-        if (touch_calibration_run(s_panel, touch_read_point, power_off,
+        if (touch_calibration_run(s_panel, touch_read_point, calibration_hold,
                                   PIN_BACKLIGHT, &calibration)) {
             active_calibration = &calibration;
         } else {
             active_calibration = NULL;
-            ESP_LOGW(TAG, "CALIBRATION DID NOT COMPLETE - returning to the screensaver");
+            ESP_LOGW(TAG, "CALIBRATION DID NOT COMPLETE - returning to the radar view");
         }
     }
     ESP_LOGE(TAG, "TOUCH MONITOR STOPPED - restarting in 5 seconds");

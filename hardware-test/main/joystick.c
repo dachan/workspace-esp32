@@ -114,11 +114,10 @@ esp_err_t joystick_read(joystick_t *joystick, joystick_input_t *input)
 
     int offset_x = raw_x - joystick->center_x;
     int offset_y = raw_y - joystick->center_y;
+    // Landscape MADCTL already matches viewed axes. Do not swap or negate.
     *input = (joystick_input_t) {
-        // The installed connector has the joystick axes crossed: VRX is the
-        // screen's vertical movement and VRY is its horizontal movement.
-        .cursor_dx = cursor_step(offset_y),
-        .cursor_dy = cursor_step(offset_x),
+        .cursor_dx = cursor_step(offset_x),
+        .cursor_dy = cursor_step(offset_y),
         .switch_pressed = !joystick->switch_latched
                        && gpio_get_level(JOYSTICK_SWITCH_GPIO) == 0,
     };

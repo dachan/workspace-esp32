@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "main.c" "ld2450.c" "radar_link.c" "screensaver.c"
+    SRCS "main.c" "ld2450.c" "radar_link.c" "radar_view.c"
          "../../hardware-test/main/board_rgb_led.c"
          "../../hardware-test/main/color_palette.c"
          "../../hardware-test/main/display_sync.c"

@@ -1,4 +1,4 @@
-#include "screensaver.h"
+#include "radar_view.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -7,7 +7,6 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "color_palette.h"
 #include "display_sync.h"
 #include "display_profile.h"
 
@@ -15,11 +14,13 @@ enum {
     DMA_ROWS = 32,
     MAX_DYNAMIC_RECTS = 32,
     RADAR_RANGE_MM = 6000,
-    RADAR_VIEW_WIDTH = LCD_HEIGHT,
-    RADAR_VIEW_HEIGHT = LCD_WIDTH,
+    RADAR_VIEW_WIDTH = LCD_WIDTH,
+    RADAR_VIEW_HEIGHT = LCD_HEIGHT,
     RADAR_SIDE_MARGIN = RADAR_VIEW_WIDTH / 12,
     RADAR_TAN_60_MILLI = 1732,
     RADAR_SIN_60_MILLI = 866,
+    // Visual-left margin in pixels. Framebuffer +X is visual left, so x=8 is
+    // the viewed RIGHT. Left-aligned origins use radar_text_left_x().
     DISTANCE_TEXT_X = 8,
     DISTANCE_TEXT_Y = 8,
     DISTANCE_TEXT_SCALE = 2,
@@ -42,8 +43,6 @@ enum {
 
 #define RADAR_PING_SECONDS 0.25f
 #define RADAR_PING_MAX_RADIUS 24
-#define RIPPLE_SECONDS 2.66f
-#define RIPPLE_RADIUS_PER_SECOND 96.0f
 #define TARGET_SMOOTHING_PER_SECOND 12.0f
 
 typedef struct {
@@ -55,8 +54,10 @@ typedef struct {
 
 typedef struct {
     char distance_text[24];
-    char target_text[SCREENSAVER_MAX_PEOPLE][TARGET_TEXT_MAX_CHARS + 1];
-    int target_text_y[SCREENSAVER_MAX_PEOPLE];
+    char target_text[RADAR_VIEW_MAX_PEOPLE][TARGET_TEXT_MAX_CHARS + 1];
+    int distance_text_x;
+    int target_text_x[RADAR_VIEW_MAX_PEOPLE];
+    int target_text_y[RADAR_VIEW_MAX_PEOPLE];
 } overlay_t;
 
 static uint16_t *s_static_pixels;
@@ -73,18 +74,6 @@ static uint16_t rgb565_wire(uint8_t red, uint8_t green, uint8_t blue)
     return __builtin_bswap16(value);
 }
 
-static uint8_t triangle_wave(unsigned int position)
-{
-    position &= 0xff;
-    return position < 128 ? position * 2 : (255 - position) * 2;
-}
-
-static uint8_t saturating_add(uint8_t value, uint8_t addition)
-{
-    unsigned int result = value + addition;
-    return result > 255 ? 255 : result;
-}
-
 static uint8_t circular_glow(int dx, int dy, int radius)
 {
     int distance_squared = dx * dx + dy * dy;
@@ -93,24 +82,6 @@ static uint8_t circular_glow(int dx, int dy, int radius)
     return distance_squared >= radius_squared
         ? 0
         : (radius_squared - distance_squared) * 255 / radius_squared;
-}
-
-static uint8_t circular_ring(int dx, int dy, int radius, int thickness)
-{
-    int distance_squared = dx * dx + dy * dy;
-    int radius_squared = radius * radius;
-    int outer_radius = radius + thickness;
-    int outer_squared = outer_radius * outer_radius;
-    int inner_radius = radius - thickness;
-    int inner_squared = inner_radius * inner_radius;
-
-    if (distance_squared < inner_squared || distance_squared > outer_squared) {
-        return 0;
-    }
-
-    int fade_range = radius * thickness * 2 + thickness * thickness;
-    int edge_distance = abs(distance_squared - radius_squared);
-    return (fade_range - edge_distance) * 255 / fade_range;
 }
 
 #if !defined(RADAR_LINK_ROLE_RECEIVER)
@@ -125,11 +96,9 @@ static bool cursor_foreground_at(int dx, int dy)
 }
 #endif
 
-static void radar_view_coordinates(int display_x, int display_y,
-                                   int *radar_x, int *radar_y)
+static int radar_mirror_x(int x)
 {
-    *radar_x = display_y;
-    *radar_y = display_x;
+    return RADAR_VIEW_WIDTH - 1 - x;
 }
 
 static int radar_radius(void)
@@ -194,7 +163,7 @@ static uint8_t radar_grid_brightness_at(int x, int y)
     return brightness;
 }
 
-static bool person_screen_position(const screensaver_person_t *person,
+static bool person_screen_position(const radar_person_t *person,
                                    int *screen_x, int *screen_y)
 {
     int x_mm = person->x_mm;
@@ -206,7 +175,7 @@ static bool person_screen_position(const screensaver_person_t *person,
     }
 
     int radius = radar_radius();
-    *screen_x = RADAR_VIEW_WIDTH / 2 + x_mm * radius / RADAR_RANGE_MM;
+    *screen_x = radar_mirror_x(RADAR_VIEW_WIDTH / 2 + x_mm * radius / RADAR_RANGE_MM);
     *screen_y = RADAR_SENSOR_Y + y_mm * radius / RADAR_RANGE_MM;
     return true;
 }
@@ -219,10 +188,10 @@ static bool person_dot_at(int x, int y, int centre_x, int centre_y)
     return dx * dx + dy * dy <= radius * radius;
 }
 
-static bool person_at(const screensaver_t *screensaver, int x, int y)
+static bool person_at(const radar_view_t *view, int x, int y)
 {
-    for (int index = 0; index < SCREENSAVER_MAX_PEOPLE; ++index) {
-        const screensaver_person_t *person = &screensaver->people[index];
+    for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
+        const radar_person_t *person = &view->people[index];
         if (!person->active) {
             continue;
         }
@@ -257,12 +226,12 @@ static uint32_t integer_square_root(uint64_t value)
     return (uint32_t)result;
 }
 
-static bool nearest_distance_tenths(const screensaver_t *screensaver,
+static bool nearest_distance_tenths(const radar_view_t *view,
                                     unsigned int *distance_tenths)
 {
     uint64_t nearest_squared = UINT64_MAX;
-    for (int index = 0; index < SCREENSAVER_MAX_PEOPLE; ++index) {
-        const screensaver_person_t *person = &screensaver->people[index];
+    for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
+        const radar_person_t *person = &view->people[index];
         if (!person->active) {
             continue;
         }
@@ -393,6 +362,22 @@ static uint8_t radar_glyph_row(char character, int row)
     return 0;
 }
 
+static int radar_text_pixel_width(const char *text, int scale, int max_characters)
+{
+    int length = 0;
+    while (length < max_characters && text[length] != '\0') {
+        ++length;
+    }
+    return length * DISTANCE_GLYPH_ADVANCE * scale;
+}
+
+// After MADCTL, framebuffer +X is visual left. Left-align against that edge.
+static int radar_text_left_x(const char *text, int scale, int max_characters)
+{
+    return RADAR_VIEW_WIDTH - DISTANCE_TEXT_X
+        - radar_text_pixel_width(text, scale, max_characters);
+}
+
 static bool radar_text_box_at(const char *text, int origin_x, int origin_y,
                               int scale, int max_characters, int padding,
                               int x, int y)
@@ -412,7 +397,13 @@ static bool radar_text_box_at(const char *text, int origin_x, int origin_y,
 static bool radar_text_at(const char *text, int origin_x, int origin_y,
                           int scale, int max_characters, int x, int y)
 {
-    int local_x = x - origin_x;
+    int length = 0;
+    while (length < max_characters && text[length] != '\0') {
+        ++length;
+    }
+    // Glyphs are authored left-to-right. After the landscape MADCTL rotation
+    // framebuffer +X is visual left, so sample the string mirrored in X.
+    int local_x = length * DISTANCE_GLYPH_ADVANCE * scale - 1 - (x - origin_x);
     int local_y = y - origin_y;
     if (local_x < 0 || local_y < 0
         || local_y >= DISTANCE_GLYPH_HEIGHT * scale) {
@@ -432,7 +423,7 @@ static bool radar_text_at(const char *text, int origin_x, int origin_y,
     return (row & (1U << (DISTANCE_GLYPH_WIDTH - 1 - glyph_x))) != 0;
 }
 
-static void target_coordinate_text(const screensaver_person_t *person, int target_number,
+static void target_coordinate_text(const radar_person_t *person, int target_number,
                                    char text[TARGET_TEXT_MAX_CHARS + 1])
 {
     int x_mm = person->x_mm;
@@ -455,85 +446,41 @@ static void target_coordinate_text(const screensaver_person_t *person, int targe
              y_tenths / 10, y_tenths % 10);
 }
 
-static uint8_t ripple_brightness(const screensaver_ripple_t *ripple,
-                                 unsigned int phase, int x, int y)
+static uint8_t ping_brightness(const radar_ping_t *ping, int x, int y)
 {
-    if (ripple->radar_ping) {
-        if (ripple->age_seconds >= RADAR_PING_SECONDS) {
-            return 0;
-        }
-        int dx = x - ripple->x;
-        int dy = y - ripple->y;
-        int radius = 4 + (int)(ripple->age_seconds
-                             * (RADAR_PING_MAX_RADIUS - 4) / RADAR_PING_SECONDS);
-        uint8_t opacity = (uint8_t)((RADAR_PING_SECONDS - ripple->age_seconds) * 255.0f
-                                  / RADAR_PING_SECONDS);
-        return (uint16_t)circular_glow(dx, dy, radius) * opacity / 255;
-    }
-
-    if (ripple->age_seconds >= RIPPLE_SECONDS) {
+    if (ping->age_seconds >= RADAR_PING_SECONDS) {
         return 0;
     }
-
-    int dx = x - ripple->x;
-    int dy = y - ripple->y;
-    uint8_t core = 0;
-    uint8_t main_ring = 0;
-    uint8_t middle_ring = 0;
-    uint8_t inner_ring = 0;
-    uint8_t fade = ripple->active ? 255
-        : (uint8_t)((RIPPLE_SECONDS - ripple->age_seconds) * 255.0f / RIPPLE_SECONDS);
-
-    if (ripple->active) {
-        int pulse = 20 + triangle_wave(phase * 3) / 32;
-        core = circular_glow(dx, dy, 11);
-        main_ring = circular_ring(dx, dy, pulse, 5);
-    } else {
-        int radius = 16 + (int)(ripple->age_seconds * RIPPLE_RADIUS_PER_SECOND);
-        main_ring = circular_ring(dx, dy, radius, 6);
-        if (radius > 34) {
-            middle_ring = circular_ring(dx, dy, radius - 20, 4);
-        }
-        if (radius > 56) {
-            inner_ring = circular_ring(dx, dy, radius - 42, 3);
-        }
-    }
-
-    uint8_t ring = saturating_add(main_ring, middle_ring / 2);
-    ring = saturating_add(ring, inner_ring / 3);
-    uint8_t ring_brightness = (uint16_t)ring * fade / 255;
-    uint8_t core_brightness = (uint16_t)core * fade / 255;
-    uint8_t ring_strength = (uint16_t)ring_brightness * 230 / 255;
-    uint8_t core_strength = (uint16_t)core_brightness * 200 / 255;
-    return core_strength > ring_strength ? core_strength : ring_strength;
+    int dx = x - ping->x;
+    int dy = y - ping->y;
+    int radius = 4 + (int)(ping->age_seconds
+                         * (RADAR_PING_MAX_RADIUS - 4) / RADAR_PING_SECONDS);
+    uint8_t opacity = (uint8_t)((RADAR_PING_SECONDS - ping->age_seconds) * 255.0f
+                              / RADAR_PING_SECONDS);
+    return (uint16_t)circular_glow(dx, dy, radius) * opacity / 255;
 }
 
-static int next_ripple_slot(const screensaver_t *screensaver)
+static int next_ping_slot(const radar_view_t *view)
 {
     int oldest = 0;
-    for (int i = 0; i < SCREENSAVER_MAX_RIPPLES; ++i) {
-        const screensaver_ripple_t *ripple = &screensaver->ripples[i];
-        float lifetime = ripple->radar_ping ? RADAR_PING_SECONDS : RIPPLE_SECONDS;
-        if (ripple->age_seconds >= lifetime) {
+    for (int i = 0; i < RADAR_VIEW_MAX_PINGS; ++i) {
+        if (view->pings[i].age_seconds >= RADAR_PING_SECONDS) {
             return i;
         }
-        if (screensaver->ripples[i].age_seconds
-            > screensaver->ripples[oldest].age_seconds) {
+        if (view->pings[i].age_seconds > view->pings[oldest].age_seconds) {
             oldest = i;
         }
     }
     return oldest;
 }
 
-static uint8_t static_brightness_uncached(int display_x, int display_y)
+static uint8_t static_brightness_uncached(int x, int y)
 {
-    int radar_x;
-    int radar_y;
-    radar_view_coordinates(display_x, display_y, &radar_x, &radar_y);
+    int radar_x = radar_mirror_x(x);
     int radar_dx = radar_x - RADAR_VIEW_WIDTH / 2;
-    int radar_dy = radar_y - RADAR_SENSOR_Y;
+    int radar_dy = y - RADAR_SENSOR_Y;
     uint8_t green = radar_point_in_fov(radar_dx, radar_dy, radar_radius()) ? 7 : 0;
-    uint8_t grid = radar_grid_brightness_at(radar_x, radar_y);
+    uint8_t grid = radar_grid_brightness_at(radar_x, y);
     return grid > green ? grid : green;
 }
 
@@ -554,7 +501,7 @@ static bool renderer_init(void)
                                         MALLOC_CAP_DMA);
     }
     if (!s_dma_pixels) {
-        ESP_LOGE("screensaver", "DMA render buffer allocation failed");
+        ESP_LOGE("radar_view", "DMA render buffer allocation failed");
         return false;
     }
 
@@ -563,7 +510,7 @@ static bool renderer_init(void)
                                             MALLOC_CAP_SPIRAM);
     }
     if (!s_static_pixels) {
-        ESP_LOGW("screensaver", "static radar cache unavailable; using direct composition");
+        ESP_LOGW("radar_view", "static radar cache unavailable; using direct composition");
         return true;
     }
 
@@ -657,34 +604,39 @@ static void add_dirty_rect(dirty_rect_t rects[MAX_DYNAMIC_RECTS], int *count,
 static dirty_rect_t radar_rect_to_display(int radar_x, int radar_y, int width, int height)
 {
     return (dirty_rect_t) {
-        .x = radar_y,
-        .y = radar_x,
-        .width = height,
-        .height = width,
+        .x = radar_x,
+        .y = radar_y,
+        .width = width,
+        .height = height,
     };
 }
 
-static void prepare_overlay(const screensaver_t *screensaver, overlay_t *overlay)
+static void prepare_overlay(const radar_view_t *view, overlay_t *overlay)
 {
     *overlay = (overlay_t) {0};
     unsigned int distance_tenths;
-    if (nearest_distance_tenths(screensaver, &distance_tenths)) {
+    if (nearest_distance_tenths(view, &distance_tenths)) {
         snprintf(overlay->distance_text, sizeof(overlay->distance_text), "DISTANCE: %u.%um",
                  distance_tenths / 10, distance_tenths % 10);
     } else {
         snprintf(overlay->distance_text, sizeof(overlay->distance_text), "DISTANCE: --.-m");
     }
+    overlay->distance_text_x = radar_text_left_x(
+        overlay->distance_text, DISTANCE_TEXT_SCALE, 16);
 
     int active_text_count = 0;
-    for (int index = 0; index < SCREENSAVER_MAX_PEOPLE; ++index) {
-        if (screensaver->people[index].active) {
-            target_coordinate_text(&screensaver->people[index], index + 1,
+    for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
+        if (view->people[index].active) {
+            target_coordinate_text(&view->people[index], index + 1,
                                    overlay->target_text[index]);
+            overlay->target_text_x[index] = radar_text_left_x(
+                overlay->target_text[index], TARGET_TEXT_SCALE,
+                TARGET_TEXT_MAX_CHARS);
             ++active_text_count;
         }
     }
     int active_text_line = 0;
-    for (int index = 0; index < SCREENSAVER_MAX_PEOPLE; ++index) {
+    for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
         if (overlay->target_text[index][0] != '\0') {
             overlay->target_text_y[index] = RADAR_VIEW_HEIGHT
                 - (active_text_count - active_text_line) * TARGET_TEXT_LINE_HEIGHT - 3;
@@ -693,23 +645,20 @@ static void prepare_overlay(const screensaver_t *screensaver, overlay_t *overlay
     }
 }
 
-static uint8_t compose_brightness(const screensaver_t *screensaver, const overlay_t *overlay,
+static uint8_t compose_brightness(const radar_view_t *view, const overlay_t *overlay,
                                   int x, int y)
 {
     uint8_t green = static_brightness_at(x, y);
-    for (int index = 0; index < SCREENSAVER_MAX_RIPPLES; ++index) {
-        uint8_t strength = ripple_brightness(&screensaver->ripples[index], screensaver->hue, x, y);
+    for (int index = 0; index < RADAR_VIEW_MAX_PINGS; ++index) {
+        uint8_t strength = ping_brightness(&view->pings[index], x, y);
         if (strength > green) {
             green = strength;
         }
     }
 
-    int radar_x;
-    int radar_y;
-    radar_view_coordinates(x, y, &radar_x, &radar_y);
 #if !defined(RADAR_LINK_ROLE_RECEIVER)
-    int cursor_dx = x - screensaver->cursor_x;
-    int cursor_dy = y - screensaver->cursor_y;
+    int cursor_dx = x - view->cursor_x;
+    int cursor_dy = y - view->cursor_y;
     if (cursor_shadow_at(cursor_dx, cursor_dy)) {
         green = 72;
     }
@@ -717,31 +666,35 @@ static uint8_t compose_brightness(const screensaver_t *screensaver, const overla
         green = 255;
     }
 #endif
-    if (person_at(screensaver, radar_x, radar_y)) {
+    if (person_at(view, x, y)) {
         green = 255;
     }
 
     bool text_background = radar_text_box_at(
-        overlay->distance_text, DISTANCE_TEXT_X, DISTANCE_TEXT_Y,
-        DISTANCE_TEXT_SCALE, 16, 2, radar_x, radar_y);
-    for (int index = 0; index < SCREENSAVER_MAX_PEOPLE; ++index) {
+        overlay->distance_text, overlay->distance_text_x, DISTANCE_TEXT_Y,
+        DISTANCE_TEXT_SCALE, 16, 2, x, y);
+    for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
         if (overlay->target_text[index][0] != '\0'
-            && radar_text_box_at(overlay->target_text[index], 8, overlay->target_text_y[index],
-                                 TARGET_TEXT_SCALE, TARGET_TEXT_MAX_CHARS, 2, radar_x, radar_y)) {
+            && radar_text_box_at(overlay->target_text[index],
+                                 overlay->target_text_x[index],
+                                 overlay->target_text_y[index],
+                                 TARGET_TEXT_SCALE, TARGET_TEXT_MAX_CHARS, 2, x, y)) {
             text_background = true;
         }
     }
     if (text_background) {
         green = 0;
     }
-    if (radar_text_at(overlay->distance_text, DISTANCE_TEXT_X, DISTANCE_TEXT_Y,
-                      DISTANCE_TEXT_SCALE, 16, radar_x, radar_y)) {
+    if (radar_text_at(overlay->distance_text, overlay->distance_text_x,
+                      DISTANCE_TEXT_Y, DISTANCE_TEXT_SCALE, 16, x, y)) {
         green = 255;
     }
-    for (int index = 0; index < SCREENSAVER_MAX_PEOPLE; ++index) {
+    for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
         if (overlay->target_text[index][0] != '\0'
-            && radar_text_at(overlay->target_text[index], 8, overlay->target_text_y[index],
-                             TARGET_TEXT_SCALE, TARGET_TEXT_MAX_CHARS, radar_x, radar_y)) {
+            && radar_text_at(overlay->target_text[index],
+                             overlay->target_text_x[index],
+                             overlay->target_text_y[index],
+                             TARGET_TEXT_SCALE, TARGET_TEXT_MAX_CHARS, x, y)) {
             green = 225;
         }
     }
@@ -767,7 +720,7 @@ static void render_static_full(esp_lcd_panel_handle_t panel)
     }
 }
 
-static void render_dirty_rect(esp_lcd_panel_handle_t panel, const screensaver_t *screensaver,
+static void render_dirty_rect(esp_lcd_panel_handle_t panel, const radar_view_t *view,
                               const overlay_t *overlay, dirty_rect_t rect)
 {
     if (!clip_rect(&rect)) {
@@ -779,7 +732,7 @@ static void render_dirty_rect(esp_lcd_panel_handle_t panel, const screensaver_t 
             for (int x = 0; x < rect.width; ++x) {
                 int display_x = rect.x + x;
                 s_dma_pixels[row * rect.width + x] = rgb565_wire(
-                    0, compose_brightness(screensaver, overlay, display_x, y + row), 0);
+                    0, compose_brightness(view, overlay, display_x, y + row), 0);
             }
         }
         display_sync_draw(panel, rect.x, y, rect.x + rect.width, y + rows, s_dma_pixels);
@@ -800,48 +753,43 @@ static void add_radar_text_rect(dirty_rect_t rects[MAX_DYNAMIC_RECTS], int *coun
         DISTANCE_GLYPH_HEIGHT * scale + 4));
 }
 
-static int ripple_radius(const screensaver_ripple_t *ripple)
+static int ping_radius(const radar_ping_t *ping)
 {
-    if (ripple->radar_ping) {
-        return ripple->age_seconds >= RADAR_PING_SECONDS ? 0
-            : 4 + (int)(ripple->age_seconds
-                      * (RADAR_PING_MAX_RADIUS - 4) / RADAR_PING_SECONDS);
-    }
-    if (ripple->active) {
-        return 28;
-    }
-    return ripple->age_seconds >= RIPPLE_SECONDS ? 0
-        : 22 + (int)(ripple->age_seconds * RIPPLE_RADIUS_PER_SECOND);
+    return ping->age_seconds >= RADAR_PING_SECONDS ? 0
+        : 4 + (int)(ping->age_seconds
+                  * (RADAR_PING_MAX_RADIUS - 4) / RADAR_PING_SECONDS);
 }
 
-static void collect_dynamic_rects(const screensaver_t *screensaver, const overlay_t *overlay,
+static void collect_dynamic_rects(const radar_view_t *view, const overlay_t *overlay,
                                   dirty_rect_t rects[MAX_DYNAMIC_RECTS], int *count)
 {
     *count = 0;
-    add_radar_text_rect(rects, count, overlay->distance_text, DISTANCE_TEXT_X, DISTANCE_TEXT_Y,
+    add_radar_text_rect(rects, count, overlay->distance_text,
+                        overlay->distance_text_x, DISTANCE_TEXT_Y,
                         DISTANCE_TEXT_SCALE, 16);
-    for (int index = 0; index < SCREENSAVER_MAX_PEOPLE; ++index) {
+    for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
         if (overlay->target_text[index][0] != '\0') {
-            add_radar_text_rect(rects, count, overlay->target_text[index], 8,
+            add_radar_text_rect(rects, count, overlay->target_text[index],
+                                overlay->target_text_x[index],
                                 overlay->target_text_y[index], TARGET_TEXT_SCALE,
                                 TARGET_TEXT_MAX_CHARS);
         }
         int radar_x;
         int radar_y;
-        if (screensaver->people[index].active
-            && person_screen_position(&screensaver->people[index], &radar_x, &radar_y)) {
+        if (view->people[index].active
+            && person_screen_position(&view->people[index], &radar_x, &radar_y)) {
             add_dirty_rect(rects, count, (dirty_rect_t) {
-                .x = radar_y - 5, .y = radar_x - 5, .width = 11, .height = 11,
+                .x = radar_x - 5, .y = radar_y - 5, .width = 11, .height = 11,
             });
         }
     }
-    for (int index = 0; index < SCREENSAVER_MAX_RIPPLES; ++index) {
-        const screensaver_ripple_t *ripple = &screensaver->ripples[index];
-        int radius = ripple_radius(ripple);
+    for (int index = 0; index < RADAR_VIEW_MAX_PINGS; ++index) {
+        const radar_ping_t *ping = &view->pings[index];
+        int radius = ping_radius(ping);
         if (radius > 0) {
             add_dirty_rect(rects, count, (dirty_rect_t) {
-                .x = ripple->x - radius - 6,
-                .y = ripple->y - radius - 6,
+                .x = ping->x - radius - 6,
+                .y = ping->y - radius - 6,
                 .width = radius * 2 + 13,
                 .height = radius * 2 + 13,
             });
@@ -849,52 +797,50 @@ static void collect_dynamic_rects(const screensaver_t *screensaver, const overla
     }
 #if !defined(RADAR_LINK_ROLE_RECEIVER)
     add_dirty_rect(rects, count, (dirty_rect_t) {
-        .x = screensaver->cursor_x - 10,
-        .y = screensaver->cursor_y - 10,
+        .x = view->cursor_x - 10,
+        .y = view->cursor_y - 10,
         .width = 21,
         .height = 21,
     });
 #endif
 }
 
-static void update_people(screensaver_t *screensaver, float dt)
+static void update_people(radar_view_t *view, float dt)
 {
     float blend = dt * TARGET_SMOOTHING_PER_SECOND;
     if (blend > 1.0f) {
         blend = 1.0f;
     }
-    for (int index = 0; index < SCREENSAVER_MAX_PEOPLE; ++index) {
-        if (!screensaver->people_target_active[index]) {
-            screensaver->people[index].active = false;
-            screensaver->people_initialized[index] = false;
+    for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
+        if (!view->people_target_active[index]) {
+            view->people[index].active = false;
+            view->people_initialized[index] = false;
             continue;
         }
-        if (!screensaver->people_initialized[index]) {
-            screensaver->people_target_x[index] = screensaver->people[index].x_mm;
-            screensaver->people_target_y[index] = screensaver->people[index].y_mm;
-            screensaver->people_initialized[index] = true;
+        if (!view->people_initialized[index]) {
+            view->people_target_x[index] = view->people[index].x_mm;
+            view->people_target_y[index] = view->people[index].y_mm;
+            view->people_initialized[index] = true;
         }
-        float current_x = screensaver->people[index].x_mm;
-        float current_y = screensaver->people[index].y_mm;
-        current_x += (screensaver->people_target_x[index] - current_x) * blend;
-        current_y += (screensaver->people_target_y[index] - current_y) * blend;
-        screensaver->people[index].x_mm = (int16_t)(current_x + (current_x >= 0 ? 0.5f : -0.5f));
-        screensaver->people[index].y_mm = (int16_t)(current_y + (current_y >= 0 ? 0.5f : -0.5f));
-        screensaver->people[index].active = true;
+        float current_x = view->people[index].x_mm;
+        float current_y = view->people[index].y_mm;
+        current_x += (view->people_target_x[index] - current_x) * blend;
+        current_y += (view->people_target_y[index] - current_y) * blend;
+        view->people[index].x_mm = (int16_t)(current_x + (current_x >= 0 ? 0.5f : -0.5f));
+        view->people[index].y_mm = (int16_t)(current_y + (current_y >= 0 ? 0.5f : -0.5f));
+        view->people[index].active = true;
     }
 }
 
-void screensaver_start(esp_lcd_panel_handle_t panel, screensaver_t *screensaver)
+void radar_view_start(esp_lcd_panel_handle_t panel, radar_view_t *view)
 {
-    *screensaver = (screensaver_t) {
-        .hue = 0,
-        .active_ripple = -1,
+    *view = (radar_view_t) {
         .cursor_x = LCD_WIDTH / 2,
         .cursor_y = LCD_HEIGHT / 2,
         .last_step_us = esp_timer_get_time(),
     };
-    for (int i = 0; i < SCREENSAVER_MAX_RIPPLES; ++i) {
-        screensaver->ripples[i].age_seconds = RIPPLE_SECONDS;
+    for (int i = 0; i < RADAR_VIEW_MAX_PINGS; ++i) {
+        view->pings[i].age_seconds = RADAR_PING_SECONDS;
     }
     s_previous_rect_count = 0;
     s_static_ready = false;
@@ -903,7 +849,15 @@ void screensaver_start(esp_lcd_panel_handle_t panel, screensaver_t *screensaver)
     }
 }
 
-void screensaver_set_cursor(screensaver_t *screensaver, int x, int y)
+void radar_view_restore(esp_lcd_panel_handle_t panel)
+{
+    s_previous_rect_count = 0;
+    if (s_dma_pixels) {
+        render_static_full(panel);
+    }
+}
+
+void radar_view_set_cursor(radar_view_t *view, int x, int y)
 {
     if (x < 0) {
         x = 0;
@@ -915,30 +869,28 @@ void screensaver_set_cursor(screensaver_t *screensaver, int x, int y)
     } else if (y >= LCD_HEIGHT) {
         y = LCD_HEIGHT - 1;
     }
-    screensaver->cursor_x = x;
-    screensaver->cursor_y = y;
+    view->cursor_x = x;
+    view->cursor_y = y;
 }
 
-void screensaver_set_people(screensaver_t *screensaver,
-                            const screensaver_person_t people[SCREENSAVER_MAX_PEOPLE],
-                            bool radar_connected)
+void radar_view_set_people(radar_view_t *view,
+                           const radar_person_t people[RADAR_VIEW_MAX_PEOPLE])
 {
-    for (int index = 0; index < SCREENSAVER_MAX_PEOPLE; ++index) {
-        screensaver->people_target_active[index] = people[index].active;
-        screensaver->people_target_x[index] = people[index].x_mm;
-        screensaver->people_target_y[index] = people[index].y_mm;
-        if (people[index].active && !screensaver->people_initialized[index]) {
-            screensaver->people[index] = people[index];
-            screensaver->people_initialized[index] = true;
+    for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
+        view->people_target_active[index] = people[index].active;
+        view->people_target_x[index] = people[index].x_mm;
+        view->people_target_y[index] = people[index].y_mm;
+        if (people[index].active && !view->people_initialized[index]) {
+            view->people[index] = people[index];
+            view->people_initialized[index] = true;
         }
     }
-    screensaver->radar_connected = radar_connected;
 }
 
-void screensaver_trigger_radar_ping(screensaver_t *screensaver)
+void radar_view_trigger_ping(radar_view_t *view)
 {
-    for (int index = 0; index < SCREENSAVER_MAX_PEOPLE; ++index) {
-        const screensaver_person_t *person = &screensaver->people[index];
+    for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
+        const radar_person_t *person = &view->people[index];
         int radar_x;
         int radar_y;
         if (!person->active
@@ -946,39 +898,28 @@ void screensaver_trigger_radar_ping(screensaver_t *screensaver)
             continue;
         }
 
-        int slot = next_ripple_slot(screensaver);
-        screensaver->ripples[slot] = (screensaver_ripple_t) {
-            .x = radar_y,
-            .y = radar_x,
+        int slot = next_ping_slot(view);
+        view->pings[slot] = (radar_ping_t) {
+            .x = radar_x,
+            .y = radar_y,
             .age_seconds = 0.0f,
-            .active = false,
-            .radar_ping = true,
         };
     }
 }
 
-void screensaver_set_palette(screensaver_t *screensaver, uint8_t palette_index,
-                             uint8_t palette_phase)
-{
-    screensaver->palette_index = palette_index % COLOR_PALETTE_COUNT;
-    screensaver->palette_phase = palette_phase;
-}
-
-void screensaver_step(esp_lcd_panel_handle_t panel, screensaver_t *screensaver)
+void radar_view_step(esp_lcd_panel_handle_t panel, radar_view_t *view)
 {
     int64_t now = esp_timer_get_time();
-    float dt = (float)(now - screensaver->last_step_us) / 1000000.0f;
-    screensaver->last_step_us = now;
+    float dt = (float)(now - view->last_step_us) / 1000000.0f;
+    view->last_step_us = now;
     if (dt <= 0.0f || dt > 0.1f) {
         dt = 1.0f / 30.0f;
     }
-    screensaver->hue += (unsigned int)(dt * 24.0f + 0.5f);
-    update_people(screensaver, dt);
-    for (int i = 0; i < SCREENSAVER_MAX_RIPPLES; ++i) {
-        screensaver_ripple_t *ripple = &screensaver->ripples[i];
-        float lifetime = ripple->radar_ping ? RADAR_PING_SECONDS : RIPPLE_SECONDS;
-        if (!ripple->active && ripple->age_seconds < lifetime) {
-            ripple->age_seconds += dt;
+    update_people(view, dt);
+    for (int i = 0; i < RADAR_VIEW_MAX_PINGS; ++i) {
+        radar_ping_t *ping = &view->pings[i];
+        if (ping->age_seconds < RADAR_PING_SECONDS) {
+            ping->age_seconds += dt;
         }
     }
 
@@ -986,10 +927,10 @@ void screensaver_step(esp_lcd_panel_handle_t panel, screensaver_t *screensaver)
         return;
     }
     overlay_t overlay;
-    prepare_overlay(screensaver, &overlay);
+    prepare_overlay(view, &overlay);
     dirty_rect_t current_rects[MAX_DYNAMIC_RECTS];
     int current_count;
-    collect_dynamic_rects(screensaver, &overlay, current_rects, &current_count);
+    collect_dynamic_rects(view, &overlay, current_rects, &current_count);
 
     dirty_rect_t redraw_rects[MAX_DYNAMIC_RECTS];
     int redraw_count = 0;
@@ -1000,32 +941,9 @@ void screensaver_step(esp_lcd_panel_handle_t panel, screensaver_t *screensaver)
         add_dirty_rect(redraw_rects, &redraw_count, current_rects[index]);
     }
     for (int index = 0; index < redraw_count; ++index) {
-        render_dirty_rect(panel, screensaver, &overlay, redraw_rects[index]);
+        render_dirty_rect(panel, view, &overlay, redraw_rects[index]);
     }
     memcpy(s_previous_rects, current_rects, current_count * sizeof(current_rects[0]));
     s_previous_rect_count = current_count;
 }
 
-void screensaver_touch(screensaver_t *screensaver, uint16_t x, uint16_t y, bool touched)
-{
-    if (touched && !screensaver->touch_active) {
-        screensaver->active_ripple = next_ripple_slot(screensaver);
-        screensaver_ripple_t *ripple = &screensaver->ripples[screensaver->active_ripple];
-        *ripple = (screensaver_ripple_t) {
-            .x = x,
-            .y = y,
-            .age_seconds = 0.0f,
-            .active = true,
-        };
-    }
-    if (touched && screensaver->active_ripple >= 0) {
-        screensaver_ripple_t *ripple = &screensaver->ripples[screensaver->active_ripple];
-        ripple->x = x;
-        ripple->y = y;
-    }
-    if (!touched && screensaver->touch_active && screensaver->active_ripple >= 0) {
-        screensaver->ripples[screensaver->active_ripple].active = false;
-        screensaver->active_ripple = -1;
-    }
-    screensaver->touch_active = touched;
-}
