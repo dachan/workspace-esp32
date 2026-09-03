@@ -8,22 +8,12 @@ MAX98357 speaker amplifier, and future LSM6DS3 IMU.
 
 ## System diagram
 
-```mermaid
-flowchart LR
-    ESP["ESP32-S3 expansion board"]
-    TFT["ILI9341V IPS display"]
-    TOUCH["FT6336G capacitive touch"]
-    AMP["MAX98357 I2S amplifier"]
-    SPEAKER["1W / 8 ohm speaker"]
-    IMU["LSM6DS3 accel/gyro"]
-
-    ESP -- "3V3 + GND" --> TFT
-    ESP -- "GPIO4, 8-11, 16-18" --> TFT
-    ESP -- "GPIO5-7, 15" --> TOUCH
-    ESP -- "5V + GND" --> AMP
-    ESP -- "GPIO38, 39, 40, 42" --> AMP
-    AMP -- "OUT+ and OUT-" --> SPEAKER
-    ESP -. "not connected yet" .-> IMU
+```text
+ESP32-S3
+  |-- 3V3/GND + GPIO4, 8-11, 16-18 --> ILI9341V display
+  |-- GPIO5-7, 15 -------------------> FT6336G capacitive touch
+  |-- 5V/GND + GPIO38-40, 42 ---------> MAX98357 amplifier --> speaker
+  `-- LSM6DS3 IMU --------------------> not connected
 ```
 
 ## ESP32-S3 expansion headers
@@ -65,6 +55,16 @@ The new display occupies GPIO4-18 as one contiguous wiring block. The IMU is
 not connected yet and must be assigned a new three-pin group before step 3.
 
 ## Display and touch connector
+
+Physical header layout, in the module’s connector order:
+
+```text
+Pin:   1    2    3        4         5          6         7    8    9        10       11       12       13       14
+Name: VCC  GND  LCD_CS   LCD_RST   LCD_RS/DC  SDI/MOSI  SCK  LED  SDO/MISO CTP_SCL  CTP_RST  CTP_SDA  CTP_INT  SD_CS
+Wire: 3V3  GND  GPIO11   GPIO10    GPIO9      GPIO8     GPIO18 GPIO17 GPIO16  GPIO15   GPIO7    GPIO6    GPIO5    GPIO4
+```
+
+Peripheral-order map:
 
 | Display module pin | ESP32-S3 connection | Notes |
 |---|---|---|

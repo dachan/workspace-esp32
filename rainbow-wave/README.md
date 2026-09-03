@@ -3,18 +3,32 @@
 Firmware for the pictured eight-pixel WS2812B bar. It renders a continuously
 moving rainbow/brightness wave from the physical left side to the right side.
 
-## Wiring used
+## Current wiring
+
+Physical connection view. The data input is at the bar’s physical right-hand
+end; the firmware reverses logical pixel order so the visible wave travels
+left-to-right.
 
 ```text
-WS2812B-8 input     ESP32-S3 DevKitC-1
-VCC                 3V3
-GND                 GND
-DIN                 GPIO1
+WS2812B-8 bar                       ESP32-S3
+-----------                         ---------
+VCC       <------------------------ 3V3
+DIN       <------------------------ GPIO1
+GND       <------------------------ GND
+DOUT      ------------------------> NC
 ```
 
-The bar is wired from its right-hand input end, so the firmware reverses the
-logical pixel order to keep the visible motion left-to-right. Brightness is
-limited for USB/3.3V operation.
+Peripheral-order map:
+
+```text
+WS2812B connector order: VCC, DIN, GND, DOUT
+VCC  -> ESP32 3V3
+DIN  -> ESP32 GPIO1
+GND  -> ESP32 GND
+DOUT -> NC (single bar)
+```
+
+Brightness is limited for USB/3.3V operation.
 
 ## Flash
 

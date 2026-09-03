@@ -6,6 +6,21 @@ speaker are its primary outputs.
 
 See [WIRING.md](WIRING.md) for the authoritative wiring map.
 
+## Current wiring at a glance
+
+Physical connection view:
+
+```text
+ESP32-S3 --SPI + control--> ILI9341V display
+         --I2C------------> FT6336G capacitive touch
+         --I2S------------> MAX98357 amplifier --speaker output--> speaker
+         --reserved-------> LSM6DS3 IMU (not connected)
+```
+
+The display module is powered from `3V3`; the amplifier `VIN` uses `5V`.
+See [WIRING.md](WIRING.md) for the complete physical-header layout and the
+separate peripheral-order maps.
+
 ## Build and flash
 
 The project targets `esp32s3` and uses the workspace ESP-IDF toolchain:

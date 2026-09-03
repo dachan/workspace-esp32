@@ -9,15 +9,78 @@ The separate receiver board renders the radar display. It has no joystick,
 microphone, or voice controls. Its distance readout is followed by radial
 acceleration; all receiver text is scaled to 80% of the former size.
 
-## Wiring
+## Current wiring
 
-| LD2450 signal | ESP32-S3 DEVKITC-1 |
-|---|---|
-| 5V | 5V |
-| GND | GND |
-| TX | GPIO41 (ESP32 UART receive) |
-| RX | GPIO42 (ESP32 UART transmit) |
-| WS2812B DIN | GPIO1 |
+### Transmitter: LD2450 and motion bar
+
+The transmitter is headless. Its only physical peripherals are the LD2450 and
+the external eight-pixel WS2812B bar; the receiver link is wireless ESP-NOW on
+channel 6.
+
+Physical connection view:
+
+```text
+LD2450                    ESP32-S3 transmitter       WS2812B-8 bar
+------                    -------------------       ------------
+5V       ----------------> 5V
+GND      ----------------> GND
+TX       ----------------> GPIO41 (UART RX)
+RX       <---------------- GPIO42 (UART TX)
+
+                                                      VCC <------ 3V3
+GPIO1    -------------------------------------------> DIN
+                                                      GND <------ GND
+                                                      DOUT ------ NC
+```
+
+Peripheral-order maps:
+
+```text
+LD2450 connector order: 5V, GND, TX, RX
+5V       -> ESP32 5V
+GND      -> ESP32 GND
+TX       -> ESP32 GPIO41 (UART RX)
+RX       -> ESP32 GPIO42 (UART TX)
+
+WS2812B connector order: VCC, DIN, GND, DOUT
+VCC      -> ESP32 3V3
+DIN      -> ESP32 GPIO1
+GND      -> ESP32 GND
+DOUT     -> NC (single bar)
+```
+
+### Receiver: 2.8-inch display module
+
+The receiver uses the LCD SPI and control signals only. The touch controller
+and microSD chip-select lines on the same module are not connected by this
+firmware.
+
+Physical header layout, in the module’s connector order:
+
+```text
+Pin:   1    2    3        4         5          6         7    8    9        10       11       12       13       14
+Name: VCC  GND  LCD_CS   LCD_RST   LCD_RS/DC  SDI/MOSI  SCK  LED  SDO/MISO CTP_SCL  CTP_RST  CTP_SDA  CTP_INT  SD_CS
+Wire: 3V3  GND  GPIO11   GPIO10    GPIO9      GPIO8     GPIO18 GPIO17 GPIO16  NC       NC       NC       NC       NC
+```
+
+Peripheral-order map:
+
+```text
+VCC       -> ESP32 3V3
+GND       -> ESP32 GND
+LCD_CS    -> ESP32 GPIO11
+LCD_RST   -> ESP32 GPIO10
+LCD_RS/DC -> ESP32 GPIO9
+SDI/MOSI  -> ESP32 GPIO8
+SCK       -> ESP32 GPIO18
+LED       -> ESP32 GPIO17
+SDO/MISO  -> ESP32 GPIO16
+CTP_SCL   -> NC
+CTP_RST   -> NC
+CTP_SDA   -> NC
+CTP_INT   -> NC
+SD_CS     -> NC
+```
 
 The LD2450 UART logic is 3.3 V. Its 5 V supply must support more than 200 mA.
 The installed module produces valid target frames at 9600 baud; the firmware
