@@ -1,20 +1,12 @@
 # ESP32-S3 LD2450 radar
 
-The sensor board is a headless transmitter: it reads LD2450 target frames over
-UART, broadcasts them via ESP-NOW on Wi-Fi channel 6, and drives the external
-WS2812B bar as a motion indicator.
-
-The separate receiver board renders the radar display from frames received over
-ESP-NOW. Its distance readout is followed by radial acceleration; all receiver
-text is scaled to 80% of the former size.
+The transmitter reads LD2450 target frames over UART, broadcasts them over
+ESP-NOW channel 6, and drives an external WS2812B motion bar. The receiver
+renders the radar display from those frames.
 
 ## Current wiring
 
 ### Transmitter: LD2450 and motion bar
-
-The transmitter is headless. Its only physical peripherals are the LD2450 and
-the external eight-pixel WS2812B bar; the receiver link is wireless ESP-NOW on
-channel 6.
 
 Physical connection view:
 
@@ -54,13 +46,24 @@ The receiver uses the LCD SPI and control signals only. The touch controller
 and microSD chip-select lines on the same module are not connected by this
 firmware.
 
-Physical header layout, in the module’s connector order:
+Physical header layout, pins 1 through 14:
 
-```text
-Pin:   1    2    3        4         5          6         7    8    9        10       11       12       13       14
-Name: VCC  GND  LCD_CS   LCD_RST   LCD_RS/DC  SDI/MOSI  SCK  LED  SDO/MISO CTP_SCL  CTP_RST  CTP_SDA  CTP_INT  SD_CS
-Wire: 3V3  GND  GPIO11   GPIO10    GPIO9      GPIO8     GPIO18 GPIO17 GPIO16  NC       NC       NC       NC       NC
-```
+| Pin | Module signal | ESP32 connection |
+|---:|---|---|
+| 1 | `VCC` | `3V3` |
+| 2 | `GND` | `GND` |
+| 3 | `LCD_CS` | GPIO11 |
+| 4 | `LCD_RST` | GPIO10 |
+| 5 | `LCD_RS/DC` | GPIO9 |
+| 6 | `SDI/MOSI` | GPIO8 |
+| 7 | `SCK` | GPIO18 |
+| 8 | `LED` | GPIO17 |
+| 9 | `SDO/MISO` | GPIO16 |
+| 10 | `CTP_SCL` | `NC` |
+| 11 | `CTP_RST` | `NC` |
+| 12 | `CTP_SDA` | `NC` |
+| 13 | `CTP_INT` | `NC` |
+| 14 | `SD_CS` | `NC` |
 
 Peripheral-order map:
 
@@ -95,26 +98,9 @@ idf.py -B build-radar-transmitter -D RADAR_LINK_ROLE=transmitter build
 ESP_PORT=/dev/ttyUSB0 ./tools/flash-radar.sh transmitter
 
 # Receiver/display board
-idf.py -B build-radar-receiver-accel -D RADAR_LINK_ROLE=receiver build
+idf.py -B build-radar-receiver -D RADAR_LINK_ROLE=receiver build
 ESP_PORT=/dev/ttyUSB1 ./tools/flash-radar.sh receiver
 ```
 
 Use `app-flash` for normal updates. It preserves the existing partition table
 and any non-application data.
-
-At boot, the firmware initializes the LD2450 and ESP-NOW transmitter, requests
-single-person tracking, and then logs target data approximately once per second.
-A single-target command timeout does not stop tracking: valid 30-byte target
-frames continue to be broadcast.
-
-The transmitter calculates the nearest tracked person's radial acceleration and
-sends that one value in every ESP-NOW frame. The receiver's `ACCEL` readout and
-the eight-pixel WS2812B bar both use that exact value. The bar is a moving green
-light crest: it is very dim and slow at zero acceleration, then becomes brighter
-and faster as acceleration increases. Its idle output uses three one-step frames
-followed by one black frame, averaging 0.75 WS2812B brightness steps—another 50%
-dimmer than the preceding idle setting.
-
-On the receiver, `ACCEL` is the unsigned, smoothed radial acceleration of the
-nearest tracked person. Its displayed value is amplified fivefold so normal
-human starts, stops, and turns produce a more visible range.

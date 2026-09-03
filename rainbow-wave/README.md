@@ -1,7 +1,7 @@
 # ESP32-S3 rainbow wave
 
-Firmware for the pictured eight-pixel WS2812B bar. It renders a continuously
-moving rainbow/brightness wave from the physical left side to the right side.
+Standalone firmware for an eight-pixel WS2812B bar. It renders a continuously
+moving wave from the physical left side to the right side.
 
 ## Current wiring
 
@@ -28,7 +28,7 @@ GND  -> ESP32 GND
 DOUT -> NC (single bar)
 ```
 
-Brightness is limited for USB/3.3V operation.
+Brightness is limited for 3.3V operation.
 
 ## Flash
 
@@ -38,8 +38,4 @@ source "$IDF_PATH/export.sh"
 ESP_PORT=/dev/ttyUSB0 ./tools/flash.sh
 ```
 
-Set `ESP_PORT` to the serial device for the connected board:
-
-```sh
-ESP_PORT=/dev/ttyUSB0 ./tools/flash.sh
-```
+Set `ESP_PORT` to the serial device for the connected board.

@@ -1,30 +1,38 @@
 # Hardware-test drivers
 
-This folder contains the non-radar peripheral drivers used by the radar
-application’s hardware-test harness. Keeping them here separates display,
-touch, input, audio, and LED support from the LD2450 and ESP-NOW transport
-sources while preserving one firmware build for each board role.
+Shared non-radar peripheral drivers for display, touch, input, audio, and LED
+support.
 
-The `radar/main/CMakeLists.txt` file includes these sources directly. This is a
-source subproject, not a separately flashed firmware image.
+The radar build includes these sources directly. This directory is not a
+separately flashed firmware project.
 
-## Current shared wiring
+## Shared wiring
 
-These allocations describe the peripherals supported by the shared drivers.
-They are not one standalone harness: the active firmware selects the subset it
-needs. `NC` means deliberately not connected.
+These allocations cover the peripherals supported by the shared drivers. The
+active firmware selects the subset it needs. `NC` means deliberately unused.
 
 ### Display and touch header
 
 The current ILI9341/FT6336 display profiles use this 14-pin module header.
 
-Physical header layout:
+Physical header layout, pins 1 through 14:
 
-```text
-Pin:   1    2    3        4         5          6         7    8    9        10       11       12       13       14
-Name: VCC  GND  LCD_CS   LCD_RST   LCD_RS/DC  SDI/MOSI  SCK  LED  SDO/MISO CTP_SCL  CTP_RST  CTP_SDA  CTP_INT  SD_CS
-Wire: 3V3  GND  GPIO11   GPIO10    GPIO9      GPIO8     GPIO18 GPIO17 GPIO16  GPIO15   GPIO7    GPIO6    GPIO5    GPIO4
-```
+| Pin | Module signal | ESP32 connection |
+|---:|---|---|
+| 1 | `VCC` | `3V3` |
+| 2 | `GND` | `GND` |
+| 3 | `LCD_CS` | GPIO11 |
+| 4 | `LCD_RST` | GPIO10 |
+| 5 | `LCD_RS/DC` | GPIO9 |
+| 6 | `SDI/MOSI` | GPIO8 |
+| 7 | `SCK` | GPIO18 |
+| 8 | `LED` | GPIO17 |
+| 9 | `SDO/MISO` | GPIO16 |
+| 10 | `CTP_SCL` | GPIO15 |
+| 11 | `CTP_RST` | GPIO7 |
+| 12 | `CTP_SDA` | GPIO6 |
+| 13 | `CTP_INT` | GPIO5 |
+| 14 | `SD_CS` | GPIO4 |
 
 Peripheral-order map:
 
@@ -81,11 +89,10 @@ Next palette button:     GPIO2  <-> GND
 Previous palette button: GPIO21 <-> GND
 ```
 
-The button inputs use internal pull-ups. The on-board addressable RGB LED is
-controlled separately on GPIO48; it has no external wiring. Speech recognition
-adds no pins because it consumes the INMP441 driver’s audio stream.
+The button inputs use internal pull-ups. The on-board addressable RGB LED uses
+GPIO48. Speech recognition reuses the microphone’s audio stream.
 
-## Sources
+## Drivers
 
 - Display profile and transfer synchronization
 - Touch calibration

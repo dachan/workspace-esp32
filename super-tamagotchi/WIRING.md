@@ -22,13 +22,28 @@ Follow the labels printed on the expansion board rather than relying on board
 orientation. Each signal is available in two parallel sockets on its labelled
 column.
 
-```text
-Side A
-3V3 · GND · 4 · 5 · 6 · 7 · 15 · 16 · 17 · 18 · 8 · 3 · 9 · 10 · 11 · 12 · 13 · 14 · GND · 3V3
-
-Side B
-3V3 · 5V · GND · GND · 19 · 20 · 21 · 47 · 48 · 38 · 39 · 40 · 41 · 42 · 2 · 1 · GND · GND · 5V · 3V3
-```
+| Position | Side A | Side B |
+|---:|---|---|
+| 1 | `3V3` | `3V3` |
+| 2 | `GND` | `5V` |
+| 3 | GPIO4 | `GND` |
+| 4 | GPIO5 | `GND` |
+| 5 | GPIO6 | GPIO19 |
+| 6 | GPIO7 | GPIO20 |
+| 7 | GPIO15 | GPIO21 |
+| 8 | GPIO16 | GPIO47 |
+| 9 | GPIO17 | GPIO48 |
+| 10 | GPIO18 | GPIO38 |
+| 11 | GPIO8 | GPIO39 |
+| 12 | GPIO3 | GPIO40 |
+| 13 | GPIO9 | GPIO41 |
+| 14 | GPIO10 | GPIO42 |
+| 15 | GPIO11 | GPIO2 |
+| 16 | GPIO12 | GPIO1 |
+| 17 | GPIO13 | `GND` |
+| 18 | GPIO14 | `GND` |
+| 19 | `GND` | `5V` |
+| 20 | `3V3` | `3V3` |
 
 ### Current GPIO use
 
@@ -56,13 +71,24 @@ not connected yet and must be assigned a new three-pin group before step 3.
 
 ## Display and touch connector
 
-Physical header layout, in the module’s connector order:
+Physical header layout, pins 1 through 14:
 
-```text
-Pin:   1    2    3        4         5          6         7    8    9        10       11       12       13       14
-Name: VCC  GND  LCD_CS   LCD_RST   LCD_RS/DC  SDI/MOSI  SCK  LED  SDO/MISO CTP_SCL  CTP_RST  CTP_SDA  CTP_INT  SD_CS
-Wire: 3V3  GND  GPIO11   GPIO10    GPIO9      GPIO8     GPIO18 GPIO17 GPIO16  GPIO15   GPIO7    GPIO6    GPIO5    GPIO4
-```
+| Pin | Module signal | ESP32 connection |
+|---:|---|---|
+| 1 | `VCC` | `3V3` |
+| 2 | `GND` | `GND` |
+| 3 | `LCD_CS` | GPIO11 |
+| 4 | `LCD_RST` | GPIO10 |
+| 5 | `LCD_RS/DC` | GPIO9 |
+| 6 | `SDI/MOSI` | GPIO8 |
+| 7 | `SCK` | GPIO18 |
+| 8 | `LED` | GPIO17 |
+| 9 | `SDO/MISO` | GPIO16 |
+| 10 | `CTP_SCL` | GPIO15 |
+| 11 | `CTP_RST` | GPIO7 |
+| 12 | `CTP_SDA` | GPIO6 |
+| 13 | `CTP_INT` | GPIO5 |
+| 14 | `SD_CS` | GPIO4 |
 
 Peripheral-order map:
 
