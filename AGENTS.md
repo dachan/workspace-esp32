@@ -121,3 +121,9 @@ For a direct peripheral-to-board map, use one continuous
 peripheral sequence alongside it; list unused GPIO coverage in additional rows
 or a separate audit table. Include every GPIO exposed on the pictured board,
 marking unused connections as `NC`.
+
+When documenting a peripheral with a physical multi-row header, include two
+distinct diagrams: the physical-header layout above, plus a second sequential
+diagram ordered by the peripheral's connector/pin order. The second diagram
+must show each peripheral pin paired with its ESP32 GPIO or power connection;
+do not reorder it to match visual placement on the board.
