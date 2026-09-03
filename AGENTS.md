@@ -27,9 +27,9 @@ changing firmware or connecting hardware.
 
 The transmitter reads LD2450 target frames over UART, broadcasts them with
 ESP-NOW, and drives an external WS2812B motion indicator. The receiver renders
-the radar view and does not require the transmitter's joystick, microphone, or
-voice controls. The receiver and transmitter should remain visually and
-behaviorally equivalent where their different panel sizes allow.
+the radar view and receives frames over ESP-NOW. The receiver and transmitter
+should remain visually and behaviorally equivalent where their different panel
+sizes allow.
 
 The LD2450 uses 5 V power, 3.3 V UART logic, and a UART connection with the
 sensor TX line connected to the ESP32 RX GPIO and the sensor RX line connected

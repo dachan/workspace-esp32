@@ -2,12 +2,11 @@
 
 The sensor board is a headless transmitter: it reads LD2450 target frames over
 UART, broadcasts them via ESP-NOW on Wi-Fi channel 6, and drives the external
-WS2812B bar as a motion indicator. It does not initialize or require a display,
-touch controller, joystick, microphone, speech model, or microSD card.
+WS2812B bar as a motion indicator.
 
-The separate receiver board renders the radar display. It has no joystick,
-microphone, or voice controls. Its distance readout is followed by radial
-acceleration; all receiver text is scaled to 80% of the former size.
+The separate receiver board renders the radar display from frames received over
+ESP-NOW. Its distance readout is followed by radial acceleration; all receiver
+text is scaled to 80% of the former size.
 
 ## Current wiring
 
