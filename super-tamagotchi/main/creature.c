@@ -27,7 +27,8 @@ static uint16_t C_BG, C_BODY, C_SHADE, C_MOUTH, C_TONGUE, C_EDGE, C_PUPIL, C_FOO
 #define SHADOW_DEPTH 20.0f
 
 // --- feeding and life --------------------------------------------------------
-// A service control in the same spirit as the rotary encoder in AGENTS.md: it
+// A service control in the same spirit as the rotary encoder described in the
+// project guidance: it
 // sits outside the pet fiction in the corner rather than pretending to be part
 // of the animal, because "where the food comes from" has no honest in-body
 // answer the way a poke does.
@@ -920,7 +921,7 @@ static void draw_tap_pulse(float s)
 }
 
 // The feed button: a bowl of kibble, outside the pet fiction like the rotary
-// encoder in AGENTS.md. Two circles for the outline, same trick the rest of
+// encoder guidance. Two circles for the outline, same trick the rest of
 // the creature uses for outlines, valid here because a circle is convex.
 static void draw_feed_button(void)
 {

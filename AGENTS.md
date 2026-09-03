@@ -67,6 +67,35 @@ The flash scripts require both `IDF_PATH` (or `IDF_EXPORT`) and `ESP_PORT` so
 that no machine-specific installation path or device identity is stored in the
 repository.
 
+## Super Tamagotchi
+
+This portable ESP32-S3 virtual pet combines a display, capacitive touch, and
+speaker/amplifier audio. The desktop simulator renders the same creature code
+without hardware. Use [super-tamagotchi/WIRING.md](super-tamagotchi/WIRING.md)
+as the authoritative pin map, keep logic signals at 3.3 V, and disconnect power
+before changing wiring.
+
+Build and flash it with a local ESP-IDF installation:
+
+```sh
+export IDF_PATH=/path/to/esp-idf
+source "$IDF_PATH/export.sh"
+cd super-tamagotchi
+idf.py set-target esp32s3
+idf.py build flash monitor
+```
+
+Choose the serial device through ESP-IDF options or an explicit local
+environment variable. Do not hard-code machine-specific ports or paths. The
+platform-neutral simulator can be run with `./sim/run.sh` or `./sim/run.sh
+--live`; live mode serves frames on localhost only.
+
+Keep rendering, hardware drivers, and application state in focused modules;
+prefer small functions and straightforward control flow; and document
+non-obvious hardware constraints in comments or wiring docs. Generated
+binaries, simulator output, `sdkconfig`, environment files, credentials, audio
+recordings, device dumps, and other private data must not be committed.
+
 ## Wiring documentation
 
 When documenting a user-supplied module diagram, preserve its physical header
