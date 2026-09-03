@@ -4,24 +4,16 @@ A portable, battery-powered virtual pet built on an ESP32-S3. It has no menus:
 the touchscreen is direct interaction with the creature, and the display and
 speaker are its primary outputs.
 
-## Current status
-
-The 2.8-inch ILI9341V display, FT6336G-family capacitive touch controller, and
-MAX98357 speaker output are wired and were verified on hardware on 2026-08-31.
-The creature renders at about 31.5 fps and touch contacts produce screen
-coordinates. The IMU, microphone input, and battery-power system are still to
-be brought up.
-
-Hardware decisions, current pin assignments, and flashing conventions are in
-[AGENTS.md](AGENTS.md); use [WIRING.md](WIRING.md) as the authoritative wiring
-map.
+See [WIRING.md](WIRING.md) for the authoritative wiring map.
 
 ## Build and flash
 
 The project targets `esp32s3` and uses the workspace ESP-IDF toolchain:
 
 ```bash
-source $IDF_PATH/export.sh
+export IDF_PATH=/path/to/esp-idf
+source "$IDF_PATH/export.sh"
+cd super-tamagotchi
 idf.py set-target esp32s3
 idf.py build flash monitor
 ```
@@ -40,7 +32,6 @@ the creature can be inspected without hardware:
 ./sim/run.sh         # renders stills to sim/out.png
 ```
 
-## Configuration
-
-WiFi credentials and other secrets belong in NVS on the device or a local
-gitignored file—never in committed firmware sources.
+Do not commit device credentials or other local configuration. Generated
+`sdkconfig`, build directories, simulator output, and environment files are
+ignored.

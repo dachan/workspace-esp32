@@ -19,10 +19,12 @@ limited for USB/3.3V operation.
 ## Flash
 
 ```sh
-./tools/flash.sh
+export IDF_PATH=/path/to/esp-idf
+source "$IDF_PATH/export.sh"
+ESP_PORT=/dev/ttyUSB0 ./tools/flash.sh
 ```
 
-If the USB serial device changes:
+Set `ESP_PORT` to the serial device for the connected board:
 
 ```sh
 ESP_PORT=/dev/ttyUSB0 ./tools/flash.sh

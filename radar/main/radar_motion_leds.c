@@ -15,7 +15,10 @@ enum {
     LED_DATA_GPIO = GPIO_NUM_1,
     LED_FRAME_INTERVAL_MS = 25,
     MOTION_MAX_MM_PER_SECOND_SQUARED = 10000,
-    WAVE_IDLE_BRIGHTNESS = 3,
+    WAVE_IDLE_BRIGHTNESS = 1,
+    WAVE_IDLE_ON_FRAMES = 3,
+    WAVE_IDLE_DITHER_FRAME_COUNT = 4,
+    WAVE_MOVING_MIN_BRIGHTNESS = 3,
     WAVE_IDLE_FLOOR_BRIGHTNESS = 1,
     WAVE_MAX_BRIGHTNESS = 64,
     WAVE_SLOW_PHASES_PER_SECOND = 8,
@@ -63,15 +66,22 @@ static size_t encode_ws2812(const void *data, size_t data_size, size_t symbols_w
     return 1;
 }
 
-static uint8_t motion_brightness(void)
+static uint8_t motion_brightness(TickType_t now)
 {
     uint32_t magnitude = s_acceleration_mm_per_second_squared < 0
                        ? -(int32_t)s_acceleration_mm_per_second_squared
                        : s_acceleration_mm_per_second_squared;
     uint32_t clamped_magnitude = magnitude > MOTION_MAX_MM_PER_SECOND_SQUARED
                                ? MOTION_MAX_MM_PER_SECOND_SQUARED : magnitude;
-    uint32_t peak = WAVE_IDLE_BRIGHTNESS
-                  + clamped_magnitude * (WAVE_MAX_BRIGHTNESS - WAVE_IDLE_BRIGHTNESS)
+    if (clamped_magnitude == 0) {
+        // WS2812B channels are integral; three dim frames followed by one
+        // black frame averages another 50% reduction from the prior idle level.
+        return (pdTICKS_TO_MS(now) / LED_FRAME_INTERVAL_MS)
+                    % WAVE_IDLE_DITHER_FRAME_COUNT < WAVE_IDLE_ON_FRAMES
+            ? WAVE_IDLE_BRIGHTNESS : 0;
+    }
+    uint32_t peak = WAVE_MOVING_MIN_BRIGHTNESS
+                  + clamped_magnitude * (WAVE_MAX_BRIGHTNESS - WAVE_MOVING_MIN_BRIGHTNESS)
                   / MOTION_MAX_MM_PER_SECOND_SQUARED;
     return (uint8_t)peak;
 }
@@ -93,6 +103,9 @@ static uint8_t moving_wave_phase(TickType_t now)
 static uint8_t wave_brightness(uint8_t physical_position, uint8_t phase,
                                uint8_t peak_brightness)
 {
+    if (peak_brightness == 0) {
+        return 0;
+    }
     uint8_t distance = physical_position - phase;
     uint8_t folded = distance > 127 ? UINT8_MAX - distance : distance;
     uint8_t crest = UINT8_MAX - folded * 2;
@@ -105,7 +118,7 @@ static uint8_t wave_brightness(uint8_t physical_position, uint8_t phase,
 
 static void render_green_wave(uint8_t frame[LED_COUNT * 3], TickType_t now)
 {
-    uint8_t peak_brightness = motion_brightness();
+    uint8_t peak_brightness = motion_brightness(now);
     uint8_t phase = moving_wave_phase(now);
     for (int index = 0; index < LED_COUNT; ++index) {
         uint8_t physical_position = index * (UINT8_MAX + 1U) / LED_COUNT;

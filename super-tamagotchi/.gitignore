@@ -18,7 +18,6 @@ dependencies.lock
 # Environment — never commit real values
 .env
 .env.*
-!.env.example
 
 # Logs
 *.log

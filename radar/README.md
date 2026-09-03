@@ -26,14 +26,15 @@ probes its supported UART rates at startup.
 ## Build and flash
 
 ```sh
-source $IDF_PATH/export.sh
-cd <repo-root>/radar
+export IDF_PATH=/path/to/esp-idf
+source "$IDF_PATH/export.sh"
+cd radar
 idf.py -B build-radar-transmitter -D RADAR_LINK_ROLE=transmitter build
-idf.py -B build-radar-transmitter -p /dev/ttyUSB0 app-flash
+ESP_PORT=/dev/ttyUSB0 ./tools/flash-radar.sh transmitter
 
 # Receiver/display board
 idf.py -B build-radar-receiver-accel -D RADAR_LINK_ROLE=receiver build
-idf.py -B build-radar-receiver-accel -p /dev/ttyUSB1 app-flash
+ESP_PORT=/dev/ttyUSB1 ./tools/flash-radar.sh receiver
 ```
 
 Use `app-flash` for normal updates. It preserves the existing partition table
@@ -48,7 +49,9 @@ The transmitter calculates the nearest tracked person's radial acceleration and
 sends that one value in every ESP-NOW frame. The receiver's `ACCEL` readout and
 the eight-pixel WS2812B bar both use that exact value. The bar is a moving green
 light crest: it is very dim and slow at zero acceleration, then becomes brighter
-and faster as acceleration increases.
+and faster as acceleration increases. Its idle output uses three one-step frames
+followed by one black frame, averaging 0.75 WS2812B brightness steps—another 50%
+dimmer than the preceding idle setting.
 
 On the receiver, `ACCEL` is the unsigned, smoothed radial acceleration of the
 nearest tracked person. Its displayed value is amplified fivefold so normal

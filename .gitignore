@@ -1,5 +1,9 @@
 .DS_Store
 **/build*/
 **/managed_components/
+**/sdkconfig
 **/sdkconfig.old
-
+**/.env
+**/.env.*
+**/*.bin
+**/sim/out.*
