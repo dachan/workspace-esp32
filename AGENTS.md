@@ -101,4 +101,23 @@ recordings, device dumps, and other private data must not be committed.
 When documenting a user-supplied module diagram, preserve its physical header
 numbering and order. Use a table for direct peripheral-to-board wiring, pair
 each signal with its ESP32 power rail or GPIO, and mark deliberately unused
-connections as `NC`. Do not silently substitute a different board pinout.
+connections as `NC`. Default to a monospaced text diagram unless an image is
+explicitly requested. Do not silently substitute a different board pinout.
+
+For a two-row peripheral header, use five columns in physical row order with a
+blank separator column:
+
+`peripheral input | ESP32 pin |  | ESP32 pin | peripheral input`
+
+Order each side from the peripheral outward: list connector inputs in their
+physical or functional order, followed by the matched ESP32 GPIO or power pin.
+Prefer consecutive ESP32 GPIOs that follow the peripheral's pin order when the
+board and fixed firmware requirements allow it. Keep one peripheral together
+on the first available side; do not split it across the separator until that
+side is full.
+
+For a direct peripheral-to-board map, use one continuous
+`peripheral | GPIO/power` pair in connector order. Do not place a second
+peripheral sequence alongside it; list unused GPIO coverage in additional rows
+or a separate audit table. Include every GPIO exposed on the pictured board,
+marking unused connections as `NC`.
