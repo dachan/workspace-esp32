@@ -15,7 +15,7 @@
 enum {
     RADAR_LINK_CHANNEL = 6,
     RADAR_LINK_MAGIC = 0x52414452,
-    RADAR_LINK_VERSION = 1,
+    RADAR_LINK_VERSION = 2,
 };
 
 typedef struct __attribute__((packed)) {
@@ -23,6 +23,7 @@ typedef struct __attribute__((packed)) {
     uint8_t version;
     uint8_t target_count;
     uint16_t sequence;
+    int16_t radial_acceleration_mm_per_second_squared;
     struct __attribute__((packed)) {
         int16_t x_mm;
         int16_t y_mm;
@@ -58,6 +59,8 @@ static void radar_link_received(const esp_now_recv_info_t *info,
     }
 
     radar_link_frame_t frame = {0};
+    frame.radial_acceleration_mm_per_second_squared =
+        packet.radial_acceleration_mm_per_second_squared;
     for (int index = 0; index < RADAR_LINK_MAX_TARGETS; ++index) {
         frame.targets[index] = (radar_link_target_t) {
             .x_mm = packet.targets[index].x_mm,
@@ -137,6 +140,8 @@ esp_err_t radar_link_send(const radar_link_frame_t *frame)
         .version = RADAR_LINK_VERSION,
         .target_count = RADAR_LINK_MAX_TARGETS,
         .sequence = ++sequence,
+        .radial_acceleration_mm_per_second_squared =
+            frame->radial_acceleration_mm_per_second_squared,
     };
     for (int index = 0; index < RADAR_LINK_MAX_TARGETS; ++index) {
         packet.targets[index].x_mm = frame->targets[index].x_mm;

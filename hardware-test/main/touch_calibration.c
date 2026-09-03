@@ -178,13 +178,6 @@ static void map_choice_touch(uint16_t raw_x, uint16_t raw_y, uint16_t *x, uint16
 static void offer_hold_actions(esp_lcd_panel_handle_t panel, touch_read_fn_t touch_read,
                                touch_hold_fn_t touch_hold)
 {
-    uint16_t ignored_x;
-    uint16_t ignored_y;
-    while (touch_read(&ignored_x, &ignored_y)) {
-        vTaskDelay(pdMS_TO_TICKS(20));
-    }
-    vTaskDelay(pdMS_TO_TICKS(TOUCH_RELEASE_MS));
-
     uint16_t green = rgb565_wire(0, 255, 0);
     int x;
     int width;
@@ -196,6 +189,13 @@ static void offer_hold_actions(esp_lcd_panel_handle_t panel, touch_read_fn_t tou
     draw_choice_button(panel, x, sleep_y, width, height, "SLEEP", green);
     draw_choice_button(panel, x, power_y, width, height, "POWER OFF", green);
     ESP_LOGI(TAG, "HOLD MENU: tap SLEEP or POWER OFF");
+
+    uint16_t ignored_x;
+    uint16_t ignored_y;
+    while (touch_read(&ignored_x, &ignored_y)) {
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+    vTaskDelay(pdMS_TO_TICKS(TOUCH_RELEASE_MS));
 
     while (true) {
         uint16_t raw_x;

@@ -6,7 +6,8 @@
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
-#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "display_sync.h"
 #include "display_profile.h"
 
@@ -23,27 +24,34 @@ enum {
     // the viewed RIGHT. Left-aligned origins use radar_text_left_x().
     DISTANCE_TEXT_X = 8,
     DISTANCE_TEXT_Y = 8,
-    DISTANCE_TEXT_SCALE = 2,
     DISTANCE_GLYPH_WIDTH = 5,
     DISTANCE_GLYPH_HEIGHT = 7,
     DISTANCE_GLYPH_ADVANCE = 6,
-    TARGET_TEXT_SCALE = 2,
-    TARGET_TEXT_LINE_HEIGHT = 17,
+    TEXT_SCALE_NUMERATOR = 8,
+    TEXT_SCALE_DENOMINATOR = 5,
+    TEXT_GLYPH_HEIGHT = (DISTANCE_GLYPH_HEIGHT * TEXT_SCALE_NUMERATOR
+                         + TEXT_SCALE_DENOMINATOR / 2) / TEXT_SCALE_DENOMINATOR,
+    TEXT_GLYPH_ADVANCE = (DISTANCE_GLYPH_ADVANCE * TEXT_SCALE_NUMERATOR
+                          + TEXT_SCALE_DENOMINATOR / 2) / TEXT_SCALE_DENOMINATOR,
+    TARGET_TEXT_LINE_HEIGHT = TEXT_GLYPH_HEIGHT + 3,
     TARGET_TEXT_MAX_CHARS = 23,
     RADAR_BOTTOM_MARGIN = RADAR_VIEW_HEIGHT / 12,
     RADAR_WIDTH_RADIUS = (RADAR_VIEW_WIDTH / 2 - RADAR_SIDE_MARGIN)
                        * 1000 / RADAR_SIN_60_MILLI,
     DISTANCE_TEXT_BOTTOM = DISTANCE_TEXT_Y
-                         + DISTANCE_GLYPH_HEIGHT * DISTANCE_TEXT_SCALE,
+                         + TEXT_GLYPH_HEIGHT,
+    ACCEL_TEXT_Y = DISTANCE_TEXT_BOTTOM + 4,
+    ACCEL_TEXT_BOTTOM = ACCEL_TEXT_Y + TEXT_GLYPH_HEIGHT,
     TARGET_TEXT_TOP = RADAR_VIEW_HEIGHT - TARGET_TEXT_LINE_HEIGHT - 3,
-    RADAR_SENSOR_Y = DISTANCE_TEXT_BOTTOM
-                   + (TARGET_TEXT_TOP - DISTANCE_TEXT_BOTTOM
+    RADAR_SENSOR_Y = ACCEL_TEXT_BOTTOM
+                   + (TARGET_TEXT_TOP - ACCEL_TEXT_BOTTOM
                       - RADAR_WIDTH_RADIUS) / 2,
 };
 
 #define RADAR_PING_SECONDS 0.25f
 #define RADAR_PING_MAX_RADIUS 24
 #define TARGET_SMOOTHING_PER_SECOND 12.0f
+#define MOTION_VARIANCE_DISPLAY_GAIN 5
 
 typedef struct {
     int x;
@@ -54,8 +62,10 @@ typedef struct {
 
 typedef struct {
     char distance_text[24];
+    char acceleration_text[24];
     char target_text[RADAR_VIEW_MAX_PEOPLE][TARGET_TEXT_MAX_CHARS + 1];
     int distance_text_x;
+    int acceleration_text_x;
     int target_text_x[RADAR_VIEW_MAX_PEOPLE];
     int target_text_y[RADAR_VIEW_MAX_PEOPLE];
 } overlay_t;
@@ -65,6 +75,11 @@ static uint16_t *s_dma_pixels;
 static bool s_static_ready;
 static dirty_rect_t s_previous_rects[MAX_DYNAMIC_RECTS];
 static int s_previous_rect_count;
+
+static int64_t radar_now_us(void)
+{
+    return (int64_t)pdTICKS_TO_MS(xTaskGetTickCount()) * 1000;
+}
 
 static uint16_t rgb565_wire(uint8_t red, uint8_t green, uint8_t blue)
 {
@@ -310,6 +325,12 @@ static uint8_t radar_glyph_row(char character, int row)
     static const uint8_t distance_e[DISTANCE_GLYPH_HEIGHT] = {
         0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x1f,
     };
+    static const uint8_t distance_l[DISTANCE_GLYPH_HEIGHT] = {
+        0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1f,
+    };
+    static const uint8_t slash[DISTANCE_GLYPH_HEIGHT] = {
+        0x01, 0x02, 0x02, 0x04, 0x08, 0x08, 0x10,
+    };
 
     if (character >= '0' && character <= '9') {
         return digits[character - '0'][row];
@@ -359,27 +380,33 @@ static uint8_t radar_glyph_row(char character, int row)
     if (character == 'E') {
         return distance_e[row];
     }
+    if (character == 'L') {
+        return distance_l[row];
+    }
+    if (character == '/') {
+        return slash[row];
+    }
     return 0;
 }
 
-static int radar_text_pixel_width(const char *text, int scale, int max_characters)
+static int radar_text_pixel_width(const char *text, int max_characters)
 {
     int length = 0;
     while (length < max_characters && text[length] != '\0') {
         ++length;
     }
-    return length * DISTANCE_GLYPH_ADVANCE * scale;
+    return length * TEXT_GLYPH_ADVANCE;
 }
 
 // After MADCTL, framebuffer +X is visual left. Left-align against that edge.
-static int radar_text_left_x(const char *text, int scale, int max_characters)
+static int radar_text_left_x(const char *text, int max_characters)
 {
     return RADAR_VIEW_WIDTH - DISTANCE_TEXT_X
-        - radar_text_pixel_width(text, scale, max_characters);
+        - radar_text_pixel_width(text, max_characters);
 }
 
 static bool radar_text_box_at(const char *text, int origin_x, int origin_y,
-                              int scale, int max_characters, int padding,
+                              int max_characters, int padding,
                               int x, int y)
 {
     int length = 0;
@@ -389,13 +416,13 @@ static bool radar_text_box_at(const char *text, int origin_x, int origin_y,
     int local_x = x - origin_x;
     int local_y = y - origin_y;
     return local_x >= -padding
-        && local_x < length * DISTANCE_GLYPH_ADVANCE * scale + padding
+        && local_x < length * TEXT_GLYPH_ADVANCE + padding
         && local_y >= -padding
-        && local_y < DISTANCE_GLYPH_HEIGHT * scale + padding;
+        && local_y < TEXT_GLYPH_HEIGHT + padding;
 }
 
 static bool radar_text_at(const char *text, int origin_x, int origin_y,
-                          int scale, int max_characters, int x, int y)
+                          int max_characters, int x, int y)
 {
     int length = 0;
     while (length < max_characters && text[length] != '\0') {
@@ -403,22 +430,23 @@ static bool radar_text_at(const char *text, int origin_x, int origin_y,
     }
     // Glyphs are authored left-to-right. After the landscape MADCTL rotation
     // framebuffer +X is visual left, so sample the string mirrored in X.
-    int local_x = length * DISTANCE_GLYPH_ADVANCE * scale - 1 - (x - origin_x);
+    int local_x = length * TEXT_GLYPH_ADVANCE - 1 - (x - origin_x);
     int local_y = y - origin_y;
     if (local_x < 0 || local_y < 0
-        || local_y >= DISTANCE_GLYPH_HEIGHT * scale) {
+        || local_y >= TEXT_GLYPH_HEIGHT) {
         return false;
     }
 
-    int character_index = local_x / (DISTANCE_GLYPH_ADVANCE * scale);
+    int character_index = local_x / TEXT_GLYPH_ADVANCE;
     if (character_index >= max_characters || text[character_index] == '\0') {
         return false;
     }
-    int glyph_x = (local_x / scale) % DISTANCE_GLYPH_ADVANCE;
+    int glyph_x = ((local_x % TEXT_GLYPH_ADVANCE) * TEXT_SCALE_DENOMINATOR)
+                / TEXT_SCALE_NUMERATOR;
     if (glyph_x >= DISTANCE_GLYPH_WIDTH) {
         return false;
     }
-    int glyph_y = local_y / scale;
+    int glyph_y = local_y * TEXT_SCALE_DENOMINATOR / TEXT_SCALE_NUMERATOR;
     uint8_t row = radar_glyph_row(text[character_index], glyph_y);
     return (row & (1U << (DISTANCE_GLYPH_WIDTH - 1 - glyph_x))) != 0;
 }
@@ -621,8 +649,19 @@ static void prepare_overlay(const radar_view_t *view, overlay_t *overlay)
     } else {
         snprintf(overlay->distance_text, sizeof(overlay->distance_text), "DISTANCE: --.-m");
     }
-    overlay->distance_text_x = radar_text_left_x(
-        overlay->distance_text, DISTANCE_TEXT_SCALE, 16);
+    overlay->distance_text_x = radar_text_left_x(overlay->distance_text, 16);
+
+    int32_t acceleration_magnitude = view->radial_acceleration_mm_per_second_squared < 0
+                                   ? -(int32_t)view->radial_acceleration_mm_per_second_squared
+                                   : view->radial_acceleration_mm_per_second_squared;
+    unsigned int acceleration_tenths = (acceleration_magnitude
+        * MOTION_VARIANCE_DISPLAY_GAIN + 50) / 100;
+    if (acceleration_tenths > 999) {
+        acceleration_tenths = 999;
+    }
+    snprintf(overlay->acceleration_text, sizeof(overlay->acceleration_text),
+             "ACCEL: %u.%u", acceleration_tenths / 10, acceleration_tenths % 10);
+    overlay->acceleration_text_x = radar_text_left_x(overlay->acceleration_text, 12);
 
     int active_text_count = 0;
     for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
@@ -630,8 +669,7 @@ static void prepare_overlay(const radar_view_t *view, overlay_t *overlay)
             target_coordinate_text(&view->people[index], index + 1,
                                    overlay->target_text[index]);
             overlay->target_text_x[index] = radar_text_left_x(
-                overlay->target_text[index], TARGET_TEXT_SCALE,
-                TARGET_TEXT_MAX_CHARS);
+                overlay->target_text[index], TARGET_TEXT_MAX_CHARS);
             ++active_text_count;
         }
     }
@@ -672,13 +710,15 @@ static uint8_t compose_brightness(const radar_view_t *view, const overlay_t *ove
 
     bool text_background = radar_text_box_at(
         overlay->distance_text, overlay->distance_text_x, DISTANCE_TEXT_Y,
-        DISTANCE_TEXT_SCALE, 16, 2, x, y);
+        16, 2, x, y)
+        || radar_text_box_at(overlay->acceleration_text, overlay->acceleration_text_x,
+                             ACCEL_TEXT_Y, 12, 2, x, y);
     for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
         if (overlay->target_text[index][0] != '\0'
             && radar_text_box_at(overlay->target_text[index],
                                  overlay->target_text_x[index],
                                  overlay->target_text_y[index],
-                                 TARGET_TEXT_SCALE, TARGET_TEXT_MAX_CHARS, 2, x, y)) {
+                                 TARGET_TEXT_MAX_CHARS, 2, x, y)) {
             text_background = true;
         }
     }
@@ -686,7 +726,9 @@ static uint8_t compose_brightness(const radar_view_t *view, const overlay_t *ove
         green = 0;
     }
     if (radar_text_at(overlay->distance_text, overlay->distance_text_x,
-                      DISTANCE_TEXT_Y, DISTANCE_TEXT_SCALE, 16, x, y)) {
+                      DISTANCE_TEXT_Y, 16, x, y)
+        || radar_text_at(overlay->acceleration_text, overlay->acceleration_text_x,
+                         ACCEL_TEXT_Y, 20, x, y)) {
         green = 255;
     }
     for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
@@ -694,7 +736,7 @@ static uint8_t compose_brightness(const radar_view_t *view, const overlay_t *ove
             && radar_text_at(overlay->target_text[index],
                              overlay->target_text_x[index],
                              overlay->target_text_y[index],
-                             TARGET_TEXT_SCALE, TARGET_TEXT_MAX_CHARS, x, y)) {
+                             TARGET_TEXT_MAX_CHARS, x, y)) {
             green = 225;
         }
     }
@@ -740,7 +782,7 @@ static void render_dirty_rect(esp_lcd_panel_handle_t panel, const radar_view_t *
 }
 
 static void add_radar_text_rect(dirty_rect_t rects[MAX_DYNAMIC_RECTS], int *count,
-                                const char *text, int radar_x, int radar_y, int scale,
+                                const char *text, int radar_x, int radar_y,
                                 int max_characters)
 {
     int length = 0;
@@ -749,8 +791,8 @@ static void add_radar_text_rect(dirty_rect_t rects[MAX_DYNAMIC_RECTS], int *coun
     }
     add_dirty_rect(rects, count, radar_rect_to_display(
         radar_x - 2, radar_y - 2,
-        length * DISTANCE_GLYPH_ADVANCE * scale + 4,
-        DISTANCE_GLYPH_HEIGHT * scale + 4));
+        length * TEXT_GLYPH_ADVANCE + 4,
+        TEXT_GLYPH_HEIGHT + 4));
 }
 
 static int ping_radius(const radar_ping_t *ping)
@@ -766,13 +808,15 @@ static void collect_dynamic_rects(const radar_view_t *view, const overlay_t *ove
     *count = 0;
     add_radar_text_rect(rects, count, overlay->distance_text,
                         overlay->distance_text_x, DISTANCE_TEXT_Y,
-                        DISTANCE_TEXT_SCALE, 16);
+                        16);
+    add_radar_text_rect(rects, count, overlay->acceleration_text,
+                        overlay->acceleration_text_x, ACCEL_TEXT_Y,
+                        12);
     for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
         if (overlay->target_text[index][0] != '\0') {
             add_radar_text_rect(rects, count, overlay->target_text[index],
                                 overlay->target_text_x[index],
-                                overlay->target_text_y[index], TARGET_TEXT_SCALE,
-                                TARGET_TEXT_MAX_CHARS);
+                                overlay->target_text_y[index], TARGET_TEXT_MAX_CHARS);
         }
         int radar_x;
         int radar_y;
@@ -837,7 +881,7 @@ void radar_view_start(esp_lcd_panel_handle_t panel, radar_view_t *view)
     *view = (radar_view_t) {
         .cursor_x = LCD_WIDTH / 2,
         .cursor_y = LCD_HEIGHT / 2,
-        .last_step_us = esp_timer_get_time(),
+        .last_step_us = radar_now_us(),
     };
     for (int i = 0; i < RADAR_VIEW_MAX_PINGS; ++i) {
         view->pings[i].age_seconds = RADAR_PING_SECONDS;
@@ -874,8 +918,11 @@ void radar_view_set_cursor(radar_view_t *view, int x, int y)
 }
 
 void radar_view_set_people(radar_view_t *view,
-                           const radar_person_t people[RADAR_VIEW_MAX_PEOPLE])
+                           const radar_person_t people[RADAR_VIEW_MAX_PEOPLE],
+                           int16_t radial_acceleration_mm_per_second_squared)
 {
+    view->radial_acceleration_mm_per_second_squared =
+        radial_acceleration_mm_per_second_squared;
     for (int index = 0; index < RADAR_VIEW_MAX_PEOPLE; ++index) {
         view->people_target_active[index] = people[index].active;
         view->people_target_x[index] = people[index].x_mm;
@@ -909,7 +956,7 @@ void radar_view_trigger_ping(radar_view_t *view)
 
 void radar_view_step(esp_lcd_panel_handle_t panel, radar_view_t *view)
 {
-    int64_t now = esp_timer_get_time();
+    int64_t now = radar_now_us();
     float dt = (float)(now - view->last_step_us) / 1000000.0f;
     view->last_step_us = now;
     if (dt <= 0.0f || dt > 0.1f) {
@@ -946,4 +993,3 @@ void radar_view_step(esp_lcd_panel_handle_t panel, radar_view_t *view)
     memcpy(s_previous_rects, current_rects, current_count * sizeof(current_rects[0]));
     s_previous_rect_count = current_count;
 }
-

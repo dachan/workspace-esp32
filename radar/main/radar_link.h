@@ -15,6 +15,7 @@ typedef struct {
 
 typedef struct {
     radar_link_target_t targets[RADAR_LINK_MAX_TARGETS];
+    int16_t radial_acceleration_mm_per_second_squared;
 } radar_link_frame_t;
 
 esp_err_t radar_link_init(void);
