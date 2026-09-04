@@ -42,6 +42,13 @@ fading detected-person marker. After an inactivity timeout the display sleeps
 while the ESP32 continues listening; a new detection or supported touch action
 redraws it.
 
+The receiver's FT6336 touch controller is wired to SDA GPIO6, SCL GPIO15,
+reset GPIO7, and INT GPIO5. A three-second hold while the display is awake
+opens calibration; the hold must be released before selecting SLEEP or POWER
+OFF. Receiver SLEEP and POWER OFF are both tap-to-wake deep-sleep modes. Keep
+the touch reset high and backlight low during either mode; POWER OFF also holds
+the LCD reset low because the receiver has no accessible EN switch.
+
 ## Build and flash
 
 Use a local ESP-IDF installation without embedding its path in scripts or

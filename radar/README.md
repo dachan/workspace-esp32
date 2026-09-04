@@ -42,9 +42,8 @@ DOUT     -> NC (single bar)
 
 ### Receiver: 2.8-inch display module
 
-The receiver uses the LCD SPI and control signals only. The touch controller
-and microSD chip-select lines on the same module are not connected by this
-firmware.
+The receiver uses the LCD SPI/control signals and the FT6336 capacitive touch
+controller. The microSD chip-select line is not used by this firmware.
 
 Physical header layout, pins 1 through 14:
 
@@ -59,10 +58,10 @@ Physical header layout, pins 1 through 14:
 | 7 | `SCK` | GPIO18 |
 | 8 | `LED` | GPIO17 |
 | 9 | `SDO/MISO` | GPIO16 |
-| 10 | `CTP_SCL` | `NC` |
-| 11 | `CTP_RST` | `NC` |
-| 12 | `CTP_SDA` | `NC` |
-| 13 | `CTP_INT` | `NC` |
+| 10 | `CTP_SCL` | GPIO15 |
+| 11 | `CTP_RST` | GPIO7 |
+| 12 | `CTP_SDA` | GPIO6 |
+| 13 | `CTP_INT` | GPIO5 |
 | 14 | `SD_CS` | `NC` |
 
 Peripheral-order map:
@@ -77,12 +76,18 @@ SDI/MOSI  -> ESP32 GPIO8
 SCK       -> ESP32 GPIO18
 LED       -> ESP32 GPIO17
 SDO/MISO  -> ESP32 GPIO16
-CTP_SCL   -> NC
-CTP_RST   -> NC
-CTP_SDA   -> NC
-CTP_INT   -> NC
+CTP_SCL   -> ESP32 GPIO15
+CTP_RST   -> ESP32 GPIO7
+CTP_SDA   -> ESP32 GPIO6
+CTP_INT   -> ESP32 GPIO5
 SD_CS     -> NC
 ```
+
+When awake, hold the receiver screen for three seconds to open calibration,
+then lift your finger and tap SLEEP or POWER OFF. The display blanks after ten
+seconds without an active target but the receiver keeps listening. A new target
+or a tap wakes it. Both SLEEP and POWER OFF wake from a tap on the receiver;
+POWER OFF also holds the LCD reset low while the board remains in deep sleep.
 
 The LD2450 UART logic is 3.3 V. Its 5 V supply must support more than 200 mA.
 The installed module produces valid target frames at 9600 baud; the firmware
