@@ -3,8 +3,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define DISPLAY_WIDTH  320
-#define DISPLAY_HEIGHT 240
+/* Landscape view size for 3.5" ST7796U (native 320x480 portrait). */
+#define DISPLAY_WIDTH  480
+#define DISPLAY_HEIGHT 320
 
 uint16_t *display_framebuffer(void);
 void canvas_set_framebuffer(uint16_t *fb);

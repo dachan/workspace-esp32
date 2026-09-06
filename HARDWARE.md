@@ -41,11 +41,11 @@ Last inventory pass: 2026-09-06 (chatgpt-model-display flashed)
 
 - MCU: ESP32-S3 (QFN56) rev v0.2, embedded 8MB PSRAM (AP_3v3), 40MHz XTAL — Lonely Binary N16R8-class
 - MAC: 28:84:85:44:1b:5c
-- Display: 2.8" ILI9341V SPI — same pinout as super-tamagotchi / radar-receiver (MOSI 8, DC 9, RST 10, CS 11, MISO 16, BL 17, SCK 18; SD_CS 4 held high)
-- Touch: not used by this firmware (FT6336 wiring may still be present on the desk board)
+- Display: **3.5" TFT SPI 480x320 v1 (ST7796U)** — pins MOSI 8, DC 9, RST 10, CS 11, MISO 16, BL 17, SCK 18; SD_CS 4 held high
+- Touch: not used by this firmware (FT6336 may be present)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Firmware currently on device: `chatgpt-model-display/` @ d0df971 (180° panel mirror)
-- Mac serial: `/dev/cu.usbmodem21201` (USB-Serial/JTAG; verify before flash — path can change)
-- Last verified: 2026-09-06 ~11:55 America/Toronto — built with esp-idf-v6.0.2 and flashed from Mac
-- Display rotation: ILI9341  +  (180° from prior true/true)
+- Firmware currently on device: `chatgpt-model-display/` (ST7796, SPI 26 MHz, invert on, swap_xy + mirror(false,true))
+- Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
+- Last verified: 2026-09-06 — switching off mistaken ILI9341 320x240 path (caused vertical flicker)
 - Notes: flash only from Mac `~/Development/workspace-esp32` after pull
+

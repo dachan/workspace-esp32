@@ -7,14 +7,14 @@
 #include "driver/spi_master.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
-#include "esp_lcd_ili9341.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
+#include "esp_lcd_st7796.h"
 #include "esp_log.h"
 
 static const char *TAG = "display";
 
-// Same 2.8" ILI9341V pinout as super-tamagotchi / radar-receiver.
+/* Lonely Binary / radar-class ESP32-S3 + 3.5" TFT SPI 480x320 v1 (ST7796U). */
 #define PIN_SD_CS  4
 #define PIN_MOSI   8
 #define PIN_DC     9
@@ -25,7 +25,8 @@ static const char *TAG = "display";
 #define PIN_SCK   18
 
 #define LCD_HOST      SPI2_HOST
-#define LCD_PIXEL_CLK (40 * 1000 * 1000)
+/* 40 MHz can tear/flicker on some 3.5" SPI panels; 26 MHz is stable here. */
+#define LCD_PIXEL_CLK (26 * 1000 * 1000)
 
 #define BL_TIMER   LEDC_TIMER_0
 #define BL_CHANNEL LEDC_CHANNEL_0
@@ -107,16 +108,17 @@ esp_err_t display_init(void)
 
     esp_lcd_panel_dev_config_t panel_cfg = {
         .reset_gpio_num = PIN_RST,
-        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR,
+        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
         .bits_per_pixel = 16,
     };
-    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_ili9341(io, &panel_cfg, &s_panel), TAG, "ili9341");
+    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_st7796(io, &panel_cfg, &s_panel), TAG, "st7796");
 
     ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(s_panel), TAG, "reset");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_init(s_panel), TAG, "init");
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(s_panel, true), TAG, "invert");
+    /* Same locked landscape mapping as hardware-test DISPLAY_PROFILE_ST7796U_3_5. */
     ESP_RETURN_ON_ERROR(esp_lcd_panel_swap_xy(s_panel, true), TAG, "swap_xy");
-    // Landscape; false/false is 180° from the prior true/true orientation.
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, false, false), TAG, "mirror");
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, false, true), TAG, "mirror");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "disp on");
 
     s_fb = heap_caps_malloc(fb_bytes, MALLOC_CAP_SPIRAM);
@@ -126,7 +128,7 @@ esp_err_t display_init(void)
     }
     memset(s_fb, 0, fb_bytes);
     canvas_set_framebuffer(s_fb);
-    ESP_LOGI(TAG, "framebuffer: %zu KB in PSRAM at %p", fb_bytes / 1024, s_fb);
+    ESP_LOGI(TAG, "ST7796 480x320 framebuffer: %zu KB PSRAM at %p", fb_bytes / 1024, s_fb);
 
     ESP_RETURN_ON_ERROR(backlight_init(), TAG, "backlight");
     return ESP_OK;
