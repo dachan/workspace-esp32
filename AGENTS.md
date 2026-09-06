@@ -11,6 +11,31 @@ virtual pet is in `super-tamagotchi/`.
 Read the relevant project README and `super-tamagotchi/WIRING.md` before
 changing firmware or connecting hardware.
 
+
+## Agent workflow (Hetzner + Mac)
+
+Hard lanes for this repo:
+
+- **All code changes** are made on the Hetzner **codex** account in
+  `/home/codex/workspace-esp32`. Do not treat `/home/david` as a place to
+  edit this codebase (`david` is for prod serving of other apps).
+- The Mac workstation keeps a clone at
+  `~/Development/workspace-esp32` and must **stay pulled / in sync** with
+  the server (via GitHub) whenever code changes. Do not keep a separate
+  standalone `mac-chatgpt-bridge` folder on the Mac.
+- When the user asks to **flash**, use the **Mac workstation clone** and the
+  connected serial device there. Do not flash from Hetzner.
+- Keep server and workstation on the same branch/commit after every change:
+  edit on server → commit/push → pull on Mac before flash or local Mac-only
+  runs (for example `mac-chatgpt-bridge` Accessibility CLI).
+
+## mac-chatgpt-bridge
+
+`mac-chatgpt-bridge/` is a macOS Accessibility CLI that reads the selected
+ChatGPT/Codex model and (later) sends it to an ESP32 over USB serial. It only
+runs on the Mac. Firmware that displays model / thinking level on-device is
+edited on the server like all other firmware, then flashed from the Mac.
+
 ## Safety and public-repository hygiene
 
 - Verify the intended board and serial device before flashing.
