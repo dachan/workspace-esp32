@@ -47,5 +47,5 @@ Last inventory pass: 2026-09-06 (chatgpt-model-display flashed)
 - Firmware currently on device: `chatgpt-model-display/` (ST7796, SPI 26 MHz, invert on, swap_xy + mirror(true,true) (180°))
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
 - Last verified: 2026-09-06 — switching off mistaken ILI9341 320x240 path (caused vertical flicker)
-- Notes: flash only from Mac `~/Development/workspace-esp32` after pull
+- Notes: edit+flash on Mac `~/Development/workspace-esp32`; push then pull Hetzner `/home/codex/workspace-esp32`
 
