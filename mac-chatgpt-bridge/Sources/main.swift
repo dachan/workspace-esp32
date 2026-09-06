@@ -10,8 +10,8 @@ struct Options {
     var hidInfo = false
     var checkAX = false
     var help = false
-    var maxDepth = 14
-    var maxNodes = 4_000
+    var maxDepth = 32
+    var maxNodes = 8_000
     var port: String?
     var baud = SerialBridge.defaultBaud
     var bundleID: String?
@@ -92,8 +92,8 @@ func usage() -> String {
     Options:
       --json              Print one JSON object
       --dump-ax           Dump the ChatGPT AX tree
-      --max-depth N       AX walk depth (default 14)
-      --max-nodes N       AX walk cap (default 4000)
+      --max-depth N       AX walk depth (default 32)
+      --max-nodes N       AX walk cap (default 8000)
       --list-candidates   Print scored model-like nodes
       --list-ports        List likely USB serial devices
       --send-serial       Write MODEL <name> (dry-run without --port)

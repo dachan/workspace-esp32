@@ -46,6 +46,9 @@ If macOS never prompts, add the terminal app with `+` and toggle it off/on.
 
 ## Build and run
 
+
+The current ChatGPT/Codex UI nests the model `AXPopUpButton` deep in the web tree; defaults use `--max-depth 32` / `--max-nodes 8000`.
+
 ```sh
 cd mac-chatgpt-bridge
 swift build -c release
