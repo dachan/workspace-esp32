@@ -137,20 +137,5 @@ esp_err_t display_init(void)
 
 esp_err_t display_flush(void)
 {
-    /* Physical 180° for how the 3.5" board sits on the desk, without MADCTL
-     * combinations that mirror glyphs. Rotate the framebuffer in place. */
-    const size_t n = (size_t)DISPLAY_WIDTH * (size_t)DISPLAY_HEIGHT;
-    for (size_t i = 0; i < n / 2; ++i) {
-        uint16_t tmp = s_fb[i];
-        s_fb[i] = s_fb[n - 1 - i];
-        s_fb[n - 1 - i] = tmp;
-    }
-    esp_err_t err = esp_lcd_panel_draw_bitmap(s_panel, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, s_fb);
-    /* Rotate back so the logical canvas stays upright for the next paint. */
-    for (size_t i = 0; i < n / 2; ++i) {
-        uint16_t tmp = s_fb[i];
-        s_fb[i] = s_fb[n - 1 - i];
-        s_fb[n - 1 - i] = tmp;
-    }
-    return err;
+    return esp_lcd_panel_draw_bitmap(s_panel, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, s_fb);
 }
