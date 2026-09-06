@@ -44,7 +44,7 @@ Last inventory pass: 2026-09-06 (chatgpt-model-display flashed)
 - Display: **3.5" TFT SPI 480x320 v1 (ST7796U)** — pins MOSI 8, DC 9, RST 10, CS 11, MISO 16, BL 17, SCK 18; SD_CS 4 held high
 - Touch: not used by this firmware (FT6336 may be present)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Firmware currently on device: `chatgpt-model-display/` (ST7796, SPI 26 MHz, invert on, swap_xy + mirror(true,false) (180°))
+- Firmware currently on device: `chatgpt-model-display/` (ST7796, SPI 26 MHz, invert on, swap_xy + mirror(true,true) (180°))
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
 - Last verified: 2026-09-06 — switching off mistaken ILI9341 320x240 path (caused vertical flicker)
 - Notes: flash only from Mac `~/Development/workspace-esp32` after pull
