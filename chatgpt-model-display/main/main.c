@@ -10,6 +10,7 @@
 #include "model_nvs.h"
 #include "model_parse.h"
 #include "serial_model.h"
+#include "build_number.h"
 
 static const char *TAG = "chatgpt_model";
 
@@ -86,6 +87,17 @@ static void ui_render(const ui_state_t *ui)
         draw_wrapped(20, 82, DISPLAY_WIDTH - 48, ui->fields.model, text, card, 2, &y_after);
         const char *thinking = ui->fields.has_thinking ? ui->fields.thinking : "—";
         font_draw_text(20, 152, thinking, text, card, 2);
+    }
+
+    /* Build number, muted, bottom-right inside the card. */
+    {
+        const char *build = FIRMWARE_BUILD_STRING;
+        const int scale = 1;
+        const int pad = 12;
+        const int bw = font_text_width(build, scale);
+        const int bx = DISPLAY_WIDTH - pad - bw;
+        const int by = DISPLAY_HEIGHT - pad - 8 * scale;
+        font_draw_text(bx, by, build, muted, card, scale);
     }
 
     display_flush();
