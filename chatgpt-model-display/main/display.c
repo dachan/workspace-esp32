@@ -118,7 +118,8 @@ esp_err_t display_init(void)
     ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(s_panel, true), TAG, "invert");
     /* Same locked landscape mapping as hardware-test DISPLAY_PROFILE_ST7796U_3_5. */
     ESP_RETURN_ON_ERROR(esp_lcd_panel_swap_xy(s_panel, true), TAG, "swap_xy");
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, false, true), TAG, "mirror");
+    // 180° from prior false,true landscape mapping.
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, true, false), TAG, "mirror");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "disp on");
 
     s_fb = heap_caps_malloc(fb_bytes, MALLOC_CAP_SPIRAM);
