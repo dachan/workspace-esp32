@@ -10,8 +10,10 @@ struct Options {
     var hidInfo = false
     var checkAX = false
     var help = false
+    var watch = false
     var maxDepth = 32
     var maxNodes = 8_000
+    var intervalSeconds = 5.0
     var port: String?
     var baud = SerialBridge.defaultBaud
     var bundleID: String?
@@ -74,6 +76,14 @@ func parseOptions(_ args: [String]) -> Options? {
                 return nil
             }
             options.bundleID = value
+        case "--watch":
+            options.watch = true
+        case "--interval":
+            guard let value = takeValue(), let parsed = Double(value), parsed > 0 else {
+                fputs("chatgpt-bridge: --interval needs a positive number of seconds\n", stderr)
+                return nil
+            }
+            options.intervalSeconds = parsed
         default:
             fputs("chatgpt-bridge: unknown option \(arg)\n", stderr)
             return nil
@@ -102,6 +112,8 @@ func usage() -> String {
       --bundle-id ID      Force com.openai.chat or com.openai.codex
       --hid-info          Document the Ctrl+Shift+M HID path
       --check-ax          Check Accessibility permission and exit
+      --watch             Poll the selected model until interrupted
+      --interval SEC      Watch poll interval in seconds (default 5)
       -h, --help
     """
 }
@@ -176,8 +188,8 @@ func run() -> Int32 {
         return 0
     }
 
-    let readback = ModelReader.read(app: app, maxDepth: options.maxDepth, maxNodes: options.maxNodes)
     if options.listCandidates {
+        let readback = ModelReader.read(app: app, maxDepth: options.maxDepth, maxNodes: options.maxNodes)
         if options.json {
             printJSON(readback)
         } else {
@@ -192,6 +204,15 @@ func run() -> Int32 {
         return readback.ok ? 0 : 1
     }
 
+    if options.watch {
+        return runWatch(options: options, initialApp: app)
+    }
+
+    return emitOnce(options: options, app: app)
+}
+
+func emitOnce(options: Options, app: NSRunningApplication) -> Int32 {
+    let readback = ModelReader.read(app: app, maxDepth: options.maxDepth, maxNodes: options.maxNodes)
     if options.json {
         printJSON(readback)
     } else {
@@ -216,6 +237,76 @@ func run() -> Int32 {
         }
     }
     return readback.ok ? 0 : 1
+}
+
+@discardableResult
+func emitChange(
+    options: Options,
+    readback: ModelReadback,
+    previousModel: inout String?
+) -> Bool {
+    let model = readback.ok ? readback.model : nil
+    guard model != previousModel else {
+        return false
+    }
+    previousModel = model
+
+    if options.json {
+        printJSON(readback)
+    } else if let model {
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        print("\(stamp) model: \(model)")
+        if let source = readback.source {
+            print("source: \(source)")
+        }
+    } else {
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        fputs("\(stamp) chatgpt-bridge: \(readback.error ?? "model not found")\n", stderr)
+    }
+    fflush(stdout)
+    fflush(stderr)
+
+    if options.sendSerial, let model, readback.ok {
+        do {
+            try SerialBridge.send(
+                model: model,
+                port: options.port,
+                baud: options.baud,
+                echoLine: !options.json
+            )
+        } catch {
+            fputs("chatgpt-bridge: \(error)\n", stderr)
+        }
+    }
+    return true
+}
+
+func runWatch(options: Options, initialApp: NSRunningApplication) -> Int32 {
+    var app = initialApp
+    var previousModel: String?
+    if !options.json {
+        print(
+            "watching every \(options.intervalSeconds)s (Ctrl+C to stop); prints on change"
+        )
+        fflush(stdout)
+    }
+
+    while true {
+        if ChatGPTProcess.find(preferredBundleID: options.bundleID) == nil {
+            // keep last known app handle; find may still fail briefly
+        }
+        if let found = ChatGPTProcess.find(preferredBundleID: options.bundleID) {
+            app = found
+        }
+
+        let readback = ModelReader.read(
+            app: app,
+            maxDepth: options.maxDepth,
+            maxNodes: options.maxNodes
+        )
+        _ = emitChange(options: options, readback: readback, previousModel: &previousModel)
+        Thread.sleep(forTimeInterval: options.intervalSeconds)
+    }
 }
 
 exit(run())

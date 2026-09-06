@@ -107,6 +107,26 @@ swift run chatgpt-bridge --dump-ax | less
 `--bundle-id com.openai.chat` or `--bundle-id com.openai.codex` forces
 one app if both Classic and unified ChatGPT are installed.
 
+
+
+### Watch mode
+
+Poll every 5 seconds and print only when the selected model changes:
+
+```sh
+swift run chatgpt-bridge --watch
+swift run chatgpt-bridge --watch --interval 5
+```
+
+Optional serial push on change (dry-run without `--port`):
+
+```sh
+swift run chatgpt-bridge --watch --send-serial
+swift run chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodemXXXX
+```
+
+Stop with Ctrl+C. Combine with `--json` for one JSON object per change.
+
 ## Serial stub
 
 Protocol (one line, UTF-8, newline terminated):
