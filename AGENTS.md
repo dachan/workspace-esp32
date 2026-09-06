@@ -36,6 +36,24 @@ ChatGPT/Codex model and (later) sends it to an ESP32 over USB serial. It only
 runs on the Mac. Firmware that displays model / thinking level on-device is
 edited on the server like all other firmware, then flashed from the Mac.
 
+## Hardware inventory (keep current)
+
+Always track the **latest hardware on each ESP32** in this workspace. Before
+flashing or changing firmware, read [HARDWARE.md](HARDWARE.md). After any
+hardware change, reflash, or newly identified USB serial device, update that
+file in the same change set (or immediately after).
+
+Record per board (one section each):
+
+- Stable label (e.g. radar-transmitter, radar-receiver, super-tamagotchi, chatgpt-bridge)
+- MCU / module and display (size, controller) plus touch if present
+- Sensors / peripherals and non-obvious wiring (point at project WIRING.md when detailed)
+- Firmware currently expected on the device (app path + role)
+- Mac USB serial identity when known () — do not commit secrets; device paths are OK
+- Last verified date
+
+Do not invent boards. If unknown, mark **unknown** and fill in when discovered.
+
 ## Safety and public-repository hygiene
 
 - Verify the intended board and serial device before flashing.
