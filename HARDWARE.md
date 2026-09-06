@@ -44,10 +44,10 @@ Last inventory pass: 2026-09-06 (chatgpt-model-display flashed)
 - Display: **3.5" TFT SPI 480x320 v1 (ST7796U)** — pins MOSI 8, DC 9, RST 10, CS 11, MISO 16, BL 17, SCK 18; SD_CS 4 held high
 - Touch: not used by this firmware (FT6336 may be present)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Firmware currently on device: `chatgpt-model-display/` **v 0.13+**
+- Firmware currently on device: `chatgpt-model-display/` **v 0.15+**
 - Display settings (LOCKED — verified against desk photo 2026-09-06):
   - Controller: ST7796U, 480×320 landscape, SPI 26 MHz, `invert_color(true)`, RGB
-  - MADCTL: `swap_xy(true)`, `mirror(false, true)` — **do not change**
+  - MADCTL: `swap_xy(true)`, `mirror(false, false)` — **do not change**
   - Software rotate/transpose: **none** (pixel-reverse 180 inverted the glass; MX/MY flips mirrored glyphs)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → ChatGPT title at top of glass, MODEL left, version bottom-right
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)

@@ -116,12 +116,11 @@ esp_err_t display_init(void)
     ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(s_panel), TAG, "reset");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_init(s_panel), TAG, "init");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(s_panel, true), TAG, "invert");
-    /* Locked MADCTL for desk pose (pins toward breadboard / USB at bottom):
-     * swap_xy(true) + mirror(false, true). Same as hardware-test
-     * DISPLAY_PROFILE_ST7796U_3_5. Do not change mirrors — wrong MX/MY
-     * mirrors glyphs. No software 180. */
+    /* Desk pose from David photos (pins toward breadboard): swap_xy on.
+     * Photos showed horizontal glyph mirror with mirror(false,true);
+     * mirror(false,false) clears MY (horizontal with swap_xy). No software 180. */
     ESP_RETURN_ON_ERROR(esp_lcd_panel_swap_xy(s_panel, true), TAG, "swap_xy");
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, false, true), TAG, "mirror");
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, false, false), TAG, "mirror");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "disp on");
 
     s_fb = heap_caps_malloc(fb_bytes, MALLOC_CAP_SPIRAM);
