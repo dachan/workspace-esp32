@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-N="$(tr -d '[:space:]' < "$ROOT/BUILD_NUMBER")"
+VER="$(tr -d '[:space:]' < "$ROOT/VERSION")"
 BIN="$ROOT/build/chatgpt-model-display.bin"
-DEST="$ROOT/dist/chatgpt-model-display-b${N}.bin"
+DEST="$ROOT/dist/chatgpt-model-display-v${VER}.bin"
 mkdir -p "$ROOT/dist"
 if [[ -f "$BIN" ]]; then
   cp -f "$BIN" "$DEST"

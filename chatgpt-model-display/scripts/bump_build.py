@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Bump BUILD_NUMBER when firmware sources change; write build_number.h and archive path stamp."""
+"""Bump firmware version (X.Y) when sources change; write build_number.h."""
 from __future__ import annotations
 
 import hashlib
 import pathlib
+import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 MAIN = ROOT / "main"
-BUILD_NUMBER_PATH = ROOT / "BUILD_NUMBER"
+VERSION_PATH = ROOT / "VERSION"
+LEGACY_BUILD_NUMBER = ROOT / "BUILD_NUMBER"
 STAMP_PATH = ROOT / "build" / ".build_number_stamp"
 HEADER_PATH = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else (ROOT / "main" / "build_number.h")
 DIST = ROOT / "dist"
@@ -19,7 +21,7 @@ def source_fingerprint() -> str:
     for path in sorted(MAIN.rglob("*")):
         if not path.is_file():
             continue
-        if path.name in {"build_number.h"}:
+        if path.name == "build_number.h":
             continue
         if path.suffix not in {".c", ".h", ".yml"} and path.name != "CMakeLists.txt":
             continue
@@ -27,10 +29,9 @@ def source_fingerprint() -> str:
         h.update(b"\0")
         h.update(path.read_bytes())
         h.update(b"\0")
-    # Project-level cmake / defaults affect the binary too
-    for rel in ("CMakeLists.txt", "sdkconfig.defaults"):
+    for rel in ("CMakeLists.txt", "sdkconfig.defaults", "VERSION"):
         p = ROOT / rel
-        if p.is_file():
+        if p.is_file() and rel != "VERSION":
             h.update(rel.encode())
             h.update(b"\0")
             h.update(p.read_bytes())
@@ -38,41 +39,62 @@ def source_fingerprint() -> str:
     return h.hexdigest()
 
 
-def read_build_number() -> int:
-    if BUILD_NUMBER_PATH.is_file():
-        text = BUILD_NUMBER_PATH.read_text().strip()
-        if text.isdigit():
-            return int(text)
-    return 0
+def parse_version(text: str) -> tuple[int, int]:
+    m = re.fullmatch(r"(\d+)\.(\d+)", text.strip())
+    if not m:
+        raise ValueError(f"bad VERSION: {text!r}")
+    return int(m.group(1)), int(m.group(2))
 
 
-def write_header(n: int) -> None:
+def format_version(major: int, minor: int) -> str:
+    return f"{major}.{minor}"
+
+
+def read_version() -> tuple[int, int]:
+    if VERSION_PATH.is_file():
+        return parse_version(VERSION_PATH.read_text())
+    if LEGACY_BUILD_NUMBER.is_file():
+        raw = LEGACY_BUILD_NUMBER.read_text().strip()
+        if raw.isdigit():
+            n = int(raw)
+            return 0, n
+    return 0, 10
+
+
+def write_header(major: int, minor: int) -> None:
+    ver = format_version(major, minor)
+    # Monotonic-ish int for logs: major*1000 + minor
+    build_int = major * 1000 + minor
     HEADER_PATH.parent.mkdir(parents=True, exist_ok=True)
     HEADER_PATH.write_text(
         "#pragma once\n"
-        f"#define FIRMWARE_BUILD_NUMBER {n}\n"
-        f'#define FIRMWARE_BUILD_STRING "b{n}"\n'
+        f"#define FIRMWARE_VERSION_MAJOR {major}\n"
+        f"#define FIRMWARE_VERSION_MINOR {minor}\n"
+        f"#define FIRMWARE_BUILD_NUMBER {build_int}\n"
+        f'#define FIRMWARE_BUILD_STRING "v {ver}"\n'
     )
 
 
 def main() -> int:
     fp = source_fingerprint()
-    n = read_build_number()
+    major, minor = read_version()
     prev_fp = STAMP_PATH.read_text().strip() if STAMP_PATH.is_file() else ""
     if fp != prev_fp:
-        n += 1
-        BUILD_NUMBER_PATH.write_text(f"{n}\n")
+        minor += 1
+        # First migration: if VERSION was just set to 0.10 and stamp missing,
+        # callers may seed VERSION at 0.9 so first bump lands on 0.10.
+        ver = format_version(major, minor)
+        VERSION_PATH.write_text(ver + "\n")
         STAMP_PATH.parent.mkdir(parents=True, exist_ok=True)
         STAMP_PATH.write_text(fp + "\n")
-        print(f"bump_build: sources changed -> build {n}")
+        print(f"bump_build: sources changed -> v {ver}")
     else:
-        if n < 1:
-            n = 1
-            BUILD_NUMBER_PATH.write_text(f"{n}\n")
-        print(f"bump_build: unchanged -> build {n}")
-    write_header(n)
+        ver = format_version(major, minor)
+        VERSION_PATH.write_text(ver + "\n")
+        print(f"bump_build: unchanged -> v {ver}")
+    write_header(major, minor)
     DIST.mkdir(parents=True, exist_ok=True)
-    (DIST / "CURRENT").write_text(f"{n}\n")
+    (DIST / "CURRENT").write_text(format_version(major, minor) + "\n")
     return 0
 
 
