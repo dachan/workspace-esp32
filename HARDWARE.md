@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-06
+Last inventory pass: 2026-09-06 (chatgpt-model-display flashed)
 
 ## radar-transmitter
 
@@ -39,11 +39,12 @@ Last inventory pass: 2026-09-06
 
 ## chatgpt-bridge target (model / thinking display)
 
-- MCU: ESP32-S3 N16R8-class (Lonely Binary style; 16MB flash + 8MB octal PSRAM)
+- MCU: ESP32-S3 (QFN56) rev v0.2, embedded 8MB PSRAM (AP_3v3), 40MHz XTAL — Lonely Binary N16R8-class
+- MAC: 28:84:85:44:1b:5c
 - Display: 2.8" ILI9341V SPI — same pinout as super-tamagotchi / radar-receiver (MOSI 8, DC 9, RST 10, CS 11, MISO 16, BL 17, SCK 18; SD_CS 4 held high)
 - Touch: not used by this firmware (FT6336 wiring may still be present on the desk board)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Firmware: `chatgpt-model-display/` (intended)
-- Mac serial (last seen): `/dev/cu.usbmodem21201` (verify before flash — path can change)
-- Last verified: 2026-09-06 (inventory + firmware added; flash status TBD on Mac)
+- Firmware currently on device: `chatgpt-model-display/` @ d5a2784
+- Mac serial: `/dev/cu.usbmodem21201` (USB-Serial/JTAG; verify before flash — path can change)
+- Last verified: 2026-09-06 ~11:55 America/Toronto — built with esp-idf-v6.0.2 and flashed from Mac
 - Notes: flash only from Mac `~/Development/workspace-esp32` after pull
