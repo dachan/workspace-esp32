@@ -42,6 +42,24 @@ enum AXRoleName {
     static let menu = "AXMenu"
 }
 
+enum AXAttr {
+    static let children = kAXChildrenAttribute as CFString
+    static let childrenInNavOrder = "AXChildrenInNavigationOrder" as CFString
+    static let description = kAXDescriptionAttribute as CFString
+    static let focusedWindow = kAXFocusedWindowAttribute as CFString
+    static let help = kAXHelpAttribute as CFString
+    static let identifier = kAXIdentifierAttribute as CFString
+    static let mainWindow = kAXMainWindowAttribute as CFString
+    static let mark = kAXMenuItemMarkCharAttribute as CFString
+    static let menuBar = kAXMenuBarAttribute as CFString
+    static let position = kAXPositionAttribute as CFString
+    static let role = kAXRoleAttribute as CFString
+    static let subrole = kAXSubroleAttribute as CFString
+    static let title = kAXTitleAttribute as CFString
+    static let value = kAXValueAttribute as CFString
+    static let windows = kAXWindowsAttribute as CFString
+}
+
 enum AXNode {
     static func copy(_ element: AXUIElement, _ attribute: CFString) -> CFTypeRef? {
         var value: CFTypeRef?
@@ -79,17 +97,17 @@ enum AXNode {
     }
 
     static func children(_ element: AXUIElement) -> [AXUIElement] {
-        if let value = copy(element, kAXChildrenAttribute) {
+        if let value = copy(element, AXAttr.children) {
             return axElements(value)
         }
-        if let value = copy(element, "AXChildrenInNavigationOrder" as CFString) {
+        if let value = copy(element, AXAttr.childrenInNavOrder) {
             return axElements(value)
         }
         return []
     }
 
     static func point(_ element: AXUIElement) -> CGPoint? {
-        guard let raw = copy(element, kAXPositionAttribute),
+        guard let raw = copy(element, AXAttr.position),
               CFGetTypeID(raw) == AXValueGetTypeID() else {
             return nil
         }
@@ -99,7 +117,7 @@ enum AXNode {
     }
 
     static func role(_ element: AXUIElement) -> String {
-        string(element, kAXRoleAttribute) ?? "AXUnknown"
+        string(element, AXAttr.role) ?? "AXUnknown"
     }
 
     private static func axElement(_ value: CFTypeRef) -> AXUIElement? {
@@ -179,13 +197,13 @@ enum AXWalk {
             AXSnapshot(
                 path: path,
                 role: role,
-                subrole: AXNode.string(element, kAXSubroleAttribute),
-                title: AXNode.string(element, kAXTitleAttribute),
-                description: AXNode.string(element, kAXDescriptionAttribute),
-                value: AXNode.string(element, kAXValueAttribute),
-                identifier: AXNode.string(element, kAXIdentifierAttribute),
-                help: AXNode.string(element, kAXHelpAttribute),
-                mark: AXNode.string(element, kAXMenuItemMarkCharAttribute),
+                subrole: AXNode.string(element, AXAttr.subrole),
+                title: AXNode.string(element, AXAttr.title),
+                description: AXNode.string(element, AXAttr.description),
+                value: AXNode.string(element, AXAttr.value),
+                identifier: AXNode.string(element, AXAttr.identifier),
+                help: AXNode.string(element, AXAttr.help),
+                mark: AXNode.string(element, AXAttr.mark),
                 position: AXNode.point(element),
                 inList: listed,
                 inMenuBar: menu
@@ -280,9 +298,9 @@ enum ChatGPTProcess {
             guard seen.insert(key).inserted else { return }
             out.append(element)
         }
-        add(AXNode.element(app, kAXFocusedWindowAttribute))
-        add(AXNode.element(app, kAXMainWindowAttribute))
-        AXNode.elements(app, kAXWindowsAttribute).forEach { add($0) }
+        add(AXNode.element(app, AXAttr.focusedWindow))
+        add(AXNode.element(app, AXAttr.mainWindow))
+        AXNode.elements(app, AXAttr.windows).forEach { add($0) }
         return out
     }
 }

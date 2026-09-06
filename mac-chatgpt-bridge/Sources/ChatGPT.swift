@@ -39,7 +39,7 @@ enum ModelReader {
     ) -> ModelReadback {
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         var snaps: [AXSnapshot] = []
-        if let menuBar = AXNode.element(axApp, kAXMenuBarAttribute) {
+        if let menuBar = AXNode.element(axApp, AXAttr.menuBar) {
             snaps += AXWalk.snapshots(
                 of: menuBar,
                 prefix: "menu",
@@ -91,7 +91,7 @@ enum ModelReader {
         print(
             "# ChatGPT AX dump  pid=\(app.processIdentifier)  bundle=\(app.bundleIdentifier ?? "?")  name=\(app.localizedName ?? "?")"
         )
-        if let menuBar = AXNode.element(axApp, kAXMenuBarAttribute) {
+        if let menuBar = AXNode.element(axApp, AXAttr.menuBar) {
             print("# menu bar")
             AXWalk.snapshots(
                 of: menuBar,
