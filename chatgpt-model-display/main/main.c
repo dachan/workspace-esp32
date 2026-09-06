@@ -74,22 +74,20 @@ static void ui_render(const ui_state_t *ui)
     display_fill_rect(8, 8, DISPLAY_WIDTH - 16, 4, accent);
 
     font_draw_text(20, 24, "ChatGPT", accent, card, 2);
-    font_draw_text(20, 48, "MODEL DISPLAY", label, card, 1);
 
-    font_draw_text(20, 78, "MODEL", label, card, 1);
-    font_draw_text(20, 148, "THINKING", label, card, 1);
+    font_draw_text(20, 64, "MODEL", label, card, 1);
+    font_draw_text(20, 134, "THINKING", label, card, 1);
 
     if (ui->waiting || !ui->fields.has_model) {
-        font_draw_text(20, 96, "Waiting for bridge...", muted, card, 2);
-        font_draw_text(20, 166, "—", muted, card, 2);
+        font_draw_text(20, 82, "Waiting for bridge...", muted, card, 2);
+        font_draw_text(20, 152, "—", muted, card, 2);
     } else {
-        int y_after = 96;
-        draw_wrapped(20, 96, DISPLAY_WIDTH - 48, ui->fields.model, text, card, 2, &y_after);
+        int y_after = 82;
+        draw_wrapped(20, 82, DISPLAY_WIDTH - 48, ui->fields.model, text, card, 2, &y_after);
         const char *thinking = ui->fields.has_thinking ? ui->fields.thinking : "—";
-        font_draw_text(20, 166, thinking, text, card, 2);
+        font_draw_text(20, 152, thinking, text, card, 2);
     }
 
-    font_draw_text(20, 214, "USB 115200  MODEL <name>", muted, card, 1);
     display_flush();
 }
 
