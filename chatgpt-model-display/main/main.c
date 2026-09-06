@@ -94,6 +94,7 @@ static int thinking_level(const char *thinking)
 static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_level,
                               uint16_t track, uint16_t fill)
 {
+    /* Segmented meter (ChatGPT-style): discrete pills with gaps. */
     if (max_level < 1) {
         max_level = 1;
     }
@@ -103,13 +104,24 @@ static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_lev
     if (level > max_level) {
         level = max_level;
     }
-    display_fill_rect(x, y, w, h, track);
-    if (level > 0) {
-        int fw = (w * level) / max_level;
-        if (fw < 2 && level > 0) {
-            fw = 2;
-        }
-        display_fill_rect(x, y, fw, h, fill);
+
+    const int gap = 4;
+    const int segs = max_level;
+    const int total_gap = gap * (segs - 1);
+    int seg_w = (w - total_gap) / segs;
+    if (seg_w < 2) {
+        seg_w = 2;
+    }
+    /* Re-center leftover pixels into the last segment. */
+    int used = seg_w * segs + total_gap;
+    int leftover = w - used;
+
+    int cx = x;
+    for (int i = 0; i < segs; i++) {
+        int sw = seg_w + (i == segs - 1 ? leftover : 0);
+        uint16_t col = (i < level) ? fill : track;
+        display_fill_rect(cx, y, sw, h, col);
+        cx += sw + gap;
     }
 }
 
