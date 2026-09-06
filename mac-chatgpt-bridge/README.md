@@ -18,6 +18,7 @@ Serial path:
 - USB serial line: `MODEL <name>\n` at 115200 (dry-run when `--port` is omitted;
   real open/write on macOS when `--port` is set)
 - `--watch` polls and sends only when the model string changes
+- Last successful model is cached at `~/Library/Application Support/chatgpt-bridge/last-model.txt`; on AX failure the bridge prints `using cached model: …` and still `--send-serial`s that line when requested
 - Optional device-side `THINKING <level>\n` is documented in
   `chatgpt-model-display/README.md` (bridge does not emit it yet; thinking is
   usually already in the model name)

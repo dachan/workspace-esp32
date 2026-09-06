@@ -37,7 +37,7 @@ ChatGPT/Codex model and sends `MODEL <name>
 ` over USB serial (115200) when
 `--send-serial --port` is set. Watch mode (`--watch`) sends only on change. It
 only runs on the Mac. On-device UI lives in `chatgpt-model-display/` (3.5\" ST7796 480x320). Edit and
-flash on the Mac; pull Hetzner codex after push.
+flash on the Mac; pull Hetzner codex after push. Bridge caches the last good model under Application Support; firmware keeps the last MODEL in NVS for boot/display fallback.
 
 ## Hardware inventory (keep current)
 

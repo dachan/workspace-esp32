@@ -17,6 +17,8 @@ embedded (for example `GPT-5.6 Luna Extra High`). The firmware splits a trailing
 thinking token when present; otherwise it shows the full string as the model and
 `—` for thinking.
 
+On each `MODEL` line the firmware saves model/thinking to NVS (`cgpt`/`model`,`think`) and reloads that cache on boot so the panel is not stuck on Waiting when the bridge is quiet.
+
 Optional extension (overrides parsed thinking until the next `MODEL` line):
 
 ```text

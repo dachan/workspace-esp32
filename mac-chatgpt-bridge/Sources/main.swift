@@ -178,19 +178,30 @@ func run() -> Int32 {
     guard AXTrust.require(prompt: true) else {
         return 2
     }
-    guard let app = ChatGPTProcess.find(preferredBundleID: options.bundleID) else {
+
+    let app = ChatGPTProcess.find(preferredBundleID: options.bundleID)
+    if app == nil {
         let hint = options.bundleID ?? ChatGPTProcess.knownBundleIDs.joined(separator: " or ")
         fputs("chatgpt-bridge: ChatGPT is not running (looked for \(hint))\n", stderr)
-        return 1
+        // Still allow cache → serial for watch/send continuity.
+        if options.dumpAX || options.listCandidates {
+            return 1
+        }
+        if options.watch {
+            return runWatch(options: options, initialApp: nil)
+        }
+        return emitOnce(options: options, app: nil)
     }
 
+    let runningApp = app!
+
     if options.dumpAX {
-        ModelReader.dump(app: app, maxDepth: options.maxDepth, maxNodes: options.maxNodes)
+        ModelReader.dump(app: runningApp, maxDepth: options.maxDepth, maxNodes: options.maxNodes)
         return 0
     }
 
     if options.listCandidates {
-        let readback = ModelReader.read(app: app, maxDepth: options.maxDepth, maxNodes: options.maxNodes)
+        let readback = ModelReader.read(app: runningApp, maxDepth: options.maxDepth, maxNodes: options.maxNodes)
         if options.json {
             printJSON(readback)
         } else {
@@ -206,58 +217,136 @@ func run() -> Int32 {
     }
 
     if options.watch {
-        return runWatch(options: options, initialApp: app)
+        return runWatch(options: options, initialApp: runningApp)
     }
 
-    return emitOnce(options: options, app: app)
+    return emitOnce(options: options, app: runningApp)
 }
 
-func emitOnce(options: Options, app: NSRunningApplication) -> Int32 {
-    let readback = ModelReader.read(app: app, maxDepth: options.maxDepth, maxNodes: options.maxNodes)
+func sendSerialModel(model: String, options: Options) -> Bool {
+    do {
+        try SerialBridge.send(
+            model: model,
+            port: options.port,
+            baud: options.baud,
+            echoLine: !options.json
+        )
+        return true
+    } catch {
+        fputs("chatgpt-bridge: \(error)\n", stderr)
+        return false
+    }
+}
+
+func emitOnce(options: Options, app: NSRunningApplication?) -> Int32 {
+    let readback: ModelReadback
+    if let app {
+        readback = ModelReader.read(app: app, maxDepth: options.maxDepth, maxNodes: options.maxNodes)
+    } else {
+        readback = ModelReadback(
+            ok: false,
+            model: nil,
+            source: nil,
+            bundleID: options.bundleID,
+            pid: nil,
+            appName: nil,
+            candidates: [],
+            error: "ChatGPT is not running"
+        )
+    }
+
+    if readback.ok, let model = readback.model {
+        ModelCache.save(model)
+        if options.json {
+            printJSON(readback)
+        } else {
+            printHuman(readback)
+        }
+        if options.sendSerial {
+            return sendSerialModel(model: model, options: options) ? 0 : 1
+        }
+        return 0
+    }
+
+    // Live AX failed — fall back to disk cache when present.
+    if let cached = ModelCache.load() {
+        fputs("chatgpt-bridge: using cached model: \(cached)\n", stderr)
+        if options.json {
+            var cachedReadback = readback
+            cachedReadback.ok = true
+            cachedReadback.model = cached
+            cachedReadback.source = "disk-cache"
+            printJSON(cachedReadback)
+        } else {
+            print("ChatGPT model: \(cached)")
+            print("source: disk-cache")
+            let app = readback.appName ?? "ChatGPT"
+            let bundle = readback.bundleID ?? "?"
+            let pid = readback.pid.map(String.init) ?? "?"
+            print("app: \(app) (\(bundle), pid \(pid))")
+        }
+        if options.sendSerial {
+            return sendSerialModel(model: cached, options: options) ? 0 : 1
+        }
+        return 0
+    }
+
     if options.json {
         printJSON(readback)
     } else {
         printHuman(readback)
     }
-
     if options.sendSerial {
-        guard let model = readback.model, readback.ok else {
-            fputs("chatgpt-bridge: not sending serial; no confident model\n", stderr)
-            return 1
-        }
-        do {
-            try SerialBridge.send(
-                model: model,
-                port: options.port,
-                baud: options.baud,
-                echoLine: !options.json
-            )
-        } catch {
-            fputs("chatgpt-bridge: \(error)\n", stderr)
-            return 1
-        }
+        fputs("chatgpt-bridge: not sending serial; no confident model and no cache\n", stderr)
     }
-    return readback.ok ? 0 : 1
+    return 1
 }
 
 @discardableResult
 func emitChange(
     options: Options,
     readback: ModelReadback,
-    previousModel: inout String?
+    previousModel: inout String?,
+    fromCache: Bool = false
 ) -> Bool {
-    let model = readback.ok ? readback.model : nil
+    let model: String?
+    let sourceOverride: String?
+    if readback.ok, let live = readback.model {
+        ModelCache.save(live)
+        model = live
+        sourceOverride = nil
+    } else if let cached = ModelCache.load() {
+        if !fromCache {
+            fputs("chatgpt-bridge: using cached model: \(cached)\n", stderr)
+        }
+        model = cached
+        sourceOverride = "disk-cache"
+    } else {
+        model = nil
+        sourceOverride = nil
+    }
+
     guard model != previousModel else {
         return false
     }
     previousModel = model
 
     if options.json {
-        printJSON(readback)
+        if let model, let sourceOverride {
+            var cachedReadback = readback
+            cachedReadback.ok = true
+            cachedReadback.model = model
+            cachedReadback.source = sourceOverride
+            printJSON(cachedReadback)
+        } else {
+            printJSON(readback)
+        }
     } else if let model {
         let stamp = ISO8601DateFormatter().string(from: Date())
         print("\(stamp) model: \(model)")
-        if let source = readback.source {
+        if let sourceOverride {
+            print("source: \(sourceOverride)")
+        } else if let source = readback.source {
             print("source: \(source)")
         }
     } else {
@@ -267,22 +356,13 @@ func emitChange(
     fflush(stdout)
     fflush(stderr)
 
-    if options.sendSerial, let model, readback.ok {
-        do {
-            try SerialBridge.send(
-                model: model,
-                port: options.port,
-                baud: options.baud,
-                echoLine: !options.json
-            )
-        } catch {
-            fputs("chatgpt-bridge: \(error)\n", stderr)
-        }
+    if options.sendSerial, let model {
+        _ = sendSerialModel(model: model, options: options)
     }
     return true
 }
 
-func runWatch(options: Options, initialApp: NSRunningApplication) -> Int32 {
+func runWatch(options: Options, initialApp: NSRunningApplication?) -> Int32 {
     var app = initialApp
     var previousModel: String?
     if !options.json {
@@ -293,19 +373,36 @@ func runWatch(options: Options, initialApp: NSRunningApplication) -> Int32 {
     }
 
     while true {
-        if ChatGPTProcess.find(preferredBundleID: options.bundleID) == nil {
-            // keep last known app handle; find may still fail briefly
-        }
         if let found = ChatGPTProcess.find(preferredBundleID: options.bundleID) {
             app = found
         }
 
-        let readback = ModelReader.read(
-            app: app,
-            maxDepth: options.maxDepth,
-            maxNodes: options.maxNodes
+        let readback: ModelReadback
+        if let app {
+            readback = ModelReader.read(
+                app: app,
+                maxDepth: options.maxDepth,
+                maxNodes: options.maxNodes
+            )
+        } else {
+            readback = ModelReadback(
+                ok: false,
+                model: nil,
+                source: nil,
+                bundleID: options.bundleID,
+                pid: nil,
+                appName: nil,
+                candidates: [],
+                error: "ChatGPT is not running"
+            )
+        }
+        let usingCache = !(readback.ok && readback.model != nil)
+        _ = emitChange(
+            options: options,
+            readback: readback,
+            previousModel: &previousModel,
+            fromCache: usingCache && previousModel != nil
         )
-        _ = emitChange(options: options, readback: readback, previousModel: &previousModel)
         Thread.sleep(forTimeInterval: options.intervalSeconds)
     }
 }

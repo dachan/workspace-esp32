@@ -7,6 +7,7 @@
 #include "font.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "model_nvs.h"
 #include "model_parse.h"
 #include "serial_model.h"
 
@@ -95,6 +96,7 @@ static void ui_render(const ui_state_t *ui)
 void app_main(void)
 {
     ESP_LOGI(TAG, "chatgpt-model-display starting");
+    ESP_ERROR_CHECK(model_nvs_init());
     ESP_ERROR_CHECK(display_init());
     ESP_ERROR_CHECK(display_set_backlight(80));
     ESP_ERROR_CHECK(serial_model_init());
@@ -102,6 +104,10 @@ void app_main(void)
     ui_state_t ui = {
         .waiting = 1,
     };
+    if (model_nvs_load(&ui.fields)) {
+        ui.waiting = 0;
+        ESP_LOGI(TAG, "boot from NVS cache");
+    }
     ui_render(&ui);
 
     TickType_t last_paint = xTaskGetTickCount();
@@ -110,6 +116,9 @@ void app_main(void)
         if (serial_model_poll(&next)) {
             ui.fields = next;
             ui.waiting = !ui.fields.has_model;
+            if (ui.fields.has_model) {
+                (void)model_nvs_save(&ui.fields);
+            }
             ui_render(&ui);
             last_paint = xTaskGetTickCount();
         }
