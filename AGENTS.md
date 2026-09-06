@@ -39,6 +39,23 @@ ChatGPT/Codex model and sends `MODEL <name>
 only runs on the Mac. On-device UI lives in `chatgpt-model-display/` (3.5\" ST7796 480x320). Edit and
 flash on the Mac; pull Hetzner codex after push. Bridge caches the last good model under Application Support; firmware keeps the last MODEL in NVS for boot/display fallback.
 
+### chatgpt-model-display locked view mapping
+
+Desk pose (photo reference): glass left of breadboard, pins toward the ESP32,
+USB toward the bottom of the frame. UI must read upright in that pose
+(ChatGPT title at top of glass).
+
+Locked ST7796 settings in `chatgpt-model-display/main/display.c`:
+
+- `invert_color(true)`, RGB, SPI 26 MHz
+- `swap_xy(true)`, `mirror(false, true)` — same MADCTL as
+  `hardware-test` `DISPLAY_PROFILE_ST7796U_3_5`
+- **No** software framebuffer 180 / transpose
+
+Do not flip MADCTL mirrors to “fix” rotation (glyphs mirror). Do not add a
+software pixel reverse (that put the glass upside-down relative to the desk).
+Keep `HARDWARE.md` in sync when this changes.
+
 ## Hardware inventory (keep current)
 
 Always track the **latest hardware on each ESP32** in this workspace. Before
