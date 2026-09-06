@@ -5,7 +5,9 @@ import Foundation
 
 enum AXTrust {
     static func isTrusted(prompt: Bool) -> Bool {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: prompt] as CFDictionary
+        let options: NSDictionary = [
+            kAXTrustedCheckOptionPrompt.takeUnretainedValue(): prompt,
+        ]
         return AXIsProcessTrustedWithOptions(options)
     }
 
@@ -28,61 +30,96 @@ enum AXTrust {
     }
 }
 
+enum AXRoleName {
+    static let popUpButton = "AXPopUpButton"
+    static let comboBox = "AXComboBox"
+    static let menuButton = "AXMenuButton"
+    static let menuItem = "AXMenuItem"
+    static let button = "AXButton"
+    static let staticText = "AXStaticText"
+    static let list = "AXList"
+    static let menuBar = "AXMenuBar"
+    static let menu = "AXMenu"
+}
+
 enum AXNode {
-    static func copy(_ element: AXUIElement, _ attribute: String) -> AnyObject? {
+    static func copy(_ element: AXUIElement, _ attribute: CFString) -> CFTypeRef? {
         var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else {
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else {
             return nil
         }
         return value
     }
 
-    static func string(_ element: AXUIElement, _ attribute: String) -> String? {
-        if let value = copy(element, attribute) as? String {
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    static func element(_ parent: AXUIElement, _ attribute: CFString) -> AXUIElement? {
+        guard let value = copy(parent, attribute) else { return nil }
+        return axElement(value)
+    }
+
+    static func elements(_ parent: AXUIElement, _ attribute: CFString) -> [AXUIElement] {
+        guard let value = copy(parent, attribute) else { return [] }
+        return axElements(value)
+    }
+
+    static func string(_ element: AXUIElement, _ attribute: CFString) -> String? {
+        guard let value = copy(element, attribute) else { return nil }
+        let typeID = CFGetTypeID(value)
+        if typeID == CFStringGetTypeID() {
+            let text = String(unsafeBitCast(value, to: CFString.self))
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : trimmed
         }
-        if let number = copy(element, attribute) as? NSNumber {
-            return number.stringValue
+        if typeID == CFNumberGetTypeID() {
+            var number: Int64 = 0
+            let cfNumber = unsafeBitCast(value, to: CFNumber.self)
+            guard CFNumberGetValue(cfNumber, .sInt64Type, &number) else { return nil }
+            return String(number)
         }
         return nil
     }
 
-    static func bool(_ element: AXUIElement, _ attribute: String) -> Bool? {
-        copy(element, attribute) as? Bool
-    }
-
     static func children(_ element: AXUIElement) -> [AXUIElement] {
-        if let kids = copy(element, kAXChildrenAttribute as String) as? [AXUIElement] {
-            return kids
+        if let value = copy(element, kAXChildrenAttribute) {
+            return axElements(value)
         }
-        if let kids = copy(element, "AXChildrenInNavigationOrder") as? [AXUIElement] {
-            return kids
+        if let value = copy(element, "AXChildrenInNavigationOrder" as CFString) {
+            return axElements(value)
         }
         return []
     }
 
     static func point(_ element: AXUIElement) -> CGPoint? {
-        guard let raw = copy(element, kAXPositionAttribute as String) else {
+        guard let raw = copy(element, kAXPositionAttribute),
+              CFGetTypeID(raw) == AXValueGetTypeID() else {
             return nil
         }
+        let axValue = unsafeBitCast(raw, to: AXValue.self)
         var point = CGPoint.zero
-        let ok = AXValueGetValue(raw as! AXValue, .cgPoint, &point)
-        return ok ? point : nil
+        return AXValueGetValue(axValue, .cgPoint, &point) ? point : nil
     }
 
     static func role(_ element: AXUIElement) -> String {
-        string(element, kAXRoleAttribute as String) ?? "AXUnknown"
+        string(element, kAXRoleAttribute) ?? "AXUnknown"
     }
 
-    static func texts(_ element: AXUIElement) -> [String] {
-        [
-            string(element, kAXTitleAttribute as String),
-            string(element, kAXDescriptionAttribute as String),
-            string(element, kAXValueAttribute as String),
-            string(element, kAXHelpAttribute as String),
-            string(element, kAXIdentifierAttribute as String),
-        ].compactMap { $0 }
+    private static func axElement(_ value: CFTypeRef) -> AXUIElement? {
+        guard CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        return unsafeBitCast(value, to: AXUIElement.self)
+    }
+
+    private static func axElements(_ value: CFTypeRef) -> [AXUIElement] {
+        guard CFGetTypeID(value) == CFArrayGetTypeID() else { return [] }
+        let cfArray = unsafeBitCast(value, to: CFArray.self)
+        let count = CFArrayGetCount(cfArray)
+        var result: [AXUIElement] = []
+        result.reserveCapacity(count)
+        for index in 0..<count {
+            guard let pointer = CFArrayGetValueAtIndex(cfArray, index) else { continue }
+            let item = Unmanaged<AnyObject>.fromOpaque(pointer).takeUnretainedValue()
+            guard CFGetTypeID(item) == AXUIElementGetTypeID() else { continue }
+            result.append(unsafeBitCast(item, to: AXUIElement.self))
+        }
+        return result
     }
 }
 
@@ -136,19 +173,19 @@ enum AXWalk {
     ) {
         guard out.count < maxNodes else { return }
         let role = AXNode.role(element)
-        let listed = inList || role == (kAXListRole as String)
-        let menu = inMenuBar || role == (kAXMenuBarRole as String) || role == (kAXMenuRole as String)
+        let listed = inList || role == AXRoleName.list
+        let menu = inMenuBar || role == AXRoleName.menuBar || role == AXRoleName.menu
         out.append(
             AXSnapshot(
                 path: path,
                 role: role,
-                subrole: AXNode.string(element, kAXSubroleAttribute as String),
-                title: AXNode.string(element, kAXTitleAttribute as String),
-                description: AXNode.string(element, kAXDescriptionAttribute as String),
-                value: AXNode.string(element, kAXValueAttribute as String),
-                identifier: AXNode.string(element, kAXIdentifierAttribute as String),
-                help: AXNode.string(element, kAXHelpAttribute as String),
-                mark: AXNode.string(element, kAXMenuItemMarkCharAttribute as String),
+                subrole: AXNode.string(element, kAXSubroleAttribute),
+                title: AXNode.string(element, kAXTitleAttribute),
+                description: AXNode.string(element, kAXDescriptionAttribute),
+                value: AXNode.string(element, kAXValueAttribute),
+                identifier: AXNode.string(element, kAXIdentifierAttribute),
+                help: AXNode.string(element, kAXHelpAttribute),
+                mark: AXNode.string(element, kAXMenuItemMarkCharAttribute),
                 position: AXNode.point(element),
                 inList: listed,
                 inMenuBar: menu
@@ -243,11 +280,9 @@ enum ChatGPTProcess {
             guard seen.insert(key).inserted else { return }
             out.append(element)
         }
-        add(AXNode.copy(app, kAXFocusedWindowAttribute as String) as? AXUIElement)
-        add(AXNode.copy(app, kAXMainWindowAttribute as String) as? AXUIElement)
-        if let windows = AXNode.copy(app, kAXWindowsAttribute as String) as? [AXUIElement] {
-            windows.forEach { add($0) }
-        }
+        add(AXNode.element(app, kAXFocusedWindowAttribute))
+        add(AXNode.element(app, kAXMainWindowAttribute))
+        AXNode.elements(app, kAXWindowsAttribute).forEach { add($0) }
         return out
     }
 }

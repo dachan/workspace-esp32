@@ -39,7 +39,7 @@ enum ModelReader {
     ) -> ModelReadback {
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         var snaps: [AXSnapshot] = []
-        if let menuBar = AXNode.copy(axApp, kAXMenuBarAttribute as String) as? AXUIElement {
+        if let menuBar = AXNode.element(axApp, kAXMenuBarAttribute) {
             snaps += AXWalk.snapshots(
                 of: menuBar,
                 prefix: "menu",
@@ -91,7 +91,7 @@ enum ModelReader {
         print(
             "# ChatGPT AX dump  pid=\(app.processIdentifier)  bundle=\(app.bundleIdentifier ?? "?")  name=\(app.localizedName ?? "?")"
         )
-        if let menuBar = AXNode.copy(axApp, kAXMenuBarAttribute as String) as? AXUIElement {
+        if let menuBar = AXNode.element(axApp, kAXMenuBarAttribute) {
             print("# menu bar")
             AXWalk.snapshots(
                 of: menuBar,
@@ -123,16 +123,16 @@ enum ModelReader {
         var score = 4
         var source = "\(snap.role)"
         switch snap.role {
-        case kAXPopUpButtonRole as String, kAXComboBoxRole as String, "AXMenuButton":
+        case AXRoleName.popUpButton, AXRoleName.comboBox, AXRoleName.menuButton:
             score += 4
             source = "toolbar-picker \(snap.role)"
-        case kAXMenuItemRole as String:
+        case AXRoleName.menuItem:
             score += snap.mark == nil ? 1 : 5
             source = snap.mark == nil ? "menu-item" : "checked-menu-item"
-        case kAXButtonRole as String:
+        case AXRoleName.button:
             score += 2
             source = "button"
-        case kAXStaticTextRole as String:
+        case AXRoleName.staticText:
             score += 1
             source = "static-text"
         default:
