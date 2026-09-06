@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <ctype.h>
 #include <string.h>
 
 #include "canvas.h"
@@ -61,6 +62,57 @@ static void draw_wrapped(int x, int y, int max_w, const char *text, uint16_t fg,
     }
 }
 
+
+static int thinking_level(const char *thinking)
+{
+    /* Map ChatGPT thinking labels to 0..4 fill steps (matches app intensity). */
+    if (thinking == NULL || thinking[0] == '\0') {
+        return 0;
+    }
+    char buf[MODEL_PARSE_MAX];
+    size_t n = 0;
+    for (const char *p = thinking; *p && n + 1 < sizeof(buf); p++) {
+        buf[n++] = (char)tolower((unsigned char)*p);
+    }
+    buf[n] = '\0';
+
+    if (strstr(buf, "extra high") || strstr(buf, "max")) {
+        return 4;
+    }
+    if (strstr(buf, "high") || strcmp(buf, "thinking") == 0 || strstr(buf, "advanced")) {
+        return 3;
+    }
+    if (strstr(buf, "medium") || strstr(buf, "standard") || strstr(buf, "auto")) {
+        return 2;
+    }
+    if (strstr(buf, "instant") || strstr(buf, "fast") || strstr(buf, "low")) {
+        return 1;
+    }
+    return 2; /* unknown but present */
+}
+
+static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_level,
+                              uint16_t track, uint16_t fill)
+{
+    if (max_level < 1) {
+        max_level = 1;
+    }
+    if (level < 0) {
+        level = 0;
+    }
+    if (level > max_level) {
+        level = max_level;
+    }
+    display_fill_rect(x, y, w, h, track);
+    if (level > 0) {
+        int fw = (w * level) / max_level;
+        if (fw < 2 && level > 0) {
+            fw = 2;
+        }
+        display_fill_rect(x, y, fw, h, fill);
+    }
+}
+
 static void ui_render(const ui_state_t *ui)
 {
     const uint16_t bg = display_rgb(12, 14, 22);
@@ -79,14 +131,24 @@ static void ui_render(const ui_state_t *ui)
     font_draw_text(20, 64, "MODEL", label, card, 1);
     font_draw_text(20, 134, "THINKING", label, card, 1);
 
+    const int bar_x = 20;
+    const int bar_y = 158;
+    const int bar_w = DISPLAY_WIDTH - 48;
+    const int bar_h = 10;
+    const uint16_t track = display_rgb(40, 46, 62);
+    const uint16_t bar_fill = accent;
+
     if (ui->waiting || !ui->fields.has_model) {
         font_draw_text(20, 82, "Waiting for bridge...", muted, card, 2);
-        font_draw_text(20, 152, "—", muted, card, 2);
+        draw_thinking_bar(bar_x, bar_y, bar_w, bar_h, 0, 4, track, bar_fill);
+        font_draw_text(20, bar_y + bar_h + 8, "—", muted, card, 1);
     } else {
         int y_after = 82;
         draw_wrapped(20, 82, DISPLAY_WIDTH - 48, ui->fields.model, text, card, 2, &y_after);
         const char *thinking = ui->fields.has_thinking ? ui->fields.thinking : "—";
-        font_draw_text(20, 152, thinking, text, card, 2);
+        const int level = ui->fields.has_thinking ? thinking_level(thinking) : 0;
+        draw_thinking_bar(bar_x, bar_y, bar_w, bar_h, level, 4, track, bar_fill);
+        font_draw_text(20, bar_y + bar_h + 8, thinking, text, card, 1);
     }
 
     /* Build number, muted, bottom-right inside the card. */
