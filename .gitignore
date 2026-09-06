@@ -1,4 +1,5 @@
 .DS_Store
+**/.build/
 **/build*/
 **/managed_components/
 **/sdkconfig
