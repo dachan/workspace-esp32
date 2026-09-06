@@ -118,7 +118,7 @@ esp_err_t display_init(void)
     ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(s_panel, true), TAG, "invert");
     /* Same locked landscape mapping as hardware-test DISPLAY_PROFILE_ST7796U_3_5. */
     ESP_RETURN_ON_ERROR(esp_lcd_panel_swap_xy(s_panel, true), TAG, "swap_xy");
-    /* Locked chirality from hardware-test ST7796 profile (do not mirror glyphs). */
+    /* MADCTL locked for chirality (do not flip mirrors — that mirrored glyphs). */
     ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, false, true), TAG, "mirror");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "disp on");
 
@@ -137,5 +137,20 @@ esp_err_t display_init(void)
 
 esp_err_t display_flush(void)
 {
-    return esp_lcd_panel_draw_bitmap(s_panel, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, s_fb);
+    /* Software 180 for desk pose (pins toward breadboard / USB at bottom);
+     * MADCTL locked for chirality (swap_xy true, mirror false,true). */
+    const size_t n = (size_t)DISPLAY_WIDTH * (size_t)DISPLAY_HEIGHT;
+    for (size_t i = 0; i < n / 2; ++i) {
+        uint16_t tmp = s_fb[i];
+        s_fb[i] = s_fb[n - 1 - i];
+        s_fb[n - 1 - i] = tmp;
+    }
+    esp_err_t err = esp_lcd_panel_draw_bitmap(s_panel, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, s_fb);
+    /* Rotate back so the logical canvas stays upright for the next paint. */
+    for (size_t i = 0; i < n / 2; ++i) {
+        uint16_t tmp = s_fb[i];
+        s_fb[i] = s_fb[n - 1 - i];
+        s_fb[n - 1 - i] = tmp;
+    }
+    return err;
 }
