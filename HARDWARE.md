@@ -39,9 +39,11 @@ Last inventory pass: 2026-09-06
 
 ## chatgpt-bridge target (model / thinking display)
 
-- MCU: ESP32-S3 (USB serial from Mac `mac-chatgpt-bridge`)
-- Display: unknown until confirmed on desk — reuse panel drivers from an existing project only after hardware match
-- Protocol: USB serial 115200, lines `MODEL <name>`
-- Firmware: TBD (`chatgpt-model-display/` or chosen app)
+- MCU: ESP32-S3 N16R8-class (Lonely Binary style; 16MB flash + 8MB octal PSRAM)
+- Display: 2.8" ILI9341V SPI — same pinout as super-tamagotchi / radar-receiver (MOSI 8, DC 9, RST 10, CS 11, MISO 16, BL 17, SCK 18; SD_CS 4 held high)
+- Touch: not used by this firmware (FT6336 wiring may still be present on the desk board)
+- Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
+- Firmware: `chatgpt-model-display/` (intended)
 - Mac serial (last seen): `/dev/cu.usbmodem21201` (verify before flash — path can change)
+- Last verified: 2026-09-06 (inventory + firmware added; flash status TBD on Mac)
 - Notes: flash only from Mac `~/Development/workspace-esp32` after pull

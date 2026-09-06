@@ -32,9 +32,12 @@ Hard lanes for this repo:
 ## mac-chatgpt-bridge
 
 `mac-chatgpt-bridge/` is a macOS Accessibility CLI that reads the selected
-ChatGPT/Codex model and (later) sends it to an ESP32 over USB serial. It only
-runs on the Mac. Firmware that displays model / thinking level on-device is
-edited on the server like all other firmware, then flashed from the Mac.
+ChatGPT/Codex model and sends `MODEL <name>
+` over USB serial (115200) when
+`--send-serial --port` is set. Watch mode (`--watch`) sends only on change. It
+only runs on the Mac. On-device UI lives in `chatgpt-model-display/` (same
+ILI9341 panel pinout as super-tamagotchi / radar-receiver); edit on the server,
+then flash from the Mac.
 
 ## Hardware inventory (keep current)
 

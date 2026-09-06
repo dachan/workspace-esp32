@@ -1,9 +1,9 @@
 # mac-chatgpt-bridge
 
 macOS helper that reads the **currently selected model** from the ChatGPT
-desktop app via Accessibility APIs. Later it will send that name to an
-ESP32-S3 over USB serial. This folder is Phase 1: **validate model
-readback**. There is no firmware here.
+desktop app via Accessibility APIs. It can send that name to an ESP32-S3 over USB serial (`MODEL <name>
+` at
+115200). Pair with firmware in `../chatgpt-model-display/`.
 
 ## What it does
 
@@ -13,9 +13,14 @@ readback**. There is no firmware here.
 3. Walks the AX tree and prints the selected model.
 4. Optional `--dump-ax` dump if the model control is not obvious.
 
-Phase 2 is stubbed only:
+Serial path:
 
-- USB serial line: `MODEL <name>\n` (dry-run when `--port` is omitted)
+- USB serial line: `MODEL <name>\n` at 115200 (dry-run when `--port` is omitted;
+  real open/write on macOS when `--port` is set)
+- `--watch` polls and sends only when the model string changes
+- Optional device-side `THINKING <level>\n` is documented in
+  `chatgpt-model-display/README.md` (bridge does not emit it yet; thinking is
+  usually already in the model name)
 - Later ESP32 USB-HID model picker: **Ctrl+Shift+M** (documented, not sent)
 
 ## Requirements
