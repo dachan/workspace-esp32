@@ -44,7 +44,7 @@ Last inventory pass: 2026-09-06 (chatgpt-model-display flashed)
 - Display: 2.8" ILI9341V SPI — same pinout as super-tamagotchi / radar-receiver (MOSI 8, DC 9, RST 10, CS 11, MISO 16, BL 17, SCK 18; SD_CS 4 held high)
 - Touch: not used by this firmware (FT6336 wiring may still be present on the desk board)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Firmware currently on device: `chatgpt-model-display/` @ d5a2784
+- Firmware currently on device: `chatgpt-model-display/` @ d0df971 (180° panel mirror)
 - Mac serial: `/dev/cu.usbmodem21201` (USB-Serial/JTAG; verify before flash — path can change)
 - Last verified: 2026-09-06 ~11:55 America/Toronto — built with esp-idf-v6.0.2 and flashed from Mac
 - Display rotation: ILI9341  +  (180° from prior true/true)
