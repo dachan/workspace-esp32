@@ -47,4 +47,5 @@ Last inventory pass: 2026-09-06 (chatgpt-model-display flashed)
 - Firmware currently on device: `chatgpt-model-display/` @ d5a2784
 - Mac serial: `/dev/cu.usbmodem21201` (USB-Serial/JTAG; verify before flash — path can change)
 - Last verified: 2026-09-06 ~11:55 America/Toronto — built with esp-idf-v6.0.2 and flashed from Mac
+- Display rotation: ILI9341  +  (180° from prior true/true)
 - Notes: flash only from Mac `~/Development/workspace-esp32` after pull
