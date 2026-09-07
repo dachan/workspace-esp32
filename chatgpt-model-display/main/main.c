@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
+#include <strings.h>
 
 #include "canvas.h"
 #include "display.h"
@@ -116,9 +117,55 @@ static void apply_thinking_level(ui_state_t *ui, int level)
     snprintf(ui->fields.thinking, sizeof(ui->fields.thinking), "%s", name);
     ui->fields.has_thinking = 1;
     if (!ui->fields.has_model) {
-        snprintf(ui->fields.model, sizeof(ui->fields.model), "%s", "ChatGPT");
+        snprintf(ui->fields.model, sizeof(ui->fields.model), "%s", "GPT-5.6 Luna");
         ui->fields.has_model = 1;
         ui->waiting = 0;
+    }
+    (void)model_nvs_save(&ui->fields);
+}
+
+/* Preset model names for the model encoder (desk UI). */
+static const char *s_models[] = {
+    "GPT-5.6 Luna",
+    "GPT-5",
+    "GPT-4.5 Luna",
+    "GPT-4o",
+    "GPT-4o mini",
+    "o3",
+    "o4-mini",
+};
+static const int s_models_n = (int)(sizeof(s_models) / sizeof(s_models[0]));
+
+static int model_index(const char *name)
+{
+    if (name == NULL || name[0] == '\0') {
+        return 0;
+    }
+    for (int i = 0; i < s_models_n; i++) {
+        if (strcasecmp(name, s_models[i]) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void apply_model_delta(ui_state_t *ui, int delta)
+{
+    int idx = model_index(ui->fields.has_model ? ui->fields.model : NULL);
+    if (idx < 0) {
+        idx = 0;
+    }
+    idx += delta;
+    while (idx < 0) {
+        idx += s_models_n;
+    }
+    idx %= s_models_n;
+    snprintf(ui->fields.model, sizeof(ui->fields.model), "%s", s_models[idx]);
+    ui->fields.has_model = 1;
+    ui->waiting = 0;
+    if (!ui->fields.has_thinking) {
+        snprintf(ui->fields.thinking, sizeof(ui->fields.thinking), "%s", "Medium");
+        ui->fields.has_thinking = 1;
     }
     (void)model_nvs_save(&ui->fields);
 }
@@ -230,22 +277,31 @@ void app_main(void)
 
     TickType_t last_paint = xTaskGetTickCount();
     while (1) {
-        int enc = encoder_delta();
-        if (enc != 0) {
+        int think_d = encoder_delta(ENCODER_THINKING);
+        if (think_d != 0) {
             int level = ui.fields.has_thinking ? thinking_level(ui.fields.thinking) : 2;
             if (level < 1) {
                 level = 2;
             }
-            level += enc;
-            apply_thinking_level(&ui, level);
+            apply_thinking_level(&ui, level + think_d);
             ui_render(&ui);
             last_paint = xTaskGetTickCount();
         }
-        if (encoder_button_pressed()) {
-            /* Click cycles thinking up one step (wrap). */
+        if (encoder_button_pressed(ENCODER_THINKING)) {
             int level = ui.fields.has_thinking ? thinking_level(ui.fields.thinking) : 0;
-            level = (level % 4) + 1;
-            apply_thinking_level(&ui, level);
+            apply_thinking_level(&ui, (level % 4) + 1);
+            ui_render(&ui);
+            last_paint = xTaskGetTickCount();
+        }
+
+        int model_d = encoder_delta(ENCODER_MODEL);
+        if (model_d != 0) {
+            apply_model_delta(&ui, model_d);
+            ui_render(&ui);
+            last_paint = xTaskGetTickCount();
+        }
+        if (encoder_button_pressed(ENCODER_MODEL)) {
+            apply_model_delta(&ui, 1);
             ui_render(&ui);
             last_paint = xTaskGetTickCount();
         }

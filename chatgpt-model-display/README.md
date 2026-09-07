@@ -39,11 +39,14 @@ Same SPI ILI9341V pinout as `super-tamagotchi/WIRING.md` / radar-receiver:
 | Backlight | 17 |
 | SCK | 18 |
 | SD_CS (held high) | 4 |
-| Encoder CLK | 12 |
-| Encoder DT | 13 |
-| Encoder SW | 14 |
-| Encoder + | 3V3 |
-| Encoder GND | GND |
+| Thinking ENC CLK | 12 |
+| Thinking ENC DT | 13 |
+| Thinking ENC SW | 14 |
+| Model ENC CLK | 1 |
+| Model ENC DT | 2 |
+| Model ENC SW | 42 |
+| Both ENC + | 3V3 |
+| Both ENC GND | GND |
 
 USB: native USB Serial/JTAG (`/dev/cu.usbmodem*` on macOS). Flash and
 `MODEL` traffic share that port.
@@ -64,7 +67,7 @@ Verify the port with `ls /dev/cu.usb*` or
 `swift run --package-path ../mac-chatgpt-bridge chatgpt-bridge --list-ports`
 before flashing (paths can change).
 
-Rotate the encoder to change **thinking** (Instant / Medium / High / Extra High). Click advances one step. Changes persist in NVS.
+Two encoders: **thinking** (GPIO12/13/14) and **model** (GPIO1/2/42). Rotate or click to step; changes persist in NVS.
 
 ## Bridge watch → screen
 

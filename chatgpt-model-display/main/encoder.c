@@ -3,20 +3,30 @@
 #include "driver/gpio.h"
 #include "esp_timer.h"
 
-/* Free on Lonely Binary N16R8 with ST7796 display on 4/8-11/16-18. */
-#define PIN_ENC_CLK 12
-#define PIN_ENC_DT  13
-#define PIN_ENC_SW  14
+/*
+ * Two KY-040-style encoders on Lonely Binary N16R8.
+ * Display owns 4/8-11/16-18; touch (unused) 5/6/7/15.
+ *
+ * Thinking: CLK12 DT13 SW14
+ * Model:    CLK1  DT2  SW42
+ */
+static const int s_clk[ENCODER_COUNT] = {12, 1};
+static const int s_dt[ENCODER_COUNT] = {13, 2};
+static const int s_sw[ENCODER_COUNT] = {14, 42};
 
-static int s_last_clk;
-static int s_last_sw;
-static int64_t s_last_sw_us;
-static int s_sw_armed;
+static int s_last_clk[ENCODER_COUNT];
+static int s_last_sw[ENCODER_COUNT];
+static int64_t s_last_sw_us[ENCODER_COUNT];
+static int s_sw_armed[ENCODER_COUNT];
 
 esp_err_t encoder_init(void)
 {
+    uint64_t mask = 0;
+    for (int i = 0; i < ENCODER_COUNT; i++) {
+        mask |= (1ULL << s_clk[i]) | (1ULL << s_dt[i]) | (1ULL << s_sw[i]);
+    }
     gpio_config_t io = {
-        .pin_bit_mask = (1ULL << PIN_ENC_CLK) | (1ULL << PIN_ENC_DT) | (1ULL << PIN_ENC_SW),
+        .pin_bit_mask = mask,
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -26,40 +36,48 @@ esp_err_t encoder_init(void)
     if (err != ESP_OK) {
         return err;
     }
-    s_last_clk = gpio_get_level(PIN_ENC_CLK);
-    s_last_sw = gpio_get_level(PIN_ENC_SW);
-    s_sw_armed = 1;
+    for (int i = 0; i < ENCODER_COUNT; i++) {
+        s_last_clk[i] = gpio_get_level(s_clk[i]);
+        s_last_sw[i] = gpio_get_level(s_sw[i]);
+        s_sw_armed[i] = 1;
+        s_last_sw_us[i] = 0;
+    }
     return ESP_OK;
 }
 
-int encoder_delta(void)
+int encoder_delta(encoder_id_t id)
 {
-    int clk = gpio_get_level(PIN_ENC_CLK);
-    int dt = gpio_get_level(PIN_ENC_DT);
+    if (id < 0 || id >= ENCODER_COUNT) {
+        return 0;
+    }
+    int clk = gpio_get_level(s_clk[id]);
+    int dt = gpio_get_level(s_dt[id]);
     int delta = 0;
-    /* Count on CLK falling edge; DT high => CW (+), low => CCW (-). */
-    if (s_last_clk == 1 && clk == 0) {
+    if (s_last_clk[id] == 1 && clk == 0) {
         delta = (dt == 1) ? 1 : -1;
     }
-    s_last_clk = clk;
+    s_last_clk[id] = clk;
     return delta;
 }
 
-int encoder_button_pressed(void)
+int encoder_button_pressed(encoder_id_t id)
 {
-    int sw = gpio_get_level(PIN_ENC_SW); /* active low */
+    if (id < 0 || id >= ENCODER_COUNT) {
+        return 0;
+    }
+    int sw = gpio_get_level(s_sw[id]);
     int64_t now = esp_timer_get_time();
     int pressed = 0;
-    if (s_last_sw == 1 && sw == 0 && s_sw_armed) {
-        if (now - s_last_sw_us > 250000) { /* 250 ms debounce */
+    if (s_last_sw[id] == 1 && sw == 0 && s_sw_armed[id]) {
+        if (now - s_last_sw_us[id] > 250000) {
             pressed = 1;
-            s_last_sw_us = now;
-            s_sw_armed = 0;
+            s_last_sw_us[id] = now;
+            s_sw_armed[id] = 0;
         }
     }
     if (sw == 1) {
-        s_sw_armed = 1;
+        s_sw_armed[id] = 1;
     }
-    s_last_sw = sw;
+    s_last_sw[id] = sw;
     return pressed;
 }

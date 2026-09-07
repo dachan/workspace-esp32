@@ -42,7 +42,10 @@ Last inventory pass: 2026-09-06 (chatgpt-model-display flashed)
 - MCU: ESP32-S3 (QFN56) rev v0.2, embedded 8MB PSRAM (AP_3v3), 40MHz XTAL — Lonely Binary N16R8-class
 - MAC: 28:84:85:44:1b:5c
 - Display: **3.5" TFT SPI 480x320 v1 (ST7796U)** — pins MOSI 8, DC 9, RST 10, CS 11, MISO 16, BL 17, SCK 18; SD_CS 4 held high
-- Rotary encoder (thinking control): KY-040-style — **CLK GPIO12, DT GPIO13, SW GPIO14**, `+`→3V3, `GND`→GND. Rotate steps Instant→Medium→High→Extra High; click advances one step. Saved to NVS.
+- Rotary encoders (×2 KY-040-style), both `+`→3V3 / `GND`→GND:
+  - **Thinking** — CLK GPIO12, DT GPIO13, SW GPIO14 (Instant→Medium→High→Extra High; click = next)
+  - **Model** — CLK GPIO1, DT GPIO2, SW GPIO42 (cycles preset list; click = next)
+  - Changes persist in NVS
 - Touch: not used by this firmware (FT6336 may be present)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
 - Firmware currently on device: `chatgpt-model-display/` **v 0.17+**
