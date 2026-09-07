@@ -54,7 +54,7 @@ Last inventory pass: 2026-09-07 (chatgpt-model-display v0.53 flash)
       Gray-table, and PCNT decoding. Fix the wiring (DT on its own node,
       not shared with CLK) before touching the decode again. The thinking
       knob on GPIO41/40 shows independent counts, which is why it works.
-  - Panel/NVS update immediately; `SET MODEL` / `SET THINKING` wait 1 s after the last detent
+  - Panel/NVS update immediately; `SET MODEL` / `SET THINKING` wait 0.4 s after the last detent
   - Changes persist in NVS
   - Board pinout image: [`s3-n16r8.jpeg`](s3-n16r8.jpeg)
 - Touch: not used by this firmware (FT6336 may be present)
@@ -66,5 +66,5 @@ Last inventory pass: 2026-09-07 (chatgpt-model-display v0.53 flash)
   - Software 180 flush: ON via internal-RAM band blit + SPI transfer sync (v 0.22+)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → ChatGPT title at top of glass, MODEL left, version bottom-right
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
-- Last verified: 2026-09-07 — v0.53 flash; 0.4 s SET settle; bridge drains serial during key delays and supersedes in-flight applies; model picker is Ctrl+Shift+M then Down from Astra; thinking always absolute; model CLK/DT wiring fault still open (see above)
+- Last verified: 2026-09-07 — v0.53 reflash on `/dev/cu.usbmodem21201` (hash-verified); 0.4 s SET settle; model picker is Ctrl+Shift+M then Down from Astra; thinking always absolute; model CLK/DT wiring fault still open (see above)
 - Notes: edit+flash on Mac `~/Development/workspace-esp32`; push then pull Hetzner `/home/codex/workspace-esp32`
