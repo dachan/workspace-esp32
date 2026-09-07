@@ -128,11 +128,10 @@ static int apply_thinking_level(ui_state_t *ui, int level)
 
 /* Preset model names for the model encoder (desk UI). */
 static const char *s_models[] = {
-    "GPT-5.6 Luna",
+    "GPT-5.6 Terra",
+    "GPT-5.6",
+    "GPT-5.5 Codex",
     "GPT-5",
-    "GPT-4.5 Luna",
-    "GPT-4o",
-    "GPT-4o mini",
     "o3",
     "o4-mini",
 };
@@ -320,6 +319,8 @@ void app_main(void)
                 hold_rx_until = xTaskGetTickCount() + hold_rx_ticks;
                 ui_render(&ui);
                 last_paint = xTaskGetTickCount();
+            } else {
+                encoder_clear_partial(ENCODER_MODEL);
             }
         }
         if (encoder_button_pressed(ENCODER_MODEL)) {
