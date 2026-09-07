@@ -2,6 +2,8 @@
 import Foundation
 
 enum Switcher {
+    private static var interruptedPickers: Set<Int32> = []
+
     struct Result {
         var ok: Bool
         var path: String
@@ -17,13 +19,18 @@ enum Switcher {
         preferredBundleID: String?,
         pulse: (() -> Bool)? = nil
     ) -> Result {
-        guard DeskFront.isForeground(preferred: preferredBundleID) else {
+        guard let focus = FocusOperation(preferred: preferredBundleID) else {
             return Result(ok: false, path: "deferred", error: "ChatGPT is not focused")
+        }
+        let upstream = pulse
+        let pulse: () -> Bool = {
+            let superseded = upstream?() ?? false
+            return !focus.isCurrent || superseded
         }
         guard let index = Catalog.modelIndex(raw), let name = Catalog.modelName(raw) else {
             return Result(ok: false, path: "none", error: "unknown model \(raw)")
         }
-        if pulse?() == true {
+        if pulse() == true {
             return .superseded
         }
 
@@ -31,8 +38,16 @@ enum Switcher {
             "chatgpt-bridge: open model picker via Ctrl+Shift+M, Down \(index) to \(name)\n",
             stderr
         )
+        // Only dismiss a picker this helper may have left open in this process.
+        if interruptedPickers.contains(focus.pid) {
+            guard Keys.key(Keys.escape, pulse: pulse), Keys.wait(0.1, pulse: pulse) else {
+                return .superseded
+            }
+            interruptedPickers.remove(focus.pid)
+        }
+        interruptedPickers.insert(focus.pid)
         guard Keys.controlShift(Keys.m, pulse: pulse) else {
-            return pulse?() == true
+            return pulse() == true
                 ? .superseded
                 : Result(ok: false, path: "shortcut", error: "could not post Ctrl+Shift+M")
         }
@@ -45,7 +60,7 @@ enum Switcher {
 
         for _ in 0..<index {
             guard Keys.key(Keys.down, pulse: pulse) else {
-                return pulse?() == true
+                return pulse() == true
                     ? .superseded
                     : Result(ok: false, path: "picker", error: "could not move to \(name)")
             }
@@ -58,10 +73,11 @@ enum Switcher {
         }
 
         guard Keys.key(Keys.return, pulse: pulse) else {
-            return pulse?() == true
+            return pulse() == true
                 ? .superseded
                 : Result(ok: false, path: "picker", error: "could not confirm \(name)")
         }
+        interruptedPickers.remove(focus.pid)
         guard Keys.wait(0.15, pulse: pulse) else {
             return .superseded
         }
@@ -75,13 +91,18 @@ enum Switcher {
         preferredBundleID: String?,
         pulse: (() -> Bool)? = nil
     ) -> Result {
-        guard DeskFront.isForeground(preferred: preferredBundleID) else {
+        guard let focus = FocusOperation(preferred: preferredBundleID) else {
             return Result(ok: false, path: "deferred", error: "ChatGPT is not focused")
+        }
+        let upstream = pulse
+        let pulse: () -> Bool = {
+            let superseded = upstream?() ?? false
+            return !focus.isCurrent || superseded
         }
         guard let target = Catalog.thinkingIndex(raw), let name = Catalog.thinkingName(raw) else {
             return Result(ok: false, path: "none", error: "unknown thinking \(raw)")
         }
-        if pulse?() == true {
+        if pulse() == true {
             return .superseded
         }
 
@@ -91,12 +112,12 @@ enum Switcher {
         )
         // 3× decrease covers Extra High → Light.
         guard bump(delta: -3, pulse: pulse) else {
-            return pulse?() == true
+            return pulse() == true
                 ? .superseded
                 : Result(ok: false, path: "shortcut", error: "could not clamp reasoning to Light")
         }
         guard bump(delta: target, pulse: pulse) else {
-            return pulse?() == true
+            return pulse() == true
                 ? .superseded
                 : Result(ok: false, path: "shortcut", error: "could not set reasoning to \(name)")
         }

@@ -49,4 +49,35 @@ enum DeskFront {
         return "ChatGPT background (\(name))"
     }
 }
+/// Latches any activation away from the original process, even if focus returns
+/// before the next key delay finishes. Also guards one-shot commands.
+final class FocusOperation {
+    let pid: Int32
+    private var interrupted = false
+    private var observer: NSObjectProtocol?
+
+    init?(preferred: String?) {
+        guard let app = DeskFront.frontmost(), DeskFront.isTarget(app, preferred: preferred) else {
+            return nil
+        }
+        pid = app.processIdentifier
+        observer = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let self,
+                  let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            else { return }
+            if app.processIdentifier != self.pid { self.interrupted = true }
+        }
+    }
+
+    var isCurrent: Bool {
+        if DeskFront.frontmost()?.processIdentifier != pid { interrupted = true }
+        return !interrupted
+    }
+
+    deinit {
+        if let observer { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
+    }
+}
 #endif

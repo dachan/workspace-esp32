@@ -43,7 +43,9 @@ final class SerialSession {
     let port: String?
     let baud: Int
     private var fd: Int32 = -1
-    private var pending = ""
+    private var pending = Data()
+    private var reconnectAt = Date.distantPast
+    private var lastConnectionError: String?
 
     init(port: String?, baud: Int) {
         self.port = port
@@ -72,33 +74,61 @@ final class SerialSession {
             fd = -1
         }
         #endif
-        pending = ""
+        pending.removeAll()
     }
 
     func readLines() -> [String] {
         #if os(macOS)
-        guard fd >= 0 else { return [] }
+        if fd < 0 {
+            guard Date() >= reconnectAt else { return [] }
+            do {
+                try open()
+                lastConnectionError = nil
+                fputs("chatgpt-bridge: serial reconnected; listening for new SET lines\n", stderr)
+            } catch {
+                connectionFailed(String(describing: error))
+                return []
+            }
+        }
+        var readFailure: String?
         var chunk = [UInt8](repeating: 0, count: 256)
         while true {
             let n = Darwin.read(fd, &chunk, chunk.count)
-            if n <= 0 { break }
-            if let piece = String(bytes: chunk[0..<n], encoding: .utf8) {
-                pending += piece
+            if n < 0 {
+                let code = errno
+                if code == EINTR { continue }
+                if code != EAGAIN && code != EWOULDBLOCK {
+                    readFailure = "serial read failed (errno \(code))"
+                }
+                break
             }
+            if n == 0 {
+                readFailure = "serial disconnected"
+                break
+            }
+            pending.append(contentsOf: chunk[0..<n])
         }
         var lines: [String] = []
-        while let range = pending.range(of: "\n") {
-            let line = String(pending[..<range.lowerBound])
+        while let newline = pending.firstIndex(of: 10) {
+            let line = String(decoding: pending[..<newline], as: UTF8.self)
                 .trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
-            pending = String(pending[range.upperBound...])
-            if !line.isEmpty {
-                lines.append(line)
-            }
+            pending.removeSubrange(...newline)
+            if !line.isEmpty { lines.append(line) }
         }
+        if let readFailure { connectionFailed(readFailure) }
         return lines
         #else
         return []
         #endif
+    }
+
+    private func connectionFailed(_ message: String) {
+        close()
+        reconnectAt = Date().addingTimeInterval(2)
+        if message != lastConnectionError {
+            fputs("chatgpt-bridge: \(message); retrying configured port every 2 seconds\n", stderr)
+            lastConnectionError = message
+        }
     }
 
     #if os(macOS)
@@ -114,6 +144,10 @@ final class SerialSession {
         default: speed = speed_t(B115200)
         }
         cfmakeraw(&term)
+        withUnsafeMutableBytes(of: &term.c_cc) { controls in
+            controls[Int(VMIN)] = 1
+            controls[Int(VTIME)] = 0
+        }
         cfsetispeed(&term, speed)
         cfsetospeed(&term, speed)
         term.c_cflag |= tcflag_t(CLOCAL | CREAD)

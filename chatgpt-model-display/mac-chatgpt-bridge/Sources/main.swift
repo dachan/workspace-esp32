@@ -118,6 +118,7 @@ final class BridgeRuntime {
     var pendingModel: String?
     var pendingThinking: String?
     var lastFront: Bool?
+    var lastFrontPID: Int32?
     var retryAt = Date.distantPast
     var lastFailure: String?
     var session: SerialSession?
@@ -195,7 +196,7 @@ func applyPending(options: Options, runtime: BridgeRuntime) {
                 pulse: pulse
             )
             if result.error == "superseded" {
-                print("\(stamp()) superseded MODEL \(applying) → \(runtime.pendingModel ?? "?")")
+                print("\(stamp()) interrupted MODEL \(applying); queued → \(runtime.pendingModel ?? "?")")
                 fflush(stdout)
                 continue
             }
@@ -230,7 +231,7 @@ func applyPending(options: Options, runtime: BridgeRuntime) {
                 pulse: pulse
             )
             if result.error == "superseded" {
-                print("\(stamp()) superseded THINKING \(applying)")
+                print("\(stamp()) interrupted THINKING \(applying); setting remains queued")
                 fflush(stdout)
                 continue
             }
@@ -274,9 +275,11 @@ func drainSerial(options: Options, runtime: BridgeRuntime) {
 
 func noteFront(options: Options, runtime: BridgeRuntime) {
     let front = DeskFront.isForeground(preferred: options.bundleID)
-    if front != runtime.lastFront {
-        let becameFocused = front && runtime.lastFront == false
+    let pid = DeskFront.frontmost()?.processIdentifier
+    if front != runtime.lastFront || (front && pid != runtime.lastFrontPID) {
+        let becameFocused = front && (runtime.lastFront != true || pid != runtime.lastFrontPID)
         runtime.lastFront = front
+        runtime.lastFrontPID = pid
         print("\(stamp()) \(DeskFront.label(preferred: options.bundleID))")
         if becameFocused, runtime.pendingModel != nil || runtime.pendingThinking != nil {
             // ChatGPT just took focus — flush queued dial state with shortcuts.

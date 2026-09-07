@@ -21,6 +21,18 @@ queues the latest `SET MODEL` / `SET THINKING` line from the ESP32.
    of truth and apply the queued values when ChatGPT becomes frontmost.
    The helper never activates ChatGPT. Cursor is never a target.
 
+Shortcut sequences stay bound to the process that was focused when they began.
+Losing focus, including switching between ChatGPT and Codex, interrupts the
+sequence and retains the setting for retry. An interrupted model picker is
+dismissed with Escape before retrying in that process (an extra 0.1 seconds).
+Thinking retries start from the absolute Light clamp. “Applied” means the key
+sequence was posted; the helper does not read back the app's selected value.
+
+Serial read failures are logged and the configured port is retried every two
+seconds. Queued settings survive reconnection, but changes sent while the port
+was disconnected are not replayed by the firmware. If the device path changes,
+restart with the new `--port`.
+
 Dial models, in order:
 
 - GPT-6 Astra
