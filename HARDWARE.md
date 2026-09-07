@@ -59,7 +59,6 @@ Last inventory pass: 2026-09-07 (chatgpt-model-display v0.65 flash)
   - Board pinout image: [`s3-n16r8.jpeg`](s3-n16r8.jpeg)
 - Touch: FT6336 — SDA GPIO6, SCL GPIO15, reset GPIO7, INT GPIO5 (CANCEL tap; 5 s hold starts five-point calibration, NVS `touch`/`c35_desk`)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Pending source update (not flashed): model-specific Cursor effort ranges, including GPT None and unsupported Auto/Composer.
 - Firmware currently on device: `chatgpt-model-display/` **v 0.65**
 - Display settings (LOCKED — title-strip noise fix 2026-09-07):
   - Controller: ST7796U, 480×320 landscape, SPI 26 MHz, `invert_color(true)`, RGB
