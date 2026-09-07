@@ -55,7 +55,7 @@ int encoder_delta(encoder_id_t id)
     int dt = gpio_get_level(s_dt[id]);
     int delta = 0;
     if (s_last_clk[id] == 1 && clk == 0) {
-        delta = (dt == 1) ? 1 : -1;
+        delta = (dt == 1) ? -1 : 1; /* KY-040: match desk clockwise = increase */
     }
     s_last_clk[id] = clk;
     return delta;
