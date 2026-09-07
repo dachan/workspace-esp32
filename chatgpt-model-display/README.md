@@ -1,25 +1,24 @@
 # chatgpt-model-display
 
 ESP32-S3 firmware that always shows the current ChatGPT/Codex **model** and
-**thinking level** on the 2.8" ILI9341 panel used by `super-tamagotchi` /
-`radar-receiver`.
+**thinking level** on the desk-mounted 3.5" ST7796U panel.
 
 ## Protocol (USB serial, 115200)
 
-UTF-8 lines from `mac-chatgpt-bridge`:
+UTF-8 lines from `mac-chatgpt-bridge/` (in this folder):
 
 ```text
 MODEL <name>
 ```
 
 `<name>` is the Accessibility readback string. Thinking level is often already
-embedded (for example `GPT-5.6 Luna Extra High`). The firmware splits a trailing
+embedded (for example `GPT-5.6 Luna Light`). The firmware splits a trailing
 thinking token when present; otherwise it shows the full string as the model and
 `—` for thinking.
 
 On each `MODEL` line the firmware saves model/thinking to NVS (`cgpt`/`model`,`think`) and reloads that cache on boot so the panel is not stuck on Waiting when the bridge is quiet.
 
-Optional extension (overrides parsed thinking until the next `MODEL` line):
+The bridge also sends the current thinking level separately:
 
 ```text
 THINKING <level>
@@ -27,7 +26,7 @@ THINKING <level>
 
 ## Hardware
 
-Same SPI ILI9341V pinout as `super-tamagotchi/WIRING.md` / radar-receiver:
+3.5" ST7796U SPI panel:
 
 | Signal | GPIO |
 |---|---:|
@@ -61,7 +60,8 @@ chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
 ```
 
 Requires Accessibility (and Input Monitoring) for the launching Terminal.
-Model knob clamps GPT-5.6 Luna ↔ o4-mini; thinking clamps Instant ↔ Extra High.
+Model knob uses the current ChatGPT picker range (GPT-6 Astra through
+GPT-5.4 Mini); thinking clamps Light ↔ Extra High.
 
 ## Build / flash (Mac only)
 
@@ -76,7 +76,7 @@ idf.py -p /dev/cu.usbmodem21201 flash monitor
 ```
 
 Verify the port with `ls /dev/cu.usb*` or
-`swift run --package-path ../mac-chatgpt-bridge chatgpt-bridge --list-ports`
+`swift run --package-path ./mac-chatgpt-bridge chatgpt-bridge --list-ports`
 before flashing (paths can change).
 
 Two encoders on the **right** header (see repo `s3-n16r8.jpeg`): **thinking** (GPIO41/40/39) and **model** (GPIO1/2/42). Rotate or click to step; changes persist in NVS.
@@ -84,7 +84,7 @@ Two encoders on the **right** header (see repo `s3-n16r8.jpeg`): **thinking** (G
 ## Bridge watch → screen
 
 ```sh
-cd ~/Development/workspace-esp32/mac-chatgpt-bridge
+cd ~/Development/workspace-esp32/chatgpt-model-display/mac-chatgpt-bridge
 swift build -c release
 "$(swift build -c release --show-bin-path)/chatgpt-bridge" \
   --watch --interval 5 --send-serial --port /dev/cu.usbmodem21201

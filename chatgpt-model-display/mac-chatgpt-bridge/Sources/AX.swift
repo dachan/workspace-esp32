@@ -54,6 +54,7 @@ enum AXAction {
 }
 
 enum AXAttr {
+    static let size = kAXSizeAttribute as CFString
     static let children = kAXChildrenAttribute as CFString
     static let childrenInNavOrder = "AXChildrenInNavigationOrder" as CFString
     static let description = kAXDescriptionAttribute as CFString
@@ -125,6 +126,14 @@ enum AXNode {
         let axValue = unsafeBitCast(raw, to: AXValue.self)
         var point = CGPoint.zero
         return AXValueGetValue(axValue, .cgPoint, &point) ? point : nil
+    }
+
+    static func size(_ element: AXUIElement) -> CGSize? {
+        guard let raw = copy(element, AXAttr.size),
+              CFGetTypeID(raw) == AXValueGetTypeID() else { return nil }
+        var size = CGSize.zero
+        guard AXValueGetValue(raw as! AXValue, .cgSize, &size) else { return nil }
+        return size
     }
 
     static func role(_ element: AXUIElement) -> String {

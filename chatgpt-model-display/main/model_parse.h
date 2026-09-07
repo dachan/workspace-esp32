@@ -13,6 +13,7 @@ typedef struct {
 
 // Split an Accessibility-style model string into model + thinking.
 // Examples:
+//   "GPT-5.6 Luna Light"      -> model="GPT-5.6 Luna", thinking="Light"
 //   "GPT-5.6 Luna Extra High" -> model="GPT-5.6 Luna", thinking="Extra High"
 //   "Thinking"                -> model="Thinking", thinking="Thinking"
 //   "GPT-5 Instant"           -> model="GPT-5", thinking="Instant"

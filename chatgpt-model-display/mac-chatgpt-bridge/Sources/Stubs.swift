@@ -24,7 +24,7 @@ enum SerialBridge {
     }
 
     static func parseInbound(_ raw: String) -> SerialLine {
-        var line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty else { return .ignored }
         if line.hasPrefix("SET MODEL ") || line.hasPrefix("SET MODEL\t") {
             let value = String(line.dropFirst(10)).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -187,50 +187,63 @@ final class SerialSession {
 }
 
 enum HIDBridge {
-    static let chord = "Ctrl+Shift+M"
-    private static let keyM: UInt16 = 0x2E
-    private static let keyReturn: UInt16 = 0x24
-    private static let keyEscape: UInt16 = 0x35
+    static let keyM: UInt16 = 0x2E
+    static let keyEscape: UInt16 = 0x35
 
     static let summary = """
-    HID path (Mac helper)
-      chatgpt-bridge injects \(chord) to open ChatGPT's model picker,
-      then types the target name and presses Return.
-      Used when Accessibility cannot press a real control.
+    Keyboard path (Mac helper)
+      chatgpt-bridge opens ChatGPT's model picker with Control-Shift-M
+      and presses the matching Accessibility button.
+      Reasoning uses ChatGPT's Increase/Decrease Reasoning shortcuts.
 
     Notes
       - Accessibility must be granted to the launching terminal.
       - Keep the ChatGPT window focused; the helper activates it first.
-      - Confirm on device whether ChatGPT honors Control-Shift-M
-        versus Command-Shift-M if the picker does not open.
+      - Model switching may be unavailable while ChatGPT is responding.
     """
 
     static func printInfo() {
         print(summary)
     }
 
-    static func openPickerAndChoose(_ text: String) -> Bool {
+    static func postKeyRaw(_ code: UInt16, flags: CGEventFlags, down: Bool) -> Bool {
         #if os(macOS) && canImport(CoreGraphics)
-        let flags: CGEventFlags = [.maskControl, .maskShift]
-        guard postKey(keyM, flags: flags, down: true),
-              postKey(keyM, flags: flags, down: false)
-        else {
-            return false
+        return postKey(code, flags: flags, down: down)
+        #else
+        return false
+        #endif
+    }
+
+    static func openModelPicker() -> Bool {
+        #if os(macOS) && canImport(CoreGraphics)
+        fputs("chatgpt-bridge: open model picker via Ctrl+Shift+M\n", stderr)
+        return postKey(keyM, flags: [.maskControl, .maskShift], down: true)
+            && postKey(keyM, flags: [.maskControl, .maskShift], down: false)
+        #else
+        return false
+        #endif
+    }
+
+    // ChatGPT Settings > Keyboard Shortcuts (bind if Unassigned):
+    //   Increase reasoning effort = Ctrl+Shift+.
+    //   Decrease reasoning effort = Ctrl+Shift+,
+    static let keyPeriod: UInt16 = 0x2F
+    static let keyComma: UInt16 = 0x2B
+
+    static func bumpReasoning(delta: Int) -> Bool {
+        #if os(macOS) && canImport(CoreGraphics)
+        guard delta != 0 else { return true }
+        let code: UInt16 = delta > 0 ? keyPeriod : keyComma
+        let label = delta > 0 ? "." : ","
+        fputs("chatgpt-bridge: reasoning bump \(delta) via Ctrl+Shift+\(label)\n", stderr)
+        for _ in 0..<abs(delta) {
+            guard postKey(code, flags: [.maskControl, .maskShift], down: true),
+                  postKey(code, flags: [.maskControl, .maskShift], down: false)
+            else { return false }
+            Thread.sleep(forTimeInterval: 0.15)
         }
-        Thread.sleep(forTimeInterval: 0.35)
-        guard typeText(text) else { return false }
-        Thread.sleep(forTimeInterval: 0.12)
-        guard postKey(keyReturn, flags: [], down: true),
-              postKey(keyReturn, flags: [], down: false)
-        else {
-            return false
-        }
-        Thread.sleep(forTimeInterval: 0.2)
-        _ = postKey(keyEscape, flags: [], down: true)
-        _ = postKey(keyEscape, flags: [], down: false)
         return true
         #else
-        fputs("chatgpt-bridge: HID inject is macOS-only\n", stderr)
         return false
         #endif
     }
@@ -245,21 +258,6 @@ enum HIDBridge {
         return true
     }
 
-    private static func typeText(_ text: String) -> Bool {
-        for scalar in text.unicodeScalars {
-            var utf16 = Array(String(scalar).utf16)
-            guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true),
-                  let up = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false)
-            else {
-                return false
-            }
-            down.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
-            up.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
-        }
-        return !text.isEmpty
-    }
     #endif
 }
 

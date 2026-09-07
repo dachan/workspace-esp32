@@ -67,7 +67,7 @@ static void draw_wrapped(int x, int y, int max_w, const char *text, uint16_t fg,
 
 static int thinking_level(const char *thinking)
 {
-    /* Map ChatGPT thinking labels to 0..4 fill steps (matches app intensity). */
+    /* Map current and legacy ChatGPT thinking labels to 0..4 fill steps. */
     if (thinking == NULL || thinking[0] == '\0') {
         return 0;
     }
@@ -78,7 +78,7 @@ static int thinking_level(const char *thinking)
     }
     buf[n] = '\0';
 
-    if (strstr(buf, "extra high") || strstr(buf, "max")) {
+    if (strstr(buf, "heavy") || strstr(buf, "extra high") || strstr(buf, "max")) {
         return 4;
     }
     if (strstr(buf, "high") || strcmp(buf, "thinking") == 0 || strstr(buf, "advanced")) {
@@ -87,17 +87,18 @@ static int thinking_level(const char *thinking)
     if (strstr(buf, "medium") || strstr(buf, "standard") || strstr(buf, "auto")) {
         return 2;
     }
-    if (strstr(buf, "instant") || strstr(buf, "fast") || strstr(buf, "low")) {
+    if (strstr(buf, "light") || strstr(buf, "instant") || strstr(buf, "fast") || strstr(buf, "low")) {
         return 1;
     }
     return 2; /* unknown but present */
 }
 
+#define THINKING_LEVEL_COUNT 4
 
 static const char *thinking_name_for_level(int level)
 {
     switch (level) {
-    case 1: return "Instant";
+    case 1: return "Light";
     case 2: return "Medium";
     case 3: return "High";
     case 4: return "Extra High";
@@ -110,8 +111,8 @@ static int apply_thinking_level(ui_state_t *ui, int level)
     if (level < 1) {
         level = 1;
     }
-    if (level > 4) {
-        level = 4;
+    if (level > THINKING_LEVEL_COUNT) {
+        level = THINKING_LEVEL_COUNT;
     }
     const char *name = thinking_name_for_level(level);
     int same = ui->fields.has_thinking && strcmp(ui->fields.thinking, name) == 0;
@@ -128,12 +129,12 @@ static int apply_thinking_level(ui_state_t *ui, int level)
 
 /* Preset model names for the model encoder (desk UI). */
 static const char *s_models[] = {
+    "GPT-6 Astra",
+    "GPT-5.6 Sol",
     "GPT-5.6 Terra",
-    "GPT-5.6",
-    "GPT-5.5 Codex",
-    "GPT-5",
-    "o3",
-    "o4-mini",
+    "GPT-5.6 Luna",
+    "GPT-5.5",
+    "GPT-5.4 Mini",
 };
 static const int s_models_n = (int)(sizeof(s_models) / sizeof(s_models[0]));
 
@@ -153,17 +154,14 @@ static int model_index(const char *name)
 static int apply_model_delta(ui_state_t *ui, int delta)
 {
     int idx = model_index(ui->fields.has_model ? ui->fields.model : NULL);
-    if (idx < 0) {
-        idx = 0;
-    }
-    int next = idx + delta;
+    int next = idx < 0 ? 0 : idx + delta;
     if (next < 0) {
         next = 0;
     }
     if (next >= s_models_n) {
         next = s_models_n - 1;
     }
-    if (next == idx && ui->fields.has_model) {
+    if (idx >= 0 && next == idx && ui->fields.has_model) {
         return 0;
     }
     snprintf(ui->fields.model, sizeof(ui->fields.model), "%s", s_models[next]);
@@ -238,14 +236,14 @@ static void ui_render(const ui_state_t *ui)
 
     if (ui->waiting || !ui->fields.has_model) {
         font_draw_text(20, 82, "Waiting for bridge...", muted, card, 2);
-        draw_thinking_bar(bar_x, bar_y, bar_w, bar_h, 0, 4, track, bar_fill);
+        draw_thinking_bar(bar_x, bar_y, bar_w, bar_h, 0, THINKING_LEVEL_COUNT, track, bar_fill);
         font_draw_text(20, bar_y + bar_h + 8, "—", muted, card, 1);
     } else {
         int y_after = 82;
         draw_wrapped(20, 82, DISPLAY_WIDTH - 48, ui->fields.model, text, card, 2, &y_after);
         const char *thinking = ui->fields.has_thinking ? ui->fields.thinking : "—";
         const int level = ui->fields.has_thinking ? thinking_level(thinking) : 0;
-        draw_thinking_bar(bar_x, bar_y, bar_w, bar_h, level, 4, track, bar_fill);
+        draw_thinking_bar(bar_x, bar_y, bar_w, bar_h, level, THINKING_LEVEL_COUNT, track, bar_fill);
         font_draw_text(20, bar_y + bar_h + 8, thinking, text, card, 1);
     }
 
@@ -288,7 +286,7 @@ void app_main(void)
     const TickType_t hold_rx_ticks = pdMS_TO_TICKS(8000);
 
     while (1) {
-        int think_d = -encoder_delta(ENCODER_THINKING); /* DT sense opposite this encoder */
+        int think_d = encoder_delta(ENCODER_THINKING);
         if (think_d != 0) {
             int level = ui.fields.has_thinking ? thinking_level(ui.fields.thinking) : 2;
             if (level < 1) {
@@ -303,7 +301,8 @@ void app_main(void)
         }
         if (encoder_button_pressed(ENCODER_THINKING)) {
             int level = ui.fields.has_thinking ? thinking_level(ui.fields.thinking) : 0;
-            int next = level < 1 ? 1 : (level >= 4 ? 4 : level + 1);
+            int next = level < 1 ? 1
+                                 : (level >= THINKING_LEVEL_COUNT ? THINKING_LEVEL_COUNT : level + 1);
             if (apply_thinking_level(&ui, next)) {
                 serial_model_send_set_thinking(ui.fields.thinking);
                 hold_rx_until = xTaskGetTickCount() + hold_rx_ticks;

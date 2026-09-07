@@ -1,5 +1,4 @@
-# Lonely Binary ESP32-S3 N16R8 class board — same panel pinout as
-# super-tamagotchi / radar-receiver (2.8" ILI9341V).
+# Lonely Binary ESP32-S3 N16R8 class board with 3.5" ST7796U SPI panel.
 
 CONFIG_IDF_TARGET="esp32s3"
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y

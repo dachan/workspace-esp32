@@ -63,7 +63,7 @@ int encoder_delta(encoder_id_t id)
     int dt = gpio_get_level(s_dt[id]);
     int delta = 0;
     if (s_last_clk[id] == 1 && clk == 0) {
-        /* Desk-verified base sense (pre v0.26). Thinking is inverted in main. */
+        /* Desk-verified sense: clockwise increases both controls. */
         delta = (dt == 1) ? 1 : -1;
     }
     s_last_clk[id] = clk;

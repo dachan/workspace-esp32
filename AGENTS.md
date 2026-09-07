@@ -25,14 +25,14 @@ Hard lanes for this repo:
 - When the user asks to **flash**, use the **Mac workstation clone** and the
   connected serial device there. Do not flash from Hetzner.
 - Do not keep a separate standalone `mac-chatgpt-bridge` folder on the Mac;
-  use `mac-chatgpt-bridge/` inside this repo.
+  use `chatgpt-model-display/mac-chatgpt-bridge/` inside this repo.
 - Keep Mac and server on the same branch/commit after every change:
   edit on Mac → commit/push → pull on Hetzner codex (and flash from Mac when
   hardware work is requested).
 
 ## mac-chatgpt-bridge
 
-`mac-chatgpt-bridge/` is a macOS Accessibility CLI that reads the selected
+`chatgpt-model-display/mac-chatgpt-bridge/` is a macOS Accessibility CLI that reads the selected
 ChatGPT/Codex model and sends `MODEL <name>
 ` over USB serial (115200) when
 `--send-serial --port` is set. Watch mode (`--watch`) sends only on change. It
@@ -48,15 +48,16 @@ USB toward the bottom of the frame. UI must read upright in that pose
 Locked ST7796 settings in `chatgpt-model-display/main/display.c`:
 
 - `invert_color(true)`, RGB, SPI 26 MHz
-- `swap_xy(true)`, `mirror(true, true)` — MADCTL-only 180 for desk pose
-  (title top-left, version bottom-right). This is **not** the same as
+- `swap_xy(true)`, `mirror(true, true)` plus the internal-RAM soft-180 band
+  blit in `display_flush()` for desk pose (title top-left, version
+  bottom-right). This is **not** the same as
   `hardware-test` `DISPLAY_PROFILE_ST7796U_3_5` (`mirror(false, true)`).
-- **No** software framebuffer 180 / transpose. In-place PSRAM reverse
-  races SPI DMA and corrupts the title strip.
+- Never reverse the PSRAM framebuffer in place. That races SPI DMA and
+  corrupts the title strip.
 
 Do not flip only one MADCTL mirror to “fix” rotation (glyphs mirror). Do
-not add a software pixel reverse. Keep `HARDWARE.md` in sync when this
-changes.
+not remove the internal-RAM band blit without desk verification. Keep
+`HARDWARE.md` in sync when this changes.
 
 ## Hardware inventory (keep current)
 
@@ -124,7 +125,8 @@ chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
 ```
 
 Requires Accessibility (and Input Monitoring) for the launching Terminal.
-Model knob clamps GPT-5.6 Luna ↔ o4-mini; thinking clamps Instant ↔ Extra High.
+Model knob uses the current ChatGPT picker range (GPT-6 Astra through
+GPT-5.4 Mini); thinking clamps Light ↔ Extra High.
 
 ## Build and flash
 

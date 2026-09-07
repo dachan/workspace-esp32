@@ -17,12 +17,12 @@ Serial path:
 
 - USB serial line: `MODEL <name>\n` at 115200 (dry-run when `--port` is omitted;
   real open/write on macOS when `--port` is set)
-- `--watch` polls and sends only when the model string changes
+- `--watch` polls and sends when the model or thinking level changes
 - Last successful model is cached at `~/Library/Application Support/chatgpt-bridge/last-model.txt`; on AX failure the bridge prints `using cached model: …` and still `--send-serial`s that line when requested
-- Optional device-side `THINKING <level>\n` is documented in
-  `chatgpt-model-display/README.md` (bridge does not emit it yet; thinking is
-  usually already in the model name)
-- Later ESP32 USB-HID model picker: **Ctrl+Shift+M** (documented, not sent)
+- Thinking is split from titles such as `GPT-5.6 Luna Light` and sent as
+  `THINKING <level>\n`
+- Encoder `SET MODEL` / `SET THINKING` commands use ChatGPT's model-picker and
+  reasoning keyboard shortcuts
 
 ## Requirements
 
@@ -42,7 +42,7 @@ not the `chatgpt-bridge` binary itself.
 4. Confirm:
 
 ```sh
-cd mac-chatgpt-bridge
+cd chatgpt-model-display/mac-chatgpt-bridge
 swift run chatgpt-bridge --check-ax
 ```
 
@@ -60,7 +60,8 @@ chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
 ```
 
 Requires Accessibility (and Input Monitoring) for the launching Terminal.
-Model knob clamps GPT-5.6 Luna ↔ o4-mini; thinking clamps Instant ↔ Extra High.
+Model knob uses the current ChatGPT picker range (GPT-6 Astra through
+GPT-5.4 Mini); thinking clamps Light ↔ Extra High.
 
 ## Build and run
 
@@ -68,7 +69,7 @@ Model knob clamps GPT-5.6 Luna ↔ o4-mini; thinking clamps Instant ↔ Extra Hi
 The current ChatGPT/Codex UI nests the model `AXPopUpButton` deep in the web tree; defaults use `--max-depth 32` / `--max-nodes 8000`.
 
 ```sh
-cd mac-chatgpt-bridge
+cd chatgpt-model-display/mac-chatgpt-bridge
 swift build -c release
 "$(swift build -c release --show-bin-path)/chatgpt-bridge"
 ```
@@ -83,8 +84,7 @@ Open ChatGPT, pick a model, then run the CLI. Do not hide the main window.
 
 ### Verify readback
 
-1. In ChatGPT, select a distinctive model (for example `Thinking` or
-   `GPT-5.2 Instant`).
+1. In ChatGPT, select a distinctive model (for example `GPT-5.6 Luna Light`).
 2. Run:
 
 ```sh
@@ -168,18 +168,16 @@ swift run chatgpt-bridge --send-serial --port /dev/cu.usbmodemXXXX --baud 115200
 
 Default baud is 115200. This repo does not flash firmware.
 
-## HID stub
+## Keyboard control
 
-Later firmware: the ESP32-S3 enumerates as a USB keyboard and sends
-**Ctrl+Shift+M** to open ChatGPT's model picker. This helper never
-injects key events.
+The bridge applies encoder commands by activating ChatGPT. It opens the model
+picker with Control-Shift-M and presses the matching Accessibility button.
+Thinking uses the configured Increase/Decrease Reasoning shortcuts
+(Control-Shift-. / Control-Shift-,).
 
 ```sh
 swift run chatgpt-bridge --hid-info
 ```
-
-Confirm on hardware whether ChatGPT honors Control-Shift-M or
-Command-Shift-M; firmware can remap.
 
 ## Notes
 

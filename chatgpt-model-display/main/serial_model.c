@@ -61,8 +61,9 @@ static int handle_line(const char *line, model_fields_t *fields)
     }
 
     if (strncmp(line, "MODEL ", 6) == 0 || strncmp(line, "MODEL\t", 6) == 0) {
+        s_has_override = 0;
+        s_thinking_override[0] = '\0';
         model_parse_name(line + 6, fields);
-        apply_override(fields);
         ESP_LOGI(TAG, "MODEL raw='%s' -> model='%s' thinking='%s'",
                  line + 6, fields->model, fields->has_thinking ? fields->thinking : "-");
         return fields->has_model;

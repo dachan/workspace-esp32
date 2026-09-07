@@ -50,6 +50,13 @@ def format_version(major: int, minor: int) -> str:
     return f"{major}.{minor}"
 
 
+def write_text_if_changed(path: pathlib.Path, text: str) -> None:
+    if path.is_file() and path.read_text() == text:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
 def read_version() -> tuple[int, int]:
     if VERSION_PATH.is_file():
         return parse_version(VERSION_PATH.read_text())
@@ -65,8 +72,8 @@ def write_header(major: int, minor: int) -> None:
     ver = format_version(major, minor)
     # Monotonic-ish int for logs: major*1000 + minor
     build_int = major * 1000 + minor
-    HEADER_PATH.parent.mkdir(parents=True, exist_ok=True)
-    HEADER_PATH.write_text(
+    write_text_if_changed(
+        HEADER_PATH,
         "#pragma once\n"
         f"#define FIRMWARE_VERSION_MAJOR {major}\n"
         f"#define FIRMWARE_VERSION_MINOR {minor}\n"
@@ -84,17 +91,15 @@ def main() -> int:
         # First migration: if VERSION was just set to 0.10 and stamp missing,
         # callers may seed VERSION at 0.9 so first bump lands on 0.10.
         ver = format_version(major, minor)
-        VERSION_PATH.write_text(ver + "\n")
-        STAMP_PATH.parent.mkdir(parents=True, exist_ok=True)
-        STAMP_PATH.write_text(fp + "\n")
+        write_text_if_changed(VERSION_PATH, ver + "\n")
+        write_text_if_changed(STAMP_PATH, fp + "\n")
         print(f"bump_build: sources changed -> v {ver}")
     else:
         ver = format_version(major, minor)
-        VERSION_PATH.write_text(ver + "\n")
+        write_text_if_changed(VERSION_PATH, ver + "\n")
         print(f"bump_build: unchanged -> v {ver}")
     write_header(major, minor)
-    DIST.mkdir(parents=True, exist_ok=True)
-    (DIST / "CURRENT").write_text(format_version(major, minor) + "\n")
+    write_text_if_changed(DIST / "CURRENT", format_version(major, minor) + "\n")
     return 0
 
 

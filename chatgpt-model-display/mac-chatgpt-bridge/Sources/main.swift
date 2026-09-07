@@ -12,6 +12,8 @@ struct Options {
     var checkAX = false
     var help = false
     var watch = false
+    var setModel: String?
+    var setThinking: String?
     var listen = false
     var maxDepth = 32
     var maxNodes = 8_000
@@ -80,6 +82,18 @@ func parseOptions(_ args: [String]) -> Options? {
             options.bundleID = value
         case "--watch":
             options.watch = true
+        case "--set-model":
+            guard let value = takeValue() else {
+                fputs("chatgpt-bridge: --set-model needs a name\n", stderr)
+                return nil
+            }
+            options.setModel = value
+        case "--set-thinking":
+            guard let value = takeValue() else {
+                fputs("chatgpt-bridge: --set-thinking needs a level\n", stderr)
+                return nil
+            }
+            options.setThinking = value
         case "--listen":
             options.listen = true
         case "--interval":
@@ -114,9 +128,11 @@ func usage() -> String {
       --port PATH         USB serial device
       --baud N            Serial baud (default 115200)
       --bundle-id ID      Force com.openai.chat or com.openai.codex
-      --hid-info          Document the Ctrl+Shift+M HID path
+      --hid-info          Describe the keyboard control path
       --check-ax          Check Accessibility permission and exit
       --watch             Poll the selected model until interrupted
+      --set-model NAME    One-shot: choose NAME from the model picker
+      --set-thinking LVL  One-shot: set the thinking level
       --listen            Read SET MODEL / SET THINKING from --port and apply
                           them in ChatGPT (implied by --watch --port)
       --interval SEC      Watch poll interval in seconds (default 5)
@@ -184,6 +200,27 @@ func run() -> Int32 {
         return 2
     }
 
+    if let name = options.setModel {
+        let app = ChatGPTProcess.find(preferredBundleID: options.bundleID)
+        let result = ChatGPTApply.model(name, app: app, maxDepth: options.maxDepth, maxNodes: options.maxNodes)
+        if result.ok {
+            print("applied model \(name) via \(result.path)")
+            return 0
+        }
+        fputs("chatgpt-bridge: \(result.error ?? "set-model failed")\n", stderr)
+        return 1
+    }
+    if let level = options.setThinking {
+        let app = ChatGPTProcess.find(preferredBundleID: options.bundleID)
+        let result = ChatGPTApply.thinking(level, app: app, maxDepth: options.maxDepth, maxNodes: options.maxNodes)
+        if result.ok {
+            print("applied thinking \(level) via \(result.path)")
+            return 0
+        }
+        fputs("chatgpt-bridge: \(result.error ?? "set-thinking failed")\n", stderr)
+        return 1
+    }
+
     let app = ChatGPTProcess.find(preferredBundleID: options.bundleID)
     if app == nil {
         let hint = options.bundleID ?? ChatGPTProcess.knownBundleIDs.joined(separator: " or ")
@@ -240,11 +277,18 @@ final class BridgeRuntime {
     var suppressSerialUntil = Date.distantPast
     var ignoreModel: String?
     var ignoreThinking: String?
+    var pendingSerialSync = false
     var session: SerialSession?
 }
 
 func thinkingFrom(_ model: String) -> String? {
     ThinkingText.canonical(model)
+}
+
+/// Strip a trailing current or legacy thinking token from a Codex chip title.
+func modelBaseName(_ model: String) -> String {
+    let base = ThinkingText.stripSuffix(model)
+    return base.isEmpty ? model : base
 }
 
 func sendSerialModel(
@@ -254,9 +298,11 @@ func sendSerialModel(
     session: SerialSession?
 ) -> Bool {
     do {
+        let base = modelBaseName(model)
+        let think = thinking ?? thinkingFrom(model)
         try SerialBridge.send(
-            model: model,
-            thinking: thinking,
+            model: base,
+            thinking: think,
             port: options.port,
             baud: options.baud,
             echoLine: !options.json,
@@ -287,7 +333,12 @@ func emitOnce(options: Options, app: NSRunningApplication?) -> Int32 {
     }
 
     if readback.ok, let model = readback.model {
-        ModelCache.save(model)
+        let base = modelBaseName(model)
+        let thinking = thinkingFrom(model)
+        ModelCache.save(base)
+        if let thinking {
+            ModelCache.saveThinking(thinking)
+        }
         if options.json {
             printJSON(readback)
         } else {
@@ -295,8 +346,8 @@ func emitOnce(options: Options, app: NSRunningApplication?) -> Int32 {
         }
         if options.sendSerial {
             return sendSerialModel(
-                model: model,
-                thinking: thinkingFrom(model) ?? ModelCache.loadThinking(),
+                model: base,
+                thinking: thinking,
                 options: options,
                 session: nil
             ) ? 0 : 1
@@ -351,22 +402,26 @@ func emitChange(
     fromCache: Bool = false
 ) -> Bool {
     var model: String?
+    var thinking: String?
     let sourceOverride: String?
     if readback.ok, let live = readback.model {
         model = live
+        thinking = thinkingFrom(live)
         sourceOverride = nil
     } else if let cached = ModelCache.load() {
         if !fromCache {
             fputs("chatgpt-bridge: using cached model: \(cached)\n", stderr)
         }
         model = cached
+        thinking = thinkingFrom(cached) ?? ModelCache.loadThinking()
         sourceOverride = "disk-cache"
     } else {
         model = nil
+        thinking = nil
         sourceOverride = nil
     }
 
-    var thinking = model.flatMap { thinkingFrom($0) } ?? ModelCache.loadThinking()
+    model = model.map(modelBaseName)
     if let ignore = runtime.ignoreModel, model == ignore {
         fputs("chatgpt-bridge: ignore stale AX model after encoder SET\n", stderr)
         model = runtime.previousModel
@@ -386,45 +441,55 @@ func emitChange(
     }
     let modelChanged = model != runtime.previousModel
     let thinkingChanged = thinking != runtime.previousThinking
-    guard modelChanged || thinkingChanged else {
+    let stateChanged = modelChanged || thinkingChanged
+    let now = Date()
+    let canFlushPending = options.sendSerial
+        && runtime.pendingSerialSync
+        && now >= runtime.suppressSerialUntil
+        && model != nil
+    guard stateChanged || canFlushPending else {
         return false
     }
-    runtime.previousModel = model
-    runtime.previousThinking = thinking
 
-    if options.json {
-        if let model, let sourceOverride {
-            var cachedReadback = readback
-            cachedReadback.ok = true
-            cachedReadback.model = model
-            cachedReadback.source = sourceOverride
-            printJSON(cachedReadback)
+    if stateChanged {
+        runtime.previousModel = model
+        runtime.previousThinking = thinking
+
+        if options.json {
+            if let model, let sourceOverride {
+                var cachedReadback = readback
+                cachedReadback.ok = true
+                cachedReadback.model = model
+                cachedReadback.source = sourceOverride
+                printJSON(cachedReadback)
+            } else {
+                printJSON(readback)
+            }
+        } else if let model {
+            let stamp = ISO8601DateFormatter().string(from: now)
+            print("\(stamp) model: \(model)")
+            if let thinking {
+                print("thinking: \(thinking)")
+            }
+            if let sourceOverride {
+                print("source: \(sourceOverride)")
+            } else if let source = readback.source {
+                print("source: \(source)")
+            }
         } else {
-            printJSON(readback)
+            let stamp = ISO8601DateFormatter().string(from: now)
+            fputs("\(stamp) chatgpt-bridge: \(readback.error ?? "model not found")\n", stderr)
         }
-    } else if let model {
-        let stamp = ISO8601DateFormatter().string(from: Date())
-        print("\(stamp) model: \(model)")
-        if let thinking {
-            print("thinking: \(thinking)")
-        }
-        if let sourceOverride {
-            print("source: \(sourceOverride)")
-        } else if let source = readback.source {
-            print("source: \(source)")
-        }
-    } else {
-        let stamp = ISO8601DateFormatter().string(from: Date())
-        fputs("\(stamp) chatgpt-bridge: \(readback.error ?? "model not found")\n", stderr)
+        fflush(stdout)
+        fflush(stderr)
     }
-    fflush(stdout)
-    fflush(stderr)
 
     if options.sendSerial, let model {
-        if Date() < runtime.suppressSerialUntil {
+        if now < runtime.suppressSerialUntil {
+            runtime.pendingSerialSync = true
             fputs("serial hold after encoder SET; skip MODEL/THINKING echo\n", stderr)
         } else {
-            _ = sendSerialModel(
+            runtime.pendingSerialSync = !sendSerialModel(
                 model: model,
                 thinking: thinking,
                 options: options,
@@ -432,7 +497,7 @@ func emitChange(
             )
         }
     }
-    return true
+    return stateChanged || canFlushPending
 }
 
 func applyEncoderSet(
@@ -445,6 +510,8 @@ func applyEncoderSet(
     case .ignored:
         return
     case .setModel(let name):
+        runtime.suppressSerialUntil = Date().addingTimeInterval(8)
+        runtime.pendingSerialSync = true
         runtime.ignoreModel = runtime.previousModel
         let result = ChatGPTApply.model(
             name,
@@ -452,18 +519,20 @@ func applyEncoderSet(
             maxDepth: options.maxDepth,
             maxNodes: options.maxNodes
         )
-        runtime.suppressSerialUntil = Date().addingTimeInterval(8)
-        runtime.previousModel = name
         if result.ok {
-            ModelCache.save(name)
+            runtime.previousModel = modelBaseName(name)
+            ModelCache.save(runtime.previousModel ?? name)
             let stamp = ISO8601DateFormatter().string(from: Date())
             print("\(stamp) applied SET MODEL \(name) via \(result.path)")
         } else {
+            runtime.ignoreModel = nil
             fputs("chatgpt-bridge: \(result.error ?? "SET MODEL failed")\n", stderr)
         }
         fflush(stdout)
         fflush(stderr)
     case .setThinking(let level):
+        runtime.suppressSerialUntil = Date().addingTimeInterval(8)
+        runtime.pendingSerialSync = true
         runtime.ignoreThinking = runtime.previousThinking
         let result = ChatGPTApply.thinking(
             level,
@@ -471,13 +540,13 @@ func applyEncoderSet(
             maxDepth: options.maxDepth,
             maxNodes: options.maxNodes
         )
-        runtime.suppressSerialUntil = Date().addingTimeInterval(8)
-        runtime.previousThinking = ThinkingText.canonical(level) ?? level
         if result.ok {
+            runtime.previousThinking = ThinkingText.canonical(level) ?? level
             ModelCache.saveThinking(runtime.previousThinking ?? level)
             let stamp = ISO8601DateFormatter().string(from: Date())
             print("\(stamp) applied SET THINKING \(level) via \(result.path)")
         } else {
+            runtime.ignoreThinking = nil
             fputs("chatgpt-bridge: \(result.error ?? "SET THINKING failed")\n", stderr)
         }
         fflush(stdout)

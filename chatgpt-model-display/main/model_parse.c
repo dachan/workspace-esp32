@@ -34,6 +34,8 @@ static int streq_ci(const char *a, const char *b)
 static int is_thinking_token(const char *tok)
 {
     static const char *k_tokens[] = {
+        "Light",
+        "Heavy",
         "Instant",
         "Fast",
         "Thinking",
