@@ -48,13 +48,15 @@ USB toward the bottom of the frame. UI must read upright in that pose
 Locked ST7796 settings in `chatgpt-model-display/main/display.c`:
 
 - `invert_color(true)`, RGB, SPI 26 MHz
-- `swap_xy(true)`, `mirror(true, true)` — same MADCTL as
-  `hardware-test` `DISPLAY_PROFILE_ST7796U_3_5`
-- **No** software framebuffer 180 / transpose
+- `swap_xy(true)`, `mirror(true, true)` — MADCTL-only 180 for desk pose
+  (title top-left, version bottom-right). This is **not** the same as
+  `hardware-test` `DISPLAY_PROFILE_ST7796U_3_5` (`mirror(false, true)`).
+- **No** software framebuffer 180 / transpose. In-place PSRAM reverse
+  races SPI DMA and corrupts the title strip.
 
-Do not flip MADCTL mirrors to “fix” rotation (glyphs mirror). Do not add a
-software pixel reverse (that put the glass upside-down relative to the desk).
-Keep `HARDWARE.md` in sync when this changes.
+Do not flip only one MADCTL mirror to “fix” rotation (glyphs mirror). Do
+not add a software pixel reverse. Keep `HARDWARE.md` in sync when this
+changes.
 
 ## Hardware inventory (keep current)
 
