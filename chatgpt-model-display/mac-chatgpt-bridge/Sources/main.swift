@@ -283,6 +283,10 @@ final class BridgeRuntime {
     var suppressSerialUntil = Date.distantPast
     var ignoreModel: String?
     var ignoreThinking: String?
+    var pendingModel: String?
+    var pendingThinking: String?
+    var pendingControlRetry = Date.distantPast
+    var lastPendingFailure: String?
     var pendingSerialSync = false
     var session: SerialSession?
 }
@@ -431,13 +435,21 @@ func emitChange(
 
     model = model.map(modelBaseName)
     if let ignore = runtime.ignoreModel, model == ignore {
-        fputs("chatgpt-bridge: ignore stale AX model after encoder SET\n", stderr)
-        model = runtime.previousModel
+        if model == runtime.previousModel {
+            runtime.ignoreModel = nil
+        } else {
+            fputs("chatgpt-bridge: ignore stale AX model after encoder SET\n", stderr)
+            model = runtime.previousModel
+        }
     } else if model == runtime.previousModel {
         runtime.ignoreModel = nil
     }
     if let ignore = runtime.ignoreThinking, thinking == ignore {
-        thinking = runtime.previousThinking
+        if thinking == runtime.previousThinking {
+            runtime.ignoreThinking = nil
+        } else {
+            thinking = runtime.previousThinking
+        }
     } else if thinking == runtime.previousThinking {
         runtime.ignoreThinking = nil
     }
@@ -454,6 +466,8 @@ func emitChange(
     let canFlushPending = options.sendSerial
         && runtime.pendingSerialSync
         && now >= runtime.suppressSerialUntil
+        && runtime.pendingModel == nil
+        && runtime.pendingThinking == nil
         && model != nil
     guard stateChanged || canFlushPending else {
         return false
@@ -492,7 +506,10 @@ func emitChange(
         fflush(stderr)
     }
 
-    if options.sendSerial, let model {
+    if options.sendSerial,
+       runtime.pendingModel == nil,
+       runtime.pendingThinking == nil,
+       let model {
         if now < runtime.suppressSerialUntil {
             runtime.pendingSerialSync = true
             fputs("serial hold after encoder SET; skip MODEL/THINKING echo\n", stderr)
@@ -508,19 +525,19 @@ func emitChange(
     return stateChanged || canFlushPending
 }
 
-func applyEncoderSet(
-    line: SerialLine,
+func applyPendingEncoderSets(
     options: Options,
     app: NSRunningApplication?,
     runtime: BridgeRuntime
 ) {
-    switch line {
-    case .ignored:
-        return
-    case .setModel(let name):
-        runtime.suppressSerialUntil = Date().addingTimeInterval(8)
-        runtime.pendingSerialSync = true
-        runtime.ignoreModel = runtime.previousModel
+    guard let app, app.isActive else { return }
+    guard runtime.pendingModel != nil || runtime.pendingThinking != nil else { return }
+    let now = Date()
+    guard now >= runtime.pendingControlRetry else { return }
+
+    var failure: String?
+    if let name = runtime.pendingModel {
+        let previous = runtime.previousModel
         let result = ChatGPTApply.model(
             name,
             app: app,
@@ -528,20 +545,20 @@ func applyEncoderSet(
             maxNodes: options.maxNodes
         )
         if result.ok {
+            runtime.ignoreModel = previous
             runtime.previousModel = modelBaseName(name)
+            runtime.pendingModel = nil
             ModelCache.save(runtime.previousModel ?? name)
-            let stamp = ISO8601DateFormatter().string(from: Date())
-            print("\(stamp) applied SET MODEL \(name) via \(result.path)")
+            print(
+                "\(ISO8601DateFormatter().string(from: Date())) applied queued MODEL \(name) via \(result.path)"
+            )
         } else {
-            runtime.ignoreModel = nil
-            fputs("chatgpt-bridge: \(result.error ?? "SET MODEL failed")\n", stderr)
+            failure = result.error ?? "SET MODEL failed"
         }
-        fflush(stdout)
-        fflush(stderr)
-    case .setThinking(let level):
-        runtime.suppressSerialUntil = Date().addingTimeInterval(8)
-        runtime.pendingSerialSync = true
-        runtime.ignoreThinking = runtime.previousThinking
+    }
+
+    if failure == nil, let level = runtime.pendingThinking {
+        let previous = runtime.previousThinking
         let result = ChatGPTApply.thinking(
             level,
             app: app,
@@ -549,27 +566,65 @@ func applyEncoderSet(
             maxNodes: options.maxNodes
         )
         if result.ok {
+            runtime.ignoreThinking = previous
             runtime.previousThinking = ThinkingText.canonical(level) ?? level
+            runtime.pendingThinking = nil
             ModelCache.saveThinking(runtime.previousThinking ?? level)
-            let stamp = ISO8601DateFormatter().string(from: Date())
-            print("\(stamp) applied SET THINKING \(level) via \(result.path)")
+            print(
+                "\(ISO8601DateFormatter().string(from: Date())) applied queued THINKING \(level) via \(result.path)"
+            )
         } else {
-            runtime.ignoreThinking = nil
-            fputs("chatgpt-bridge: \(result.error ?? "SET THINKING failed")\n", stderr)
+            failure = result.error ?? "SET THINKING failed"
         }
-        fflush(stdout)
-        fflush(stderr)
     }
+
+    if let failure {
+        if failure != runtime.lastPendingFailure {
+            fputs("chatgpt-bridge: \(failure); setting remains queued\n", stderr)
+        }
+        runtime.lastPendingFailure = failure
+        runtime.pendingControlRetry = Date().addingTimeInterval(3)
+    } else {
+        runtime.lastPendingFailure = nil
+        runtime.pendingControlRetry = .distantPast
+        runtime.suppressSerialUntil = Date().addingTimeInterval(8)
+        runtime.pendingSerialSync = true
+    }
+    fflush(stdout)
+    fflush(stderr)
 }
 
-func drainSerial(options: Options, app: NSRunningApplication?, runtime: BridgeRuntime) {
+func queueEncoderSet(line: SerialLine, runtime: BridgeRuntime, appIsActive: Bool) {
+    switch line {
+    case .ignored:
+        return
+    case .setModel(let name):
+        runtime.pendingModel = modelBaseName(name)
+        runtime.pendingSerialSync = true
+        runtime.pendingControlRetry = .distantPast
+        runtime.lastPendingFailure = nil
+        if !appIsActive {
+            print("queued MODEL \(name) until ChatGPT is focused")
+        }
+    case .setThinking(let level):
+        runtime.pendingThinking = ThinkingText.canonical(level) ?? level
+        runtime.pendingSerialSync = true
+        runtime.pendingControlRetry = .distantPast
+        runtime.lastPendingFailure = nil
+        if !appIsActive {
+            print("queued THINKING \(level) until ChatGPT is focused")
+        }
+    }
+    fflush(stdout)
+}
+
+func drainSerial(app: NSRunningApplication?, runtime: BridgeRuntime) {
     guard let session = runtime.session else { return }
     for raw in session.readLines() {
-        applyEncoderSet(
+        queueEncoderSet(
             line: SerialBridge.parseInbound(raw),
-            options: options,
-            app: app,
-            runtime: runtime
+            runtime: runtime,
+            appIsActive: app?.isActive == true
         )
     }
 }
@@ -613,7 +668,8 @@ func runWatch(options: Options, initialApp: NSRunningApplication?) -> Int32 {
         if let found = ChatGPTProcess.find(preferredBundleID: options.bundleID) {
             app = found
         }
-        drainSerial(options: options, app: app, runtime: runtime)
+        drainSerial(app: app, runtime: runtime)
+        applyPendingEncoderSets(options: options, app: app, runtime: runtime)
 
         let now = Date()
         if now.timeIntervalSince(lastAX) >= options.intervalSeconds {

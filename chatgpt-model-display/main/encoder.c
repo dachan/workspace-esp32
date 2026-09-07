@@ -23,8 +23,8 @@ static int s_last_sw[ENCODER_COUNT];
 static int64_t s_last_sw_us[ENCODER_COUNT];
 static int s_sw_armed[ENCODER_COUNT];
 
-#define MIN_STEP_US 2000
-#define DIR_LOCK_US 40000
+#define MIN_STEP_US 50000
+#define DIR_LOCK_US 100000
 
 esp_err_t encoder_init(void)
 {

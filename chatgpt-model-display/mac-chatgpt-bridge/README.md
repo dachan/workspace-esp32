@@ -63,8 +63,11 @@ chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
 
 Requires Accessibility for the launching app. Input Monitoring is needed only
 when the keyboard-shortcut fallback is used.
-Model knob uses the current ChatGPT picker range (GPT-6 Astra through
+Model knob clamps to the current ChatGPT picker range (GPT-6 Astra through
 GPT-5.4 Mini); thinking clamps Light ↔ Extra High.
+When ChatGPT is not focused, encoder changes stay on the ESP32 display/NVS and
+the bridge queues them without activating ChatGPT. It applies the latest queued
+model and thinking level after ChatGPT returns to the foreground.
 
 ## Build and run
 

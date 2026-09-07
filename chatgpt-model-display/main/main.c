@@ -311,7 +311,8 @@ void app_main(void)
             }
         }
 
-        int model_d = encoder_delta(ENCODER_MODEL);
+        /* The model encoder is mounted opposite the thinking encoder. */
+        int model_d = -encoder_delta(ENCODER_MODEL);
         if (model_d != 0) {
             if (apply_model_delta(&ui, model_d)) {
                 serial_model_send_set_model(ui.fields.model);

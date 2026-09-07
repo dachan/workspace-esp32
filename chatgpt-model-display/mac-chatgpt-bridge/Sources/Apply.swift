@@ -23,8 +23,9 @@ enum ChatGPTApply {
         guard let app else {
             return Result(ok: false, path: "none", error: "ChatGPT not running")
         }
-        app.activate(options: [])
-        Thread.sleep(forTimeInterval: 0.35)
+        guard app.isActive else {
+            return Result(ok: false, path: "deferred", error: "ChatGPT is not focused")
+        }
         dismissMenus()
 
         let base = ThinkingText.stripSuffix(target)
@@ -65,11 +66,17 @@ enum ChatGPTApply {
         if let chip = ModelChip.find(app: app, maxDepth: maxDepth, maxNodes: maxNodes),
            AXAction.press(chip.element) {
             Thread.sleep(forTimeInterval: 0.65)
-            return "model control \(chip.path)"
+            if ModelPicker.isOpen(app: app, maxDepth: maxDepth, maxNodes: maxNodes) {
+                return "model control \(chip.path)"
+            }
+            dismissMenus()
         }
         if HIDBridge.openModelPicker() {
             Thread.sleep(forTimeInterval: 0.8)
-            return "model shortcut"
+            if ModelPicker.isOpen(app: app, maxDepth: maxDepth, maxNodes: maxNodes) {
+                return "model shortcut"
+            }
+            dismissMenus()
         }
         return nil
     }
@@ -88,8 +95,9 @@ enum ChatGPTApply {
         guard let app else {
             return Result(ok: false, path: "none", error: "ChatGPT not running")
         }
-        app.activate(options: [])
-        Thread.sleep(forTimeInterval: 0.35)
+        guard app.isActive else {
+            return Result(ok: false, path: "deferred", error: "ChatGPT is not focused")
+        }
         dismissMenus()
 
         let current = ThinkingControl.current(
@@ -149,6 +157,28 @@ enum ChatGPTApply {
 }
 
 enum ModelPicker {
+    static func isOpen(
+        app: NSRunningApplication,
+        maxDepth: Int,
+        maxNodes: Int
+    ) -> Bool {
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+        let modelButtons = AXWalk.hits(
+            of: axApp,
+            prefix: "app",
+            maxDepth: max(maxDepth, 64),
+            maxNodes: max(maxNodes, 16_000)
+        ).filter { hit in
+            guard AXAction.isPressableRole(hit.snap.role) else { return false }
+            return hit.snap.labels.contains { label in
+                label.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                    .hasPrefix("gpt-")
+            }
+        }
+        return modelButtons.count >= 2
+    }
+
     static func select(
         _ model: String,
         app: NSRunningApplication,

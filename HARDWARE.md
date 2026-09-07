@@ -44,17 +44,17 @@ Last inventory pass: 2026-09-06 (chatgpt-model-display v0.31 flash)
 - Display: **3.5" TFT SPI 480x320 v1 (ST7796U)** — pins MOSI 8, DC 9, RST 10, CS 11, MISO 16, BL 17, SCK 18; SD_CS 4 held high
 - Rotary encoders (×2 KY-040-style) on the **RIGHT** header of `s3-n16r8.jpeg` (left header is display SPI). Both `+`→3V3 / `GND`→GND (right-side GND pins OK):
   - **Thinking** — CLK GPIO41, DT GPIO40, SW GPIO39 (Light→Medium→High→Extra High; click = next)
-  - **Model** — CLK GPIO1, DT GPIO2, SW GPIO42 (GPT-6 Astra through GPT-5.4 Mini; click = next)
+  - **Model** — CLK GPIO1, DT GPIO2, SW GPIO42 (one model per detent; clamps at GPT-6 Astra / GPT-5.4 Mini; click = next)
   - Changes persist in NVS
   - Board pinout image: [`s3-n16r8.jpeg`](s3-n16r8.jpeg)
 - Touch: not used by this firmware (FT6336 may be present)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Firmware currently on device: `chatgpt-model-display/` **v 0.31**
+- Firmware currently on device: `chatgpt-model-display/` **v 0.34**
 - Display settings (LOCKED — title-strip noise fix 2026-09-07):
   - Controller: ST7796U, 480×320 landscape, SPI 26 MHz, `invert_color(true)`, RGB
   - MADCTL: `swap_xy(true)`, `mirror(true, true)` — desk 180 in hardware; do not flip only one mirror (glyphs)
   - Software 180 flush: ON via internal-RAM band blit + SPI transfer sync (v 0.22+)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → ChatGPT title at top of glass, MODEL left, version bottom-right
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
-- Last verified: 2026-09-06 — v0.31 bootloader, partition table, and application image hash-verified after flash; display band blit retained
+- Last verified: 2026-09-06 — v0.34 bootloader, partition table, and application image hash-verified after flash; display band blit retained
 - Notes: edit+flash on Mac `~/Development/workspace-esp32`; push then pull Hetzner `/home/codex/workspace-esp32`
