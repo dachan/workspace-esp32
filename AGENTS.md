@@ -79,7 +79,7 @@ Record per board (one section each):
 - MCU / module and display (size, controller) plus touch if present
 - Sensors / peripherals and non-obvious wiring (point at project WIRING.md when detailed)
 - Firmware currently expected on the device (app path + role)
-- Mac USB serial identity when known () — do not commit secrets; device paths are OK
+- Mac USB serial identity when known (e.g. `/dev/cu.usbmodem…`) — do not commit secrets; device paths are OK
 - Last verified date
 
 Do not invent boards. If unknown, mark **unknown** and fill in when discovered.

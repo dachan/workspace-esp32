@@ -11,8 +11,9 @@ a portable virtual pet.
 - `rainbow-wave/` — standalone eight-pixel WS2812B firmware.
 - `super-tamagotchi/` — portable ESP32-S3 virtual-pet firmware, including the
   native creature simulator and the display, touch, and audio drivers.
-- `chatgpt-model-display/mac-chatgpt-bridge/` — macOS helper that reads the ChatGPT desktop model
-  via Accessibility and later sends it to an ESP32-S3 over USB serial.
+- `chatgpt-model-display/` — ESP32-S3 desk panel (ST7796) for ChatGPT model/thinking, plus
+  `chatgpt-model-display/mac-chatgpt-bridge/` macOS CLI that applies encoder `SET` lines over USB
+  serial while ChatGPT is focused (`--watch --send-serial`).
 
 ## Wiring
 
