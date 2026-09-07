@@ -48,7 +48,7 @@ USB toward the bottom of the frame. UI must read upright in that pose
 Locked ST7796 settings in `chatgpt-model-display/main/display.c`:
 
 - `invert_color(true)`, RGB, SPI 26 MHz
-- `swap_xy(true)`, `mirror(false, false)` — same MADCTL as
+- `swap_xy(true)`, `mirror(true, true)` — same MADCTL as
   `hardware-test` `DISPLAY_PROFILE_ST7796U_3_5`
 - **No** software framebuffer 180 / transpose
 
