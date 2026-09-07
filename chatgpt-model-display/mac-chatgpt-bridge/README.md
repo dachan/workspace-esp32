@@ -11,12 +11,12 @@ queues the latest `SET MODEL` / `SET THINKING` line from the ESP32.
 2. Treats ChatGPT as foreground when the frontmost app is
    `com.openai.chat` or `com.openai.codex`.
 3. Reads `SET MODEL <name>` / `SET THINKING <level>` from USB serial.
-4. If ChatGPT is focused:
-   - Model: Control-Shift-M, Up/Down to the dial list, Return
+4. If ChatGPT is focused (or just became focused with a queue):
+   - Model: Control-Shift-M, Up to GPT-6 Astra, Down to the ESP dial index, Return
    - Reasoning: Control-Shift-, / Control-Shift-.
 5. If ChatGPT is not focused: leave the ESP32 display/NVS as the source
    of truth and apply the queued values when ChatGPT becomes frontmost.
-   The helper never activates ChatGPT.
+   The helper never activates ChatGPT. Cursor is never a target.
 
 Dial models, in order:
 
@@ -25,7 +25,6 @@ Dial models, in order:
 - GPT-5.6 Terra
 - GPT-5.6 Luna
 - GPT-5.5
-- GPT-5.4 Mini
 
 Reasoning: Light, Medium, High, Extra High.
 

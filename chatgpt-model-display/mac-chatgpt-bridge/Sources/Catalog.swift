@@ -7,7 +7,6 @@ enum Catalog {
         "GPT-5.6 Terra",
         "GPT-5.6 Luna",
         "GPT-5.5",
-        "GPT-5.4 Mini",
     ]
 
     static let thinking = [
@@ -27,7 +26,6 @@ enum Catalog {
             "sol": 1,
             "terra": 2,
             "luna": 3,
-            "mini": 5,
         ]
         return aliases[name.lowercased()]
     }
@@ -57,17 +55,5 @@ enum Catalog {
 
     static func thinkingName(_ raw: String) -> String? {
         thinkingIndex(raw).map { thinking[$0] }
-    }
-
-    static func pickerQuery(for model: String) -> String {
-        switch model {
-        case "GPT-6 Astra": return "Astra"
-        case "GPT-5.6 Sol": return "Sol"
-        case "GPT-5.6 Terra": return "Terra"
-        case "GPT-5.6 Luna": return "Luna"
-        case "GPT-5.5": return "GPT-5.5"
-        case "GPT-5.4 Mini": return "Mini"
-        default: return model
-        }
     }
 }

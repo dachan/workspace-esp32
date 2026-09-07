@@ -33,12 +33,15 @@ Hard lanes for this repo:
 ## mac-chatgpt-bridge
 
 `chatgpt-model-display/mac-chatgpt-bridge/` is a macOS CLI. Foreground is
-`NSWorkspace.frontmostApplication` (`com.openai.chat` / `com.openai.codex` /
-Cursor `com.todesktop.230313mzl4w4u92`).
-It never activates the target app and never walks the AX tree. Encoder `SET MODEL` /
-`SET THINKING` lines are applied with keyboard shortcuts only while ChatGPT or Cursor
-is already focused; otherwise they stay queued. Firmware waits 1 s after the
-last rotary detent before sending SET. The helper only runs on the Mac.
+`NSWorkspace.frontmostApplication` (`com.openai.chat` / `com.openai.codex`
+only — not Cursor). It never activates ChatGPT and never walks the AX tree.
+Encoder `SET MODEL` / `SET THINKING` lines are applied with keyboard shortcuts
+only while ChatGPT is already focused; otherwise they stay queued. On the
+ChatGPT foreground edge the helper flushes the queue: Control-Shift-M, Up to
+GPT-6 Astra, Down to the ESP dial index, Return; then Control-Shift-, /
+Control-Shift-. for thinking. Firmware waits 1 s after the last rotary detent
+before sending SET.
+The helper only runs on the Mac.
 On-device UI lives in `chatgpt-model-display/` (3.5\" ST7796 480x320). Edit
 and flash on the Mac; pull Hetzner codex after push. Firmware keeps the last
 model/thinking in NVS for boot.
@@ -124,8 +127,8 @@ the LCD reset low because the receiver has no accessible EN switch.
 Firmware `v 0.35+` updates the panel/NVS immediately, then sends
 `SET MODEL <name>` / `SET THINKING <level>` 1 s after the last detent.
 The Mac helper applies those with keyboard shortcuts only while ChatGPT is
-already the foreground app: Control-Shift-M then type the model token and Return;
-Control-Shift-, / Control-Shift-. for Light → Extra High.
+already the foreground app: Control-Shift-M, Up to Astra, Down to the dial
+index, Return; Control-Shift-, / Control-Shift-. for Light → Extra High.
 Run the Mac bridge with serial listen + watch:
 
 ```bash
@@ -136,11 +139,12 @@ Requires Accessibility for the launching app (key posting). Foreground
 detection does not. Thinking uses a polled falling-CLK decode; the model knob
 uses PCNT hardware quadrature (a polled decode misreads it, because the display
 flush delays the poll past the CLK/DT phase difference and the dial parks on one
-end). Model clamps GPT-6 Astra through GPT-5.4 Mini (no wrap);
+end). Model clamps GPT-6 Astra through GPT-5.5 (no wrap);
 thinking clamps Light ↔ Extra High.
-If ChatGPT or Cursor is not focused, the bridge must not activate it. Encoder changes
-remain on the ESP32 display/NVS and are queued until ChatGPT or Cursor returns to the
-foreground, when the latest model and thinking settings are applied.
+If ChatGPT is not focused, the bridge must not activate it. Encoder changes
+remain on the ESP32 display/NVS and are queued until ChatGPT returns to the
+foreground, when the latest model and thinking settings are applied via
+Control-Shift-M and Control-Shift-, / Control-Shift-..
 
 ## Build and flash
 

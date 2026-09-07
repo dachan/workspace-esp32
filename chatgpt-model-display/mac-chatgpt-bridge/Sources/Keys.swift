@@ -13,11 +13,11 @@ enum Keys {
 
     static let hidInfo = """
     Keyboard path (Mac helper)
-      Foreground: NSWorkspace.frontmostApplication (ChatGPT or Cursor).
-      Model: Control-Shift-M opens the picker; type the model token, Return.
+      Foreground: NSWorkspace.frontmostApplication (ChatGPT / Codex only).
+      Model: Control-Shift-M opens the picker (Astra highlighted); Down to dial index (250 ms apart), Return.
       Reasoning: Control-Shift-, decreases; Control-Shift-. increases.
-      Bind those shortcuts in ChatGPT/Cursor if they are Unassigned.
-      The helper never activates an app; keys fire only while it is focused.
+      Bind those shortcuts in ChatGPT if they are Unassigned.
+      The helper never activates ChatGPT; keys fire only while it is focused.
     """
 
     static func wait(_ seconds: Double) {

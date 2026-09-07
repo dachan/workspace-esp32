@@ -18,7 +18,8 @@
  * CLK fell, read its resting level every time, and every detent looked like
  * the same direction. The list then walked to one end and stayed there. PCNT
  * counts both lines in hardware, so a blocked loop cannot lose or misread a
- * detent. Four counts per detent; the model list clamps at Astra / Mini.
+ * detent. Eight counts (two mechanical detents) plus a 160 ms gap per model
+ * step so the dial is less twitchy; the list clamps at Astra / GPT-5.5.
  */
 static const int s_clk[ENCODER_COUNT] = {41, 1};
 static const int s_dt[ENCODER_COUNT] = {40, 2};
@@ -41,16 +42,19 @@ static int s_sw_armed[ENCODER_COUNT];
 #define PULSES_PER_STEP 2
 #define DIR_LOCK_US 100000
 
-/* Model (PCNT) */
+/* Model (PCNT) — less sensitive: two detents + emit gap per model step. */
 #define MODEL_PCNT_LIMIT 1000
 #define MODEL_PCNT_RESET 500
-#define MODEL_COUNTS_PER_DETENT 4
-/* +1 counterclockwise → Mini. Flip to -1 if the two directions land swapped. */
+#define MODEL_COUNTS_PER_STEP 8
+#define MODEL_EMIT_US 160000
+/* +1 counterclockwise → GPT-5.5. Flip to -1 if the two directions land swapped. */
 #define MODEL_SIGN 1
 
 static pcnt_unit_handle_t s_model_unit;
 static int s_model_prev_count;
 static int s_model_acc;
+static int s_model_sign;
+static int64_t s_model_emit_us;
 
 
 static esp_err_t model_pcnt_init(void)
@@ -132,6 +136,8 @@ static esp_err_t model_pcnt_init(void)
 
     s_model_prev_count = 0;
     s_model_acc = 0;
+    s_model_sign = 0;
+    s_model_emit_us = 0;
     return ESP_OK;
 }
 
@@ -188,24 +194,42 @@ static int model_delta(void)
     if (pcnt_unit_get_count(s_model_unit, &count) != ESP_OK) {
         return 0;
     }
-    s_model_acc += count - s_model_prev_count;
+    int delta_counts = count - s_model_prev_count;
     s_model_prev_count = count;
     if (count > MODEL_PCNT_RESET || count < -MODEL_PCNT_RESET) {
         if (pcnt_unit_clear_count(s_model_unit) == ESP_OK) {
             s_model_prev_count = 0;
         }
     }
+    if (delta_counts == 0) {
+        return 0;
+    }
 
-    /* One model per detent; leftover counts stay for the next poll. */
-    if (s_model_acc >= MODEL_COUNTS_PER_DETENT) {
-        s_model_acc -= MODEL_COUNTS_PER_DETENT;
-        return MODEL_SIGN;
+    int sign = delta_counts > 0 ? 1 : -1;
+    if (sign != s_model_sign) {
+        s_model_sign = sign;
+        s_model_acc = delta_counts;
+    } else {
+        s_model_acc += delta_counts;
     }
-    if (s_model_acc <= -MODEL_COUNTS_PER_DETENT) {
-        s_model_acc += MODEL_COUNTS_PER_DETENT;
-        return -MODEL_SIGN;
+
+    int step = 0;
+    if (s_model_acc >= MODEL_COUNTS_PER_STEP) {
+        s_model_acc -= MODEL_COUNTS_PER_STEP;
+        step = MODEL_SIGN;
+    } else if (s_model_acc <= -MODEL_COUNTS_PER_STEP) {
+        s_model_acc += MODEL_COUNTS_PER_STEP;
+        step = -MODEL_SIGN;
+    } else {
+        return 0;
     }
-    return 0;
+
+    int64_t now = esp_timer_get_time();
+    if (now - s_model_emit_us < MODEL_EMIT_US) {
+        return 0;
+    }
+    s_model_emit_us = now;
+    return step;
 }
 
 int encoder_delta(encoder_id_t id)

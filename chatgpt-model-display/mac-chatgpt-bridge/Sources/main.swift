@@ -93,7 +93,8 @@ func usage() -> String {
     Usage: chatgpt-bridge [options]
 
     Apply ESP32 encoder SET MODEL / SET THINKING with keyboard
-    shortcuts, only while ChatGPT or Cursor is already the foreground app.
+    shortcuts, only while ChatGPT is already the foreground app.
+    Model: Ctrl+Shift+M, Up/Down to dial index. Thinking: Ctrl+Shift+, / .
 
     Options:
       --front             Print whether ChatGPT is foreground and exit
@@ -148,7 +149,7 @@ func queue(line: SerialLine, runtime: BridgeRuntime, focused: Bool) {
         runtime.retryAt = .distantPast
         runtime.lastFailure = nil
         if !focused {
-            print("\(stamp()) queued MODEL \(model) until ChatGPT/Cursor is focused")
+            print("\(stamp()) queued MODEL \(model) until ChatGPT is focused")
         }
     case .setThinking(let level):
         guard let think = Catalog.thinkingName(level) else {
@@ -159,7 +160,7 @@ func queue(line: SerialLine, runtime: BridgeRuntime, focused: Bool) {
         runtime.retryAt = .distantPast
         runtime.lastFailure = nil
         if !focused {
-            print("\(stamp()) queued THINKING \(think) until ChatGPT/Cursor is focused")
+            print("\(stamp()) queued THINKING \(think) until ChatGPT is focused")
         }
     }
     fflush(stdout)
@@ -170,7 +171,22 @@ func applyPending(options: Options, runtime: BridgeRuntime) {
     guard runtime.pendingModel != nil || runtime.pendingThinking != nil else { return }
     guard Date() >= runtime.retryAt else { return }
 
+    // Model picker first (Ctrl+Shift+M), then reasoning (Ctrl+Shift+, / .).
+    if let name = runtime.pendingModel {
+        let result = Switcher.model(name, preferredBundleID: options.bundleID)
+        if result.ok {
+            runtime.pendingModel = nil
+            print("\(stamp()) applied MODEL \(name) via \(result.path)")
+        } else {
+            fail(result.error ?? "SET MODEL failed", runtime: runtime)
+            return
+        }
+    }
+
     if let level = runtime.pendingThinking {
+        // Absolute only when we have no trusted baseline (just came to
+        // foreground). While ChatGPT stays focused, relative bumps from
+        // lastThinking — absolute Escape+reset was breaking live dial turns.
         let result = Switcher.thinking(
             level,
             preferredBundleID: options.bundleID,
@@ -182,17 +198,6 @@ func applyPending(options: Options, runtime: BridgeRuntime) {
             print("\(stamp()) applied THINKING \(level) via \(result.path)")
         } else {
             fail(result.error ?? "SET THINKING failed", runtime: runtime)
-            return
-        }
-    }
-
-    if let name = runtime.pendingModel {
-        let result = Switcher.model(name, preferredBundleID: options.bundleID)
-        if result.ok {
-            runtime.pendingModel = nil
-            print("\(stamp()) applied MODEL \(name) via \(result.path)")
-        } else {
-            fail(result.error ?? "SET MODEL failed", runtime: runtime)
             return
         }
     }
@@ -223,8 +228,21 @@ func drainSerial(options: Options, runtime: BridgeRuntime) {
 func noteFront(options: Options, runtime: BridgeRuntime) {
     let front = DeskFront.isForeground(preferred: options.bundleID)
     if front != runtime.lastFront {
+        let becameFocused = front && runtime.lastFront == false
+        let lostFocus = !front && runtime.lastFront == true
         runtime.lastFront = front
         print("\(stamp()) \(DeskFront.label(preferred: options.bundleID))")
+        if lostFocus {
+            // ChatGPT may change effort while we're away; don't reuse a stale baseline.
+            runtime.lastThinking = nil
+        }
+        if becameFocused, runtime.pendingModel != nil || runtime.pendingThinking != nil {
+            // ChatGPT just took focus — flush queued dial state with shortcuts.
+            runtime.retryAt = .distantPast
+            runtime.lastFailure = nil
+            runtime.lastThinking = nil
+            print("\(stamp()) flushing queued dial state into ChatGPT")
+        }
         fflush(stdout)
     }
 }
@@ -255,7 +273,7 @@ func runWatch(options: Options) -> Int32 {
     }
     defer { runtime.session?.close() }
 
-    var parts = ["watching ChatGPT/Cursor foreground via NSWorkspace"]
+    var parts = ["watching ChatGPT foreground via NSWorkspace"]
     if options.listen, let port = options.port {
         parts.append("listening for SET MODEL / SET THINKING on \(port)")
     }

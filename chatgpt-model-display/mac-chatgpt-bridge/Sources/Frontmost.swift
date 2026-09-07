@@ -2,13 +2,13 @@
 import AppKit
 import Foundation
 
-/// One `frontmostApplication` read. Keys fire only for ChatGPT or Cursor.
+/// One `frontmostApplication` read. Keys fire only for ChatGPT / Codex —
+/// never Cursor. Cursor is where the bridge often runs; treating it as a
+/// target burned the queue by posting ChatGPT shortcuts into the wrong app.
 enum DeskFront {
     static let bundleIDs: Set<String> = [
         "com.openai.chat",
         "com.openai.codex",
-        "com.todesktop.230313mzl4w4u92",
-        "com.anysphere.cursor",
     ]
 
     static func allowedIDs(preferred: String?) -> Set<String> {
@@ -26,7 +26,7 @@ enum DeskFront {
             return false
         }
         let name = (app.localizedName ?? "").lowercased()
-        return name == "chatgpt" || name.hasPrefix("chatgpt ") || name == "cursor"
+        return name == "chatgpt" || name.hasPrefix("chatgpt ")
     }
 
     static func frontmost(preferred: String? = nil) -> NSRunningApplication? {
@@ -44,9 +44,9 @@ enum DeskFront {
         let app = frontmost(preferred: preferred)
         let name = app?.localizedName ?? "?"
         if let app, isTarget(app, preferred: preferred) {
-            return "\(name) foreground"
+            return "ChatGPT foreground"
         }
-        return "background (\(name))"
+        return "ChatGPT background (\(name))"
     }
 }
 #endif

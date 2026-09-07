@@ -26,7 +26,7 @@ On each encoder change the firmware saves model/thinking to NVS
 (`cgpt`/`model`,`think`) and reloads that cache on boot.
 
 Dial models, in order: GPT-6 Astra, GPT-5.6 Sol, GPT-5.6 Terra,
-GPT-5.6 Luna, GPT-5.5, GPT-5.4 Mini.
+GPT-5.6 Luna, GPT-5.5.
 
 Thinking: Light, Medium, High, Extra High.
 

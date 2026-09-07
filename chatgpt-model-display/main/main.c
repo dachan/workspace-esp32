@@ -134,7 +134,6 @@ static const char *s_models[] = {
     "GPT-5.6 Terra",
     "GPT-5.6 Luna",
     "GPT-5.5",
-    "GPT-5.4 Mini",
 };
 static const int s_models_n = (int)(sizeof(s_models) / sizeof(s_models[0]));
 
@@ -283,6 +282,11 @@ void app_main(void)
     if (model_nvs_load(&ui.fields)) {
         ui.waiting = 0;
         ESP_LOGI(TAG, "boot from NVS cache");
+        /* Drop removed dial entries (e.g. old GPT-5.4 Mini) onto the new end. */
+        if (ui.fields.has_model && model_index(ui.fields.model) < 0) {
+            snprintf(ui.fields.model, sizeof(ui.fields.model), "%s", s_models[s_models_n - 1]);
+            (void)model_nvs_save(&ui.fields);
+        }
     }
     ui_render(&ui);
 
