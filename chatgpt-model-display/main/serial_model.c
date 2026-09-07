@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "hal/usb_serial_jtag_ll.h"
 
 static const char *TAG = "serial_model";
 
@@ -130,19 +131,39 @@ int serial_model_poll(model_fields_t *fields)
     return updated;
 }
 
+/* USB Serial/JTAG can accept bytes into soft/HW buffers and still not push
+ * them to the Mac until the TX FIFO is flushed. Clearing pending on a soft
+ * "success" without a flush drops SET lines while the panel already updated. */
+static int write_all(const void *data, size_t n, TickType_t timeout)
+{
+    const uint8_t *p = (const uint8_t *)data;
+    size_t left = n;
+    TickType_t deadline = xTaskGetTickCount() + timeout;
+    while (left > 0) {
+        TickType_t now = xTaskGetTickCount();
+        TickType_t slice = (deadline > now) ? (deadline - now) : 1;
+        int wrote = usb_serial_jtag_write_bytes(p, left, slice);
+        if (wrote <= 0) {
+            return 0;
+        }
+        p += (size_t)wrote;
+        left -= (size_t)wrote;
+    }
+    usb_serial_jtag_ll_txfifo_flush();
+    return 1;
+}
+
 static int write_line(const char *line)
 {
     if (line == NULL || line[0] == '\0') {
         return 0;
     }
     size_t n = strlen(line);
-    int wrote = usb_serial_jtag_write_bytes(line, n, pdMS_TO_TICKS(50));
-    if (wrote < 0 || (size_t)wrote != n) {
+    if (!write_all(line, n, pdMS_TO_TICKS(100))) {
         return 0;
     }
     const char nl = '\n';
-    wrote = usb_serial_jtag_write_bytes(&nl, 1, pdMS_TO_TICKS(20));
-    return wrote == 1;
+    return write_all(&nl, 1, pdMS_TO_TICKS(40));
 }
 
 int serial_model_send_set_model(const char *name)
@@ -156,7 +177,11 @@ int serial_model_send_set_model(const char *name)
         return 0;
     }
     int ok = write_line(buf);
-    ESP_LOGI(TAG, "TX %s", buf);
+    if (ok) {
+        ESP_LOGI(TAG, "TX %s", buf);
+    } else {
+        ESP_LOGW(TAG, "TX failed %s", buf);
+    }
     return ok;
 }
 
@@ -171,6 +196,10 @@ int serial_model_send_set_thinking(const char *level)
         return 0;
     }
     int ok = write_line(buf);
-    ESP_LOGI(TAG, "TX %s", buf);
+    if (ok) {
+        ESP_LOGI(TAG, "TX %s", buf);
+    } else {
+        ESP_LOGW(TAG, "TX failed %s", buf);
+    }
     return ok;
 }

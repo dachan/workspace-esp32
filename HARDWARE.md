@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-07 (chatgpt-model-display v0.50 flash)
+Last inventory pass: 2026-09-07 (chatgpt-model-display v0.52 flash)
 
 ## radar-transmitter
 
@@ -59,12 +59,12 @@ Last inventory pass: 2026-09-07 (chatgpt-model-display v0.50 flash)
   - Board pinout image: [`s3-n16r8.jpeg`](s3-n16r8.jpeg)
 - Touch: not used by this firmware (FT6336 may be present)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Firmware currently on device: `chatgpt-model-display/` **v 0.50**
+- Firmware currently on device: `chatgpt-model-display/` **v 0.52**
 - Display settings (LOCKED — title-strip noise fix 2026-09-07):
   - Controller: ST7796U, 480×320 landscape, SPI 26 MHz, `invert_color(true)`, RGB
   - MADCTL: `swap_xy(true)`, `mirror(true, true)` — desk 180 in hardware; do not flip only one mirror (glyphs)
   - Software 180 flush: ON via internal-RAM band blit + SPI transfer sync (v 0.22+)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → ChatGPT title at top of glass, MODEL left, version bottom-right
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
-- Last verified: 2026-09-07 — v0.50 bootloader, partition table, and application image hash-verified after flash; thinking sensitivity reverted to 2 pulses + 160 ms; GPT-5.4 Mini removed; clamps Astra ↔ GPT-5.5; model CLK/DT wiring fault still open (see above)
+- Last verified: 2026-09-07 — v0.52 bootloader, partition table, and application image hash-verified after flash; USB SET TX flushes FIFO after write (dropped SETs after panel update); encoder emit-gap no longer discards counted steps; clamps Astra ↔ GPT-5.5; model CLK/DT wiring fault still open (see above)
 - Notes: edit+flash on Mac `~/Development/workspace-esp32`; push then pull Hetzner `/home/codex/workspace-esp32`

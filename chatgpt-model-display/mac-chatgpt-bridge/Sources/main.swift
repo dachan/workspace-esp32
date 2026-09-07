@@ -148,7 +148,10 @@ func queue(line: SerialLine, runtime: BridgeRuntime, focused: Bool) {
         runtime.pendingModel = model
         runtime.retryAt = .distantPast
         runtime.lastFailure = nil
-        if !focused {
+        // Always log RX so missing SETs are visible even while ChatGPT is focused.
+        if focused {
+            print("\(stamp()) rx MODEL \(model)")
+        } else {
             print("\(stamp()) queued MODEL \(model) until ChatGPT is focused")
         }
     case .setThinking(let level):
@@ -159,7 +162,9 @@ func queue(line: SerialLine, runtime: BridgeRuntime, focused: Bool) {
         runtime.pendingThinking = think
         runtime.retryAt = .distantPast
         runtime.lastFailure = nil
-        if !focused {
+        if focused {
+            print("\(stamp()) rx THINKING \(think)")
+        } else {
             print("\(stamp()) queued THINKING \(think) until ChatGPT is focused")
         }
     }

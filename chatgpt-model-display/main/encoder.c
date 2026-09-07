@@ -213,23 +213,23 @@ static int model_delta(void)
         s_model_acc += delta_counts;
     }
 
-    int step = 0;
-    if (s_model_acc >= MODEL_COUNTS_PER_STEP) {
-        s_model_acc -= MODEL_COUNTS_PER_STEP;
-        step = MODEL_SIGN;
-    } else if (s_model_acc <= -MODEL_COUNTS_PER_STEP) {
-        s_model_acc += MODEL_COUNTS_PER_STEP;
-        step = -MODEL_SIGN;
-    } else {
-        return 0;
-    }
-
+    /* Do not consume acc until the emit gap allows a step — otherwise fast
+     * turns burn counts during the gap and never update the panel/SET path. */
     int64_t now = esp_timer_get_time();
     if (now - s_model_emit_us < MODEL_EMIT_US) {
         return 0;
     }
-    s_model_emit_us = now;
-    return step;
+    if (s_model_acc >= MODEL_COUNTS_PER_STEP) {
+        s_model_acc -= MODEL_COUNTS_PER_STEP;
+        s_model_emit_us = now;
+        return MODEL_SIGN;
+    }
+    if (s_model_acc <= -MODEL_COUNTS_PER_STEP) {
+        s_model_acc += MODEL_COUNTS_PER_STEP;
+        s_model_emit_us = now;
+        return -MODEL_SIGN;
+    }
+    return 0;
 }
 
 int encoder_delta(encoder_id_t id)
@@ -272,10 +272,11 @@ int encoder_delta(encoder_id_t id)
     if (s_pulses[id] < PULSES_PER_STEP) {
         return 0;
     }
-    s_pulses[id] = 0;
+    /* Keep the completed pulse pair until the emit gap elapses. */
     if (now - s_emit_us[id] < EMIT_US) {
         return 0;
     }
+    s_pulses[id] = 0;
     s_emit_us[id] = now;
     return delta;
 }
