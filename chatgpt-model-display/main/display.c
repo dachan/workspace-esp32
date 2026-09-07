@@ -11,6 +11,10 @@
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_st7796.h"
 #include "esp_log.h"
+#include "esp_lcd_io_spi.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "canvas.h"
 
 static const char *TAG = "display";
 
@@ -34,7 +38,36 @@ static const char *TAG = "display";
 #define BL_MAX     ((1 << 10) - 1)
 
 static esp_lcd_panel_handle_t s_panel;
+static esp_lcd_panel_io_handle_t s_io;
 static uint16_t *s_fb;
+/* Internal-RAM bounce strips for SPI DMA (PSRAM DMA snowed first rows). */
+#define FLUSH_BAND_H 16
+static uint16_t *s_band;
+static SemaphoreHandle_t s_xfer_done;
+static volatile int s_flush_pending;
+
+static bool IRAM_ATTR on_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
+                                          esp_lcd_panel_io_event_data_t *edata,
+                                          void *user_ctx)
+{
+    (void)panel_io;
+    (void)edata;
+    (void)user_ctx;
+    BaseType_t hp = pdFALSE;
+    s_flush_pending = 0;
+    if (s_xfer_done) {
+        xSemaphoreGiveFromISR(s_xfer_done, &hp);
+    }
+    return hp == pdTRUE;
+}
+
+static void wait_flush_done(void)
+{
+    if (s_flush_pending && s_xfer_done) {
+        (void)xSemaphoreTake(s_xfer_done, pdMS_TO_TICKS(200));
+        s_flush_pending = 0;
+    }
+}
 
 static esp_err_t backlight_init(void)
 {
@@ -92,7 +125,7 @@ esp_err_t display_init(void)
     };
     ESP_RETURN_ON_ERROR(spi_bus_initialize(LCD_HOST, &bus, SPI_DMA_CH_AUTO), TAG, "spi bus");
 
-    esp_lcd_panel_io_handle_t io = NULL;
+    s_io = NULL;
     esp_lcd_panel_io_spi_config_t io_cfg = {
         .dc_gpio_num = PIN_DC,
         .cs_gpio_num = PIN_CS,
@@ -100,10 +133,12 @@ esp_err_t display_init(void)
         .lcd_cmd_bits = 8,
         .lcd_param_bits = 8,
         .spi_mode = 0,
-        .trans_queue_depth = 10,
+        .trans_queue_depth = 4,
+        .on_color_trans_done = on_color_trans_done,
+        .user_ctx = NULL,
     };
     ESP_RETURN_ON_ERROR(
-        esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)LCD_HOST, &io_cfg, &io),
+        esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)LCD_HOST, &io_cfg, &s_io),
         TAG, "panel io");
 
     esp_lcd_panel_dev_config_t panel_cfg = {
@@ -111,24 +146,33 @@ esp_err_t display_init(void)
         .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
         .bits_per_pixel = 16,
     };
-    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_st7796(io, &panel_cfg, &s_panel), TAG, "st7796");
+    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_st7796(s_io, &panel_cfg, &s_panel), TAG, "st7796");
 
     ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(s_panel), TAG, "reset");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_init(s_panel), TAG, "init");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(s_panel, true), TAG, "invert");
-    /* Desk pose: swap_xy + both mirrors is MADCTL 180 (glyphs stay LTR).
-     * Do not software-reverse the PSRAM framebuffer — in-place 180 races
-     * SPI DMA and snows the first rows (ChatGPT title strip). */
+    /* Desk pose lock (verified): MADCTL swap_xy + mirror(true,true), plus a
+     * separate soft-180 DMA buffer in display_flush (never reverse s_fb in place). */
     ESP_RETURN_ON_ERROR(esp_lcd_panel_swap_xy(s_panel, true), TAG, "swap_xy");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, true, true), TAG, "mirror");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "disp on");
 
+    s_xfer_done = xSemaphoreCreateBinary();
+    if (s_xfer_done == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    /* Primed so first wait is a no-op until a real transfer starts. */
+    xSemaphoreGive(s_xfer_done);
+
     s_fb = heap_caps_malloc(fb_bytes, MALLOC_CAP_SPIRAM);
-    if (s_fb == NULL) {
-        ESP_LOGE(TAG, "framebuffer alloc failed (%zu bytes in PSRAM)", fb_bytes);
+    const size_t band_bytes = (size_t)DISPLAY_WIDTH * FLUSH_BAND_H * sizeof(uint16_t);
+    s_band = heap_caps_malloc(band_bytes, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+    if (s_fb == NULL || s_band == NULL) {
+        ESP_LOGE(TAG, "framebuffer/band alloc failed (fb=%zu band=%zu)", fb_bytes, band_bytes);
         return ESP_ERR_NO_MEM;
     }
     memset(s_fb, 0, fb_bytes);
+    memset(s_band, 0, band_bytes);
     canvas_set_framebuffer(s_fb);
     ESP_LOGI(TAG, "ST7796 480x320 framebuffer: %zu KB PSRAM at %p", fb_bytes / 1024, s_fb);
 
@@ -138,6 +182,33 @@ esp_err_t display_init(void)
 
 esp_err_t display_flush(void)
 {
-    /* MADCTL alone sets desk pose. Keep the canvas framebuffer upright. */
-    return esp_lcd_panel_draw_bitmap(s_panel, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, s_fb);
+    /* Desk pose still needs soft 180 on top of MADCTL. Blit through an
+     * internal-RAM band so SPI DMA never reads PSRAM (that snowed an edge). */
+    const int w = DISPLAY_WIDTH;
+    const int h = DISPLAY_HEIGHT;
+    esp_err_t err = ESP_OK;
+
+    for (int y = 0; y < h; y += FLUSH_BAND_H) {
+        const int band_h = (y + FLUSH_BAND_H <= h) ? FLUSH_BAND_H : (h - y);
+        /* Wait before filling — s_band is still owned by SPI until done. */
+        wait_flush_done();
+        for (int row = 0; row < band_h; row++) {
+            const int panel_y = y + row;
+            const int src_y = h - 1 - panel_y;
+            const uint16_t *src = s_fb + (size_t)src_y * (size_t)w;
+            uint16_t *dst = s_band + (size_t)row * (size_t)w;
+            for (int x = 0; x < w; x++) {
+                dst[x] = src[w - 1 - x];
+            }
+        }
+        s_flush_pending = 1;
+        (void)xSemaphoreTake(s_xfer_done, 0);
+        err = esp_lcd_panel_draw_bitmap(s_panel, 0, y, w, y + band_h, s_band);
+        if (err != ESP_OK) {
+            s_flush_pending = 0;
+            return err;
+        }
+    }
+    wait_flush_done();
+    return ESP_OK;
 }
