@@ -1,10 +1,13 @@
 #include "serial_model.h"
 
 #include <ctype.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "driver/usb_serial_jtag.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static const char *TAG = "serial_model";
 
@@ -29,7 +32,7 @@ esp_err_t serial_model_init(void)
     s_len = 0;
     s_has_override = 0;
     s_thinking_override[0] = '\0';
-    ESP_LOGI(TAG, "USB Serial/JTAG ready for MODEL lines @ 115200 framing");
+    ESP_LOGI(TAG, "USB Serial/JTAG ready for MODEL/THINKING RX and SET TX @ 115200");
     return ESP_OK;
 }
 
@@ -48,6 +51,12 @@ static int handle_line(const char *line, model_fields_t *fields)
         line++;
     }
     if (*line == '\0') {
+        return 0;
+    }
+
+    /* Outbound SET lines must not be treated as display updates. */
+    if (strncmp(line, "SET ", 4) == 0 || strncmp(line, "SET\t", 4) == 0) {
+        ESP_LOGD(TAG, "ignore SET line");
         return 0;
     }
 
@@ -118,4 +127,49 @@ int serial_model_poll(model_fields_t *fields)
         }
     }
     return updated;
+}
+
+static int write_line(const char *line)
+{
+    if (line == NULL || line[0] == '\0') {
+        return 0;
+    }
+    size_t n = strlen(line);
+    int wrote = usb_serial_jtag_write_bytes(line, n, pdMS_TO_TICKS(50));
+    if (wrote < 0 || (size_t)wrote != n) {
+        return 0;
+    }
+    const char nl = '\n';
+    wrote = usb_serial_jtag_write_bytes(&nl, 1, pdMS_TO_TICKS(20));
+    return wrote == 1;
+}
+
+int serial_model_send_set_model(const char *name)
+{
+    if (name == NULL || name[0] == '\0') {
+        return 0;
+    }
+    char buf[LINE_MAX];
+    int n = snprintf(buf, sizeof(buf), "SET MODEL %s", name);
+    if (n <= 0 || n >= (int)sizeof(buf)) {
+        return 0;
+    }
+    int ok = write_line(buf);
+    ESP_LOGI(TAG, "TX %s", buf);
+    return ok;
+}
+
+int serial_model_send_set_thinking(const char *level)
+{
+    if (level == NULL || level[0] == '\0') {
+        return 0;
+    }
+    char buf[LINE_MAX];
+    int n = snprintf(buf, sizeof(buf), "SET THINKING %s", level);
+    if (n <= 0 || n >= (int)sizeof(buf)) {
+        return 0;
+    }
+    int ok = write_line(buf);
+    ESP_LOGI(TAG, "TX %s", buf);
+    return ok;
 }

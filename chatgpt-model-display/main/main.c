@@ -105,7 +105,7 @@ static const char *thinking_name_for_level(int level)
     }
 }
 
-static void apply_thinking_level(ui_state_t *ui, int level)
+static int apply_thinking_level(ui_state_t *ui, int level)
 {
     if (level < 1) {
         level = 1;
@@ -114,6 +114,7 @@ static void apply_thinking_level(ui_state_t *ui, int level)
         level = 4;
     }
     const char *name = thinking_name_for_level(level);
+    int same = ui->fields.has_thinking && strcmp(ui->fields.thinking, name) == 0;
     snprintf(ui->fields.thinking, sizeof(ui->fields.thinking), "%s", name);
     ui->fields.has_thinking = 1;
     if (!ui->fields.has_model) {
@@ -122,6 +123,7 @@ static void apply_thinking_level(ui_state_t *ui, int level)
         ui->waiting = 0;
     }
     (void)model_nvs_save(&ui->fields);
+    return !same;
 }
 
 /* Preset model names for the model encoder (desk UI). */
@@ -149,18 +151,23 @@ static int model_index(const char *name)
     return -1;
 }
 
-static void apply_model_delta(ui_state_t *ui, int delta)
+static int apply_model_delta(ui_state_t *ui, int delta)
 {
     int idx = model_index(ui->fields.has_model ? ui->fields.model : NULL);
     if (idx < 0) {
         idx = 0;
     }
-    idx += delta;
-    while (idx < 0) {
-        idx += s_models_n;
+    int next = idx + delta;
+    if (next < 0) {
+        next = 0;
     }
-    idx %= s_models_n;
-    snprintf(ui->fields.model, sizeof(ui->fields.model), "%s", s_models[idx]);
+    if (next >= s_models_n) {
+        next = s_models_n - 1;
+    }
+    if (next == idx && ui->fields.has_model) {
+        return 0;
+    }
+    snprintf(ui->fields.model, sizeof(ui->fields.model), "%s", s_models[next]);
     ui->fields.has_model = 1;
     ui->waiting = 0;
     if (!ui->fields.has_thinking) {
@@ -168,6 +175,7 @@ static void apply_model_delta(ui_state_t *ui, int delta)
         ui->fields.has_thinking = 1;
     }
     (void)model_nvs_save(&ui->fields);
+    return 1;
 }
 
 static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_level,
@@ -276,6 +284,10 @@ void app_main(void)
     ui_render(&ui);
 
     TickType_t last_paint = xTaskGetTickCount();
+    /* Ignore stale Mac MODEL/THINKING for a short window after a local encoder SET. */
+    TickType_t hold_rx_until = 0;
+    const TickType_t hold_rx_ticks = pdMS_TO_TICKS(8000);
+
     while (1) {
         int think_d = encoder_delta(ENCODER_THINKING);
         if (think_d != 0) {
@@ -283,38 +295,56 @@ void app_main(void)
             if (level < 1) {
                 level = 2;
             }
-            apply_thinking_level(&ui, level + think_d);
-            ui_render(&ui);
-            last_paint = xTaskGetTickCount();
+            if (apply_thinking_level(&ui, level + think_d)) {
+                serial_model_send_set_thinking(ui.fields.thinking);
+                hold_rx_until = xTaskGetTickCount() + hold_rx_ticks;
+                ui_render(&ui);
+                last_paint = xTaskGetTickCount();
+            }
         }
         if (encoder_button_pressed(ENCODER_THINKING)) {
             int level = ui.fields.has_thinking ? thinking_level(ui.fields.thinking) : 0;
-            apply_thinking_level(&ui, (level % 4) + 1);
-            ui_render(&ui);
-            last_paint = xTaskGetTickCount();
+            if (apply_thinking_level(&ui, (level % 4) + 1)) {
+                serial_model_send_set_thinking(ui.fields.thinking);
+                hold_rx_until = xTaskGetTickCount() + hold_rx_ticks;
+                ui_render(&ui);
+                last_paint = xTaskGetTickCount();
+            }
         }
 
         int model_d = encoder_delta(ENCODER_MODEL);
         if (model_d != 0) {
-            apply_model_delta(&ui, model_d);
-            ui_render(&ui);
-            last_paint = xTaskGetTickCount();
+            if (apply_model_delta(&ui, model_d)) {
+                serial_model_send_set_model(ui.fields.model);
+                hold_rx_until = xTaskGetTickCount() + hold_rx_ticks;
+                ui_render(&ui);
+                last_paint = xTaskGetTickCount();
+            }
         }
         if (encoder_button_pressed(ENCODER_MODEL)) {
-            apply_model_delta(&ui, 1);
-            ui_render(&ui);
-            last_paint = xTaskGetTickCount();
+            if (apply_model_delta(&ui, 1)) {
+                serial_model_send_set_model(ui.fields.model);
+                hold_rx_until = xTaskGetTickCount() + hold_rx_ticks;
+                ui_render(&ui);
+                last_paint = xTaskGetTickCount();
+            }
         }
 
         model_fields_t next = ui.fields;
         if (serial_model_poll(&next)) {
-            ui.fields = next;
-            ui.waiting = !ui.fields.has_model;
-            if (ui.fields.has_model) {
-                (void)model_nvs_save(&ui.fields);
+            TickType_t now = xTaskGetTickCount();
+            int held = hold_rx_until != 0 && now < hold_rx_until;
+            if (held) {
+                ESP_LOGD(TAG, "hold Mac poll after local encoder SET");
+            } else {
+                ui.fields = next;
+                ui.waiting = !ui.fields.has_model;
+                if (ui.fields.has_model) {
+                    (void)model_nvs_save(&ui.fields);
+                }
+                ui_render(&ui);
+                last_paint = xTaskGetTickCount();
             }
-            ui_render(&ui);
-            last_paint = xTaskGetTickCount();
         }
 
         // Soft blink of waiting hint every ~1s without clobbering a live model.

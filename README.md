@@ -12,7 +12,8 @@ a portable virtual pet.
 - `super-tamagotchi/` — portable ESP32-S3 virtual-pet firmware, including the
   native creature simulator and the display, touch, and audio drivers.
 - `mac-chatgpt-bridge/` — macOS helper that reads the ChatGPT desktop model
-  via Accessibility and later sends it to an ESP32-S3 over USB serial.
+  via Accessibility, sends `MODEL`/`THINKING` to the ESP32, and applies
+  encoder `SET MODEL` / `SET THINKING` lines back to the app.
 
 ## Wiring
 

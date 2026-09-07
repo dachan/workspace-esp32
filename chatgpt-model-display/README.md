@@ -6,20 +6,23 @@ ESP32-S3 firmware that always shows the current ChatGPT/Codex **model** and
 
 ## Protocol (USB serial, 115200)
 
-UTF-8 lines from `mac-chatgpt-bridge`:
+UTF-8 lines, 115200. Directions are not interchangeable (avoids an echo loop):
 
 ```text
-MODEL <name>
+MODEL <name>           # Mac → ESP display
+THINKING <level>       # Mac → ESP display
+SET MODEL <name>       # ESP → Mac (encoder); firmware ignores on RX
+SET THINKING <level>   # ESP → Mac (encoder); firmware ignores on RX
 ```
 
-`<name>` is the Accessibility readback string. Thinking level is often already
-embedded (for example `GPT-5.6 Luna Extra High`). The firmware splits a trailing
-thinking token when present; otherwise it shows the full string as the model and
-`—` for thinking.
+`<name>` is the Accessibility readback string or a preset from the model
+encoder. Thinking level is often already embedded (for example
+`GPT-5.6 Luna Extra High`). The firmware splits a trailing thinking token when
+present; otherwise it shows the full string as the model and `—` for thinking.
 
-On each `MODEL` line the firmware saves model/thinking to NVS (`cgpt`/`model`,`think`) and reloads that cache on boot so the panel is not stuck on Waiting when the bridge is quiet.
+On each `MODEL` line the firmware saves model/thinking to NVS (`cgpt`/`model`,`think`) and reloads that cache on boot so the panel is not stuck on Waiting when the bridge is quiet. After a local encoder `SET`, inbound `MODEL`/`THINKING` are ignored for 8s so a stale Mac poll cannot overwrite the knob.
 
-Optional extension (overrides parsed thinking until the next `MODEL` line):
+Optional Mac override (until the next `MODEL` line):
 
 ```text
 THINKING <level>
@@ -48,8 +51,8 @@ Same SPI ILI9341V pinout as `super-tamagotchi/WIRING.md` / radar-receiver:
 | Both ENC + | 3V3 |
 | Both ENC GND | GND |
 
-USB: native USB Serial/JTAG (`/dev/cu.usbmodem*` on macOS). Flash and
-`MODEL` traffic share that port.
+USB: native USB Serial/JTAG (`/dev/cu.usbmodem*` on macOS). Flash,
+`MODEL`/`THINKING`, and encoder `SET` traffic share that port.
 
 ## Build / flash (Mac only)
 
@@ -67,15 +70,18 @@ Verify the port with `ls /dev/cu.usb*` or
 `swift run --package-path ../mac-chatgpt-bridge chatgpt-bridge --list-ports`
 before flashing (paths can change).
 
-Two encoders on the **right** header (see repo `s3-n16r8.jpeg`): **thinking** (GPIO41/40/39) and **model** (GPIO1/2/42). Rotate or click to step; changes persist in NVS.
+Two encoders on the **right** header (see repo `s3-n16r8.jpeg`): **thinking** (GPIO41/40/39) and **model** (GPIO1/2/42). Rotate or click to step; changes persist in NVS and emit `SET …` to the Mac. Model rotate and click **clamp** at the first and last preset (no wrap). Thinking rotate clamps Instant…Extra High.
 
-## Bridge watch → screen
+## Desk bridge (watch + port + listen)
 
 ```sh
 cd ~/Development/workspace-esp32/mac-chatgpt-bridge
 swift build -c release
 "$(swift build -c release --show-bin-path)/chatgpt-bridge" \
-  --watch --interval 5 --send-serial --port /dev/cu.usbmodem21201
+  --watch --listen --send-serial --interval 5 \
+  --port /dev/cu.usbmodem21201
 ```
 
-Watch mode sends `MODEL <name>` only when the model string changes.
+`--watch --port` implies `--listen`. The helper applies encoder `SET` lines in
+ChatGPT and sends `MODEL`/`THINKING` only when the AX readback changes and the
+post-encoder hold has expired.

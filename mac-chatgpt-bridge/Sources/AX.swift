@@ -37,9 +37,20 @@ enum AXRoleName {
     static let menuItem = "AXMenuItem"
     static let button = "AXButton"
     static let staticText = "AXStaticText"
+    static let radioButton = "AXRadioButton"
+    static let checkBox = "AXCheckBox"
     static let list = "AXList"
     static let menuBar = "AXMenuBar"
     static let menu = "AXMenu"
+}
+
+enum AXAction {
+    static let press = kAXPressAction as CFString
+
+    @discardableResult
+    static func press(_ element: AXUIElement) -> Bool {
+        AXUIElementPerformAction(element, press) == .success
+    }
 }
 
 enum AXAttr {
@@ -154,6 +165,15 @@ struct AXSnapshot {
     var position: CGPoint?
     var inList: Bool
     var inMenuBar: Bool
+
+    var labels: [String] {
+        [title, description, value, help, identifier].compactMap { $0 }
+    }
+}
+
+struct AXHit {
+    var element: AXUIElement
+    var snap: AXSnapshot
 }
 
 enum AXWalk {
@@ -165,7 +185,25 @@ enum AXWalk {
         inList: Bool = false,
         inMenuBar: Bool = false
     ) -> [AXSnapshot] {
-        var out: [AXSnapshot] = []
+        hits(
+            of: root,
+            prefix: prefix,
+            maxDepth: maxDepth,
+            maxNodes: maxNodes,
+            inList: inList,
+            inMenuBar: inMenuBar
+        ).map(\.snap)
+    }
+
+    static func hits(
+        of root: AXUIElement,
+        prefix: String,
+        maxDepth: Int,
+        maxNodes: Int,
+        inList: Bool = false,
+        inMenuBar: Bool = false
+    ) -> [AXHit] {
+        var out: [AXHit] = []
         walk(
             root,
             path: prefix,
@@ -187,28 +225,27 @@ enum AXWalk {
         maxNodes: Int,
         inList: Bool,
         inMenuBar: Bool,
-        into out: inout [AXSnapshot]
+        into out: inout [AXHit]
     ) {
         guard out.count < maxNodes else { return }
         let role = AXNode.role(element)
         let listed = inList || role == AXRoleName.list
         let menu = inMenuBar || role == AXRoleName.menuBar || role == AXRoleName.menu
-        out.append(
-            AXSnapshot(
-                path: path,
-                role: role,
-                subrole: AXNode.string(element, AXAttr.subrole),
-                title: AXNode.string(element, AXAttr.title),
-                description: AXNode.string(element, AXAttr.description),
-                value: AXNode.string(element, AXAttr.value),
-                identifier: AXNode.string(element, AXAttr.identifier),
-                help: AXNode.string(element, AXAttr.help),
-                mark: AXNode.string(element, AXAttr.mark),
-                position: AXNode.point(element),
-                inList: listed,
-                inMenuBar: menu
-            )
+        let snap = AXSnapshot(
+            path: path,
+            role: role,
+            subrole: AXNode.string(element, AXAttr.subrole),
+            title: AXNode.string(element, AXAttr.title),
+            description: AXNode.string(element, AXAttr.description),
+            value: AXNode.string(element, AXAttr.value),
+            identifier: AXNode.string(element, AXAttr.identifier),
+            help: AXNode.string(element, AXAttr.help),
+            mark: AXNode.string(element, AXAttr.mark),
+            position: AXNode.point(element),
+            inList: listed,
+            inMenuBar: menu
         )
+        out.append(AXHit(element: element, snap: snap))
         guard depth < maxDepth else { return }
         let kids = AXNode.children(element)
         for (index, child) in kids.enumerated() {
@@ -287,6 +324,38 @@ enum ChatGPTProcess {
 
     static func firstRunning(bundleID: String) -> NSRunningApplication? {
         NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first
+    }
+
+    static func hits(
+        for app: NSRunningApplication,
+        maxDepth: Int,
+        maxNodes: Int
+    ) -> [AXHit] {
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+        var out: [AXHit] = []
+        if let menuBar = AXNode.element(axApp, AXAttr.menuBar) {
+            out += AXWalk.hits(
+                of: menuBar,
+                prefix: "menu",
+                maxDepth: maxDepth,
+                maxNodes: maxNodes,
+                inMenuBar: true
+            )
+        }
+        let windows = windows(for: axApp)
+        if windows.isEmpty {
+            out += AXWalk.hits(of: axApp, prefix: "app", maxDepth: maxDepth, maxNodes: maxNodes)
+        } else {
+            for (index, window) in windows.enumerated() {
+                out += AXWalk.hits(
+                    of: window,
+                    prefix: "win\(index)",
+                    maxDepth: maxDepth,
+                    maxNodes: maxNodes
+                )
+            }
+        }
+        return out
     }
 
     static func windows(for app: AXUIElement) -> [AXUIElement] {

@@ -1,9 +1,8 @@
 # mac-chatgpt-bridge
 
 macOS helper that reads the **currently selected model** from the ChatGPT
-desktop app via Accessibility APIs. It can send that name to an ESP32-S3 over USB serial (`MODEL <name>
-` at
-115200). Pair with firmware in `../chatgpt-model-display/`.
+desktop app via Accessibility APIs and applies encoder commands from the
+ESP32. Pair with firmware in `../chatgpt-model-display/`.
 
 ## What it does
 
@@ -13,16 +12,17 @@ desktop app via Accessibility APIs. It can send that name to an ESP32-S3 over US
 3. Walks the AX tree and prints the selected model.
 4. Optional `--dump-ax` dump if the model control is not obvious.
 
-Serial path:
+Serial path (USB Serial/JTAG, 115200):
 
-- USB serial line: `MODEL <name>\n` at 115200 (dry-run when `--port` is omitted;
-  real open/write on macOS when `--port` is set)
-- `--watch` polls and sends only when the model string changes
-- Last successful model is cached at `~/Library/Application Support/chatgpt-bridge/last-model.txt`; on AX failure the bridge prints `using cached model: …` and still `--send-serial`s that line when requested
-- Optional device-side `THINKING <level>\n` is documented in
-  `chatgpt-model-display/README.md` (bridge does not emit it yet; thinking is
-  usually already in the model name)
-- Later ESP32 USB-HID model picker: **Ctrl+Shift+M** (documented, not sent)
+- **Mac → ESP** (display): `MODEL <name>\n` and optional `THINKING <level>\n`
+- **ESP → Mac** (apply): `SET MODEL <name>\n` and `SET THINKING <level>\n`
+- Dry-run when `--port` is omitted; real open/read/write on macOS when `--port` is set
+- `--watch --port` also `--listen`s: apply encoder `SET` lines, then hold outbound
+  `MODEL`/`THINKING` for a few seconds so a stale AX poll cannot fight the knob
+- Last successful model/thinking are cached under
+  `~/Library/Application Support/chatgpt-bridge/`
+- Apply path: Accessibility press on a matching control if the window tree
+  exists; otherwise HID **Ctrl+Shift+M**, type the name, Return
 
 ## Requirements
 
@@ -115,23 +115,39 @@ one app if both Classic and unified ChatGPT are installed.
 
 
 
-### Watch mode
+### Desk workflow (watch + port + listen)
+
+Keep ChatGPT open, grant Accessibility to the terminal, then leave this running
+while the encoders drive the app:
+
+```sh
+cd mac-chatgpt-bridge
+swift build -c release
+"$(swift build -c release --show-bin-path)/chatgpt-bridge" \
+  --watch --listen --send-serial --interval 5 \
+  --port /dev/cu.usbmodemXXXX
+```
+
+`--watch --port` implies `--listen`. `--listen` alone with `--port` still
+applies `SET` lines and polls ChatGPT on `--interval`.
+
+Stop with Ctrl+C. Combine with `--json` for one JSON object per AX change.
+
+List the serial device first:
+
+```sh
+swift run chatgpt-bridge --list-ports
+```
+
+### Watch mode (AX only)
 
 Poll every 5 seconds and print only when the selected model changes:
 
 ```sh
 swift run chatgpt-bridge --watch
 swift run chatgpt-bridge --watch --interval 5
-```
-
-Optional serial push on change (dry-run without `--port`):
-
-```sh
 swift run chatgpt-bridge --watch --send-serial
-swift run chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodemXXXX
 ```
-
-Stop with Ctrl+C. Combine with `--json` for one JSON object per change.
 
 ## Serial stub
 
@@ -139,7 +155,13 @@ Protocol (one line, UTF-8, newline terminated):
 
 ```text
 MODEL <name>
+THINKING <level>
+SET MODEL <name>
+SET THINKING <level>
 ```
+
+`MODEL` / `THINKING` are Mac → ESP. `SET …` are ESP → Mac. The helper never
+writes `SET` lines; the firmware never treats `SET` as a display update.
 
 No port → dry-run (prints the line, does not open a device):
 
@@ -158,16 +180,16 @@ Default baud is 115200. This repo does not flash firmware.
 
 ## HID stub
 
-Later firmware: the ESP32-S3 enumerates as a USB keyboard and sends
-**Ctrl+Shift+M** to open ChatGPT's model picker. This helper never
-injects key events.
+When Accessibility cannot press a real picker row, `--listen` injects
+**Ctrl+Shift+M**, types the target name, and presses Return. ChatGPT must
+be frontmost (the helper activates it first).
 
 ```sh
 swift run chatgpt-bridge --hid-info
 ```
 
 Confirm on hardware whether ChatGPT honors Control-Shift-M or
-Command-Shift-M; firmware can remap.
+Command-Shift-M.
 
 ## Notes
 

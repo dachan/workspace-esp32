@@ -33,11 +33,18 @@ Hard lanes for this repo:
 ## mac-chatgpt-bridge
 
 `mac-chatgpt-bridge/` is a macOS Accessibility CLI that reads the selected
-ChatGPT/Codex model and sends `MODEL <name>
-` over USB serial (115200) when
-`--send-serial --port` is set. Watch mode (`--watch`) sends only on change. It
-only runs on the Mac. On-device UI lives in `chatgpt-model-display/` (3.5\" ST7796 480x320). Edit and
-flash on the Mac; pull Hetzner codex after push. Bridge caches the last good model under Application Support; firmware keeps the last MODEL in NVS for boot/display fallback.
+ChatGPT/Codex model and talks to `chatgpt-model-display/` over USB serial
+(115200). Mac → ESP: `MODEL <name>` / `THINKING <level>`. ESP → Mac (encoders):
+`SET MODEL <name>` / `SET THINKING <level>`. Desk command:
+`--watch --listen --send-serial --port /dev/cu.usbmodem…` (`--watch --port`
+implies `--listen`). After a `SET`, both sides hold the opposite direction
+briefly so a stale poll cannot fight the knob. HID fallback is Ctrl+Shift+M
+then type/Return. It only runs on the Mac. On-device UI lives in
+`chatgpt-model-display/` (3.5\" ST7796 480x320). Edit and flash on the Mac;
+pull Hetzner codex after push. Bridge caches last model/thinking under
+Application Support; firmware keeps the last fields in NVS. Model encoder
+clamps at the first/last preset (rotate and click). Do not revert ST7796
+orientation in `display.c` while changing serial TX.
 
 ### chatgpt-model-display locked view mapping
 
