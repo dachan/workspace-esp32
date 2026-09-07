@@ -163,17 +163,16 @@ static void ui_render(const ui_state_t *ui)
         font_draw_text(20, bar_y + bar_h + 8, thinking, text, card, 1);
     }
 
-    /* Version bottom-right — accent + scale 2 so it cannot be confused with title. */
+    /* Version bottom-right. */
     {
-        char build[24];
-        snprintf(build, sizeof(build), "VER %s", FIRMWARE_BUILD_STRING);
-        const int scale = 2;
+        const char *build = FIRMWARE_BUILD_STRING;
+        const int scale = 1;
         const int pad = 12;
         const int bw = font_text_width(build, scale);
         const int bh = 7 * scale;
         const int bx = DISPLAY_WIDTH - pad - bw;
         const int by = DISPLAY_HEIGHT - pad - bh;
-        font_draw_text(bx, by, build, accent, card, scale);
+        font_draw_text(bx, by, build, muted, card, scale);
     }
 
     display_flush();
