@@ -10,7 +10,9 @@ enum Switcher {
 
     /// Ctrl+Shift+M → Down to the ESP dial index → Return.
     /// ChatGPT's picker always opens with GPT-6 Astra highlighted; list order
-    /// matches Catalog.models.
+    /// matches Catalog.models. No Escape first — while the composer is focused,
+    /// Escape steals key focus and live dial applies miss (queued→focus still
+    /// works because ChatGPT was just brought front).
     static func model(_ raw: String, preferredBundleID: String?) -> Result {
         guard DeskFront.isForeground(preferred: preferredBundleID) else {
             return Result(ok: false, path: "deferred", error: "ChatGPT is not focused")
@@ -19,8 +21,6 @@ enum Switcher {
             return Result(ok: false, path: "none", error: "unknown model \(raw)")
         }
 
-        Keys.key(Keys.escape)
-        Keys.wait(0.1)
         guard DeskFront.isForeground(preferred: preferredBundleID) else {
             return Result(ok: false, path: "deferred", error: "ChatGPT is not focused")
         }
@@ -52,8 +52,7 @@ enum Switcher {
 
     /// Ctrl+Shift-, / Ctrl+Shift-. bumps. ChatGPT must already be focused.
     /// No Escape here — while the composer is focused, Escape steals key
-    /// focus and the reasoning chords silently miss. Dismiss pickers before
-    /// calling this (model apply already Escapes on the way out).
+    /// focus and the reasoning chords silently miss.
     static func thinking(_ raw: String, preferredBundleID: String?, from current: String?) -> Result {
         guard DeskFront.isForeground(preferred: preferredBundleID) else {
             return Result(ok: false, path: "deferred", error: "ChatGPT is not focused")
