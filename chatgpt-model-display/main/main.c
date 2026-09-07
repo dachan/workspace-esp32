@@ -9,6 +9,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "model_nvs.h"
+#include "encoder.h"
 #include "model_parse.h"
 #include "serial_model.h"
 #include "build_number.h"
@@ -89,6 +90,37 @@ static int thinking_level(const char *thinking)
         return 1;
     }
     return 2; /* unknown but present */
+}
+
+
+static const char *thinking_name_for_level(int level)
+{
+    switch (level) {
+    case 1: return "Instant";
+    case 2: return "Medium";
+    case 3: return "High";
+    case 4: return "Extra High";
+    default: return "Medium";
+    }
+}
+
+static void apply_thinking_level(ui_state_t *ui, int level)
+{
+    if (level < 1) {
+        level = 1;
+    }
+    if (level > 4) {
+        level = 4;
+    }
+    const char *name = thinking_name_for_level(level);
+    snprintf(ui->fields.thinking, sizeof(ui->fields.thinking), "%s", name);
+    ui->fields.has_thinking = 1;
+    if (!ui->fields.has_model) {
+        snprintf(ui->fields.model, sizeof(ui->fields.model), "%s", "ChatGPT");
+        ui->fields.has_model = 1;
+        ui->waiting = 0;
+    }
+    (void)model_nvs_save(&ui->fields);
 }
 
 static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_level,
@@ -185,6 +217,7 @@ void app_main(void)
     ESP_ERROR_CHECK(display_init());
     ESP_ERROR_CHECK(display_set_backlight(80));
     ESP_ERROR_CHECK(serial_model_init());
+    ESP_ERROR_CHECK(encoder_init());
 
     ui_state_t ui = {
         .waiting = 1,
@@ -197,6 +230,26 @@ void app_main(void)
 
     TickType_t last_paint = xTaskGetTickCount();
     while (1) {
+        int enc = encoder_delta();
+        if (enc != 0) {
+            int level = ui.fields.has_thinking ? thinking_level(ui.fields.thinking) : 2;
+            if (level < 1) {
+                level = 2;
+            }
+            level += enc;
+            apply_thinking_level(&ui, level);
+            ui_render(&ui);
+            last_paint = xTaskGetTickCount();
+        }
+        if (encoder_button_pressed()) {
+            /* Click cycles thinking up one step (wrap). */
+            int level = ui.fields.has_thinking ? thinking_level(ui.fields.thinking) : 0;
+            level = (level % 4) + 1;
+            apply_thinking_level(&ui, level);
+            ui_render(&ui);
+            last_paint = xTaskGetTickCount();
+        }
+
         model_fields_t next = ui.fields;
         if (serial_model_poll(&next)) {
             ui.fields = next;
@@ -213,6 +266,6 @@ void app_main(void)
             ui_render(&ui);
             last_paint = xTaskGetTickCount();
         }
-        vTaskDelay(pdMS_TO_TICKS(20));
+        vTaskDelay(pdMS_TO_TICKS(5));
     }
 }

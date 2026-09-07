@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "main.c" "display.c" "canvas.c" "font.c" "model_parse.c" "serial_model.c" "model_nvs.c"
+    SRCS "main.c" "display.c" "canvas.c" "font.c" "model_parse.c" "serial_model.c" "model_nvs.c" "encoder.c"
     INCLUDE_DIRS "."
 )
 
