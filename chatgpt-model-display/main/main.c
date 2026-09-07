@@ -288,7 +288,7 @@ void app_main(void)
     const TickType_t hold_rx_ticks = pdMS_TO_TICKS(8000);
 
     while (1) {
-        int think_d = encoder_delta(ENCODER_THINKING);
+        int think_d = -encoder_delta(ENCODER_THINKING); /* DT sense opposite this encoder */
         if (think_d != 0) {
             int level = ui.fields.has_thinking ? thinking_level(ui.fields.thinking) : 2;
             if (level < 1) {
