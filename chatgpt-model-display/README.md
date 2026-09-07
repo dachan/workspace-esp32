@@ -107,7 +107,7 @@ steps still use a 160 ms emit gap. The Mac helper uses `NSWorkspace.frontmostApp
 Control-Shift-M and steps reasoning with Control-Shift-, / Control-Shift-.
 While Cursor is focused it opens the model list with Command-/ (first Down
 is Auto), then reopens it for Effort with Left, Up, Right, then Down-only to
-the level; Return selects. The bridge
+the level; Return selects, then Escape twice closes the menus. The bridge
 settles 1 s after the last received change, applies model and effort in one
 pass, and skips any field that matches what it last applied to that app — an
 effort-only change skips model selection. When neither is
@@ -179,7 +179,7 @@ physical edges; the pending-step fix does not replace the existing decoder.
 - GPT-5.6 Sol, Terra, Luna: None, Low, Medium, High, Extra High, Max.
 
 Command-/ → Left → Up → Right highlights the first supported effort.
-Down moves by the target's zero-based index; Return selects once. Model changes
+Down moves by the target's zero-based index; Return selects, then Escape twice closes the menus. Model changes
 reapply effort, even when the requested level is unchanged. Unsupported endpoints
 clamp to the model's range. The bridge needs a known model for effort-only
 commands; CLI callers supply `--set-model` together with `--set-thinking`.

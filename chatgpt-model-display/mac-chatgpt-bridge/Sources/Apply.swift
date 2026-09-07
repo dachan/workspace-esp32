@@ -339,6 +339,13 @@ enum Switcher {
         guard Keys.wait(0.15, pulse: pulse) else {
             return .interrupted
         }
+        // Reasoning selection leaves two menu layers open.
+        if let stopped = repeatKey(
+            Keys.escape, times: 2, gap: 0.15, pulse: pulse,
+            fail: "could not close Cursor menus"
+        ) {
+            return stopped
+        }
         interruptedPickers.remove(focus.pid)
         guard Keys.wait(0.15, pulse: pulse) else {
             return .interrupted

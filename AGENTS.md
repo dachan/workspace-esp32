@@ -41,7 +41,7 @@ otherwise they stay queued. ChatGPT flush: Control-Shift-M, Down to the ESP
 dial index, Return; then absolute reasoning (Ctrl+Shift+, clamp to Light,
 Ctrl+Shift-. up to target). Cursor flush: Command-/ (first Down is Auto),
 or Left, Up, Right directly into Reasoning after reopening (Right highlights
-the first supported level; Down to the target; Return selects once). A
+the first supported level; Down to the target; Return selects, then Escape twice closes the menus). A
 ChatGPT-only model name still queued (e.g. GPT-6 Astra) is skipped while
 Cursor is focused so effort can still apply. The helper sends
 `FRONT Cursor` or `FRONT ChatGPT` so the panel title matches the focused app.
@@ -253,7 +253,7 @@ do not reorder it to match visual placement on the board.
 ### Cursor effort capabilities
 
 Right highlights the first supported effort; use its zero-based menu index for
-Down presses, then Return once. Auto and Composer 2.5 have no effort support.
+Down presses, then Return once, then Escape twice to close the menus. Auto and Composer 2.5 have no effort support.
 Cursor Grok 4.6 supports Low, Medium, High, Extra High. Claude Opus 5 and
 Claude Fable 5 add Max. GPT-5.6 Sol, Terra, and Luna support None, Low, Medium,
 High, Extra High, Max. Model changes must reapply effort because Cursor can

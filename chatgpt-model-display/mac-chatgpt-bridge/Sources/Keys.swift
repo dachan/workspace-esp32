@@ -27,7 +27,7 @@ enum Keys {
         Command-/ opens the model list on Search. First Down is Auto,
         then the enabled picker order. Return selects.
         Effort: Command-/, Left, Up, Right directly into Reasoning,
-        then Down to the level and Return once. Chat/agent input must be focused.
+        then Down to the level and Return once, then Escape twice to close the menus. Chat/agent input must be focused.
         Fast/Slow is not set from the dial.
       Serial is drained during key delays so a newer SET supersedes in-flight apply.
     """

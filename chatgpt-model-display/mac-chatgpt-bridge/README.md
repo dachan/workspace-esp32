@@ -29,7 +29,7 @@ otherwise it queues the latest model and thinking state from the ESP32.
      still apply.
    - Cursor effort: Command-/ (reopened after selecting a model when
      both changed), then Left, Up, Right directly into Reasoning, Down to
-     the level, and Return once. An effort-only change skips model selection.
+     the level, and Return once, then Escape twice to close the menus. An effort-only change skips model selection.
 5. If neither ChatGPT nor Cursor is focused: leave the ESP32 display/NVS
    as the source of truth and apply the queued values when one of those
    apps becomes frontmost. The helper never activates either app. A
@@ -130,7 +130,7 @@ the previous helper and relaunch it from the same Accessibility-authorized app.
 - GPT-5.6 Sol, Terra, Luna: None, Low, Medium, High, Extra High, Max.
 
 Command-/ → Left → Up → Right highlights the first supported effort.
-Down moves by the target's zero-based index; Return selects once. Model changes
+Down moves by the target's zero-based index; Return selects, then Escape twice closes the menus. Model changes
 reapply effort, even when the requested level is unchanged. Unsupported endpoints
 clamp to the model's range. The bridge needs a known model for effort-only
 commands; CLI callers supply `--set-model` together with `--set-thinking`.
