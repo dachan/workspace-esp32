@@ -1,11 +1,10 @@
 import Foundation
 
-/// Persist last successful AX model string for serial/watch fallback.
+/// Persist last successful model/thinking for serial/watch fallback.
 enum ModelCache {
-    private static let fileName = "last-model.txt"
     private static let folderName = "chatgpt-bridge"
 
-    static var fileURL: URL {
+    static var folderURL: URL {
         let fm = FileManager.default
         let base: URL
         if let appSupport = try? fm.url(
@@ -21,23 +20,42 @@ enum ModelCache {
                 .appendingPathComponent(folderName, isDirectory: true)
         }
         try? fm.createDirectory(at: base, withIntermediateDirectories: true)
-        return base.appendingPathComponent(fileName, isDirectory: false)
+        return base
     }
 
-    static func load() -> String? {
-        guard let raw = try? String(contentsOf: fileURL, encoding: .utf8) else {
+    static var fileURL: URL {
+        folderURL.appendingPathComponent("last-model.txt", isDirectory: false)
+    }
+
+    static var thinkingURL: URL {
+        folderURL.appendingPathComponent("last-thinking.txt", isDirectory: false)
+    }
+
+    static func load() -> String? { read(fileURL) }
+
+    static func loadThinking() -> String? { read(thinkingURL) }
+
+    static func save(_ model: String) {
+        write(model, to: fileURL)
+    }
+
+    static func saveThinking(_ level: String) {
+        write(level, to: thinkingURL)
+    }
+
+    private static func read(_ url: URL) -> String? {
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else {
             return nil
         }
-        let line = raw
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return line.isEmpty ? nil : line
     }
 
-    static func save(_ model: String) {
-        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+    private static func write(_ value: String, to url: URL) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         do {
-            try trimmed.write(to: fileURL, atomically: true, encoding: .utf8)
+            try trimmed.write(to: url, atomically: true, encoding: .utf8)
         } catch {
             fputs("chatgpt-bridge: cache write failed: \(error)\n", stderr)
         }

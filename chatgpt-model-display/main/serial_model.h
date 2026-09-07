@@ -7,13 +7,14 @@
 
 esp_err_t serial_model_init(void);
 
-// Non-blocking: returns true when a complete line updated fields.
-// Accepts from Mac:
+// Mac → ESP display updates (never sent by the ESP):
 //   MODEL <name>
-//   THINKING <level>   (optional override)
+//   THINKING <level>
+// ESP → Mac commands (Mac applies these; ESP ignores them on RX):
+//   SET MODEL <name>
+//   SET THINKING <level>
 int serial_model_poll(model_fields_t *fields);
 
-// ESP → Mac (encoder changes). Mac must not echo these back as MODEL lines
-// in a tight loop; use SET prefix so poll() ignores them.
-esp_err_t serial_model_send_set_model(const char *model);
-esp_err_t serial_model_send_set_thinking(const char *thinking);
+// Write one SET line to USB Serial/JTAG. Returns true if the write completed.
+int serial_model_send_set_model(const char *name);
+int serial_model_send_set_thinking(const char *level);

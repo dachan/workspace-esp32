@@ -12,6 +12,7 @@ struct Options {
     var checkAX = false
     var help = false
     var watch = false
+    var listen = false
     var maxDepth = 32
     var maxNodes = 8_000
     var intervalSeconds = 5.0
@@ -79,6 +80,8 @@ func parseOptions(_ args: [String]) -> Options? {
             options.bundleID = value
         case "--watch":
             options.watch = true
+        case "--listen":
+            options.listen = true
         case "--interval":
             guard let value = takeValue(), let parsed = Double(value), parsed > 0 else {
                 fputs("chatgpt-bridge: --interval needs a positive number of seconds\n", stderr)
@@ -114,6 +117,8 @@ func usage() -> String {
       --hid-info          Document the Ctrl+Shift+M HID path
       --check-ax          Check Accessibility permission and exit
       --watch             Poll the selected model until interrupted
+      --listen            Read SET MODEL / SET THINKING from --port and apply
+                          them in ChatGPT (implied by --watch --port)
       --interval SEC      Watch poll interval in seconds (default 5)
       -h, --help
     """
@@ -190,6 +195,9 @@ func run() -> Int32 {
         if options.watch {
             return runWatch(options: options, initialApp: nil)
         }
+        if options.listen {
+            return runListen(options: options, initialApp: nil)
+        }
         return emitOnce(options: options, app: nil)
     }
 
@@ -219,17 +227,40 @@ func run() -> Int32 {
     if options.watch {
         return runWatch(options: options, initialApp: runningApp)
     }
+    if options.listen {
+        return runListen(options: options, initialApp: runningApp)
+    }
 
     return emitOnce(options: options, app: runningApp)
 }
 
-func sendSerialModel(model: String, options: Options) -> Bool {
+final class BridgeRuntime {
+    var previousModel: String?
+    var previousThinking: String?
+    var suppressSerialUntil = Date.distantPast
+    var ignoreModel: String?
+    var ignoreThinking: String?
+    var session: SerialSession?
+}
+
+func thinkingFrom(_ model: String) -> String? {
+    ThinkingText.canonical(model)
+}
+
+func sendSerialModel(
+    model: String,
+    thinking: String?,
+    options: Options,
+    session: SerialSession?
+) -> Bool {
     do {
         try SerialBridge.send(
             model: model,
+            thinking: thinking,
             port: options.port,
             baud: options.baud,
-            echoLine: !options.json
+            echoLine: !options.json,
+            session: session
         )
         return true
     } catch {
@@ -263,7 +294,12 @@ func emitOnce(options: Options, app: NSRunningApplication?) -> Int32 {
             printHuman(readback)
         }
         if options.sendSerial {
-            return sendSerialModel(model: model, options: options) ? 0 : 1
+            return sendSerialModel(
+                model: model,
+                thinking: thinkingFrom(model) ?? ModelCache.loadThinking(),
+                options: options,
+                session: nil
+            ) ? 0 : 1
         }
         return 0
     }
@@ -286,7 +322,12 @@ func emitOnce(options: Options, app: NSRunningApplication?) -> Int32 {
             print("app: \(app) (\(bundle), pid \(pid))")
         }
         if options.sendSerial {
-            return sendSerialModel(model: cached, options: options) ? 0 : 1
+            return sendSerialModel(
+                model: cached,
+                thinking: thinkingFrom(cached) ?? ModelCache.loadThinking(),
+                options: options,
+                session: nil
+            ) ? 0 : 1
         }
         return 0
     }
@@ -306,13 +347,12 @@ func emitOnce(options: Options, app: NSRunningApplication?) -> Int32 {
 func emitChange(
     options: Options,
     readback: ModelReadback,
-    previousModel: inout String?,
+    runtime: BridgeRuntime,
     fromCache: Bool = false
 ) -> Bool {
-    let model: String?
+    var model: String?
     let sourceOverride: String?
     if readback.ok, let live = readback.model {
-        ModelCache.save(live)
         model = live
         sourceOverride = nil
     } else if let cached = ModelCache.load() {
@@ -326,10 +366,31 @@ func emitChange(
         sourceOverride = nil
     }
 
-    guard model != previousModel else {
+    var thinking = model.flatMap { thinkingFrom($0) } ?? ModelCache.loadThinking()
+    if let ignore = runtime.ignoreModel, model == ignore {
+        fputs("chatgpt-bridge: ignore stale AX model after encoder SET\n", stderr)
+        model = runtime.previousModel
+    } else if model == runtime.previousModel {
+        runtime.ignoreModel = nil
+    }
+    if let ignore = runtime.ignoreThinking, thinking == ignore {
+        thinking = runtime.previousThinking
+    } else if thinking == runtime.previousThinking {
+        runtime.ignoreThinking = nil
+    }
+    if let model {
+        ModelCache.save(model)
+    }
+    if let thinking {
+        ModelCache.saveThinking(thinking)
+    }
+    let modelChanged = model != runtime.previousModel
+    let thinkingChanged = thinking != runtime.previousThinking
+    guard modelChanged || thinkingChanged else {
         return false
     }
-    previousModel = model
+    runtime.previousModel = model
+    runtime.previousThinking = thinking
 
     if options.json {
         if let model, let sourceOverride {
@@ -344,6 +405,9 @@ func emitChange(
     } else if let model {
         let stamp = ISO8601DateFormatter().string(from: Date())
         print("\(stamp) model: \(model)")
+        if let thinking {
+            print("thinking: \(thinking)")
+        }
         if let sourceOverride {
             print("source: \(sourceOverride)")
         } else if let source = readback.source {
@@ -357,112 +421,167 @@ func emitChange(
     fflush(stderr)
 
     if options.sendSerial, let model {
-        _ = sendSerialModel(model: model, options: options)
+        if Date() < runtime.suppressSerialUntil {
+            fputs("serial hold after encoder SET; skip MODEL/THINKING echo\n", stderr)
+        } else {
+            _ = sendSerialModel(
+                model: model,
+                thinking: thinking,
+                options: options,
+                session: runtime.session
+            )
+        }
     }
     return true
 }
 
+func applyEncoderSet(
+    line: SerialLine,
+    options: Options,
+    app: NSRunningApplication?,
+    runtime: BridgeRuntime
+) {
+    switch line {
+    case .ignored:
+        return
+    case .setModel(let name):
+        runtime.ignoreModel = runtime.previousModel
+        let result = ChatGPTApply.model(
+            name,
+            app: app,
+            maxDepth: options.maxDepth,
+            maxNodes: options.maxNodes
+        )
+        runtime.suppressSerialUntil = Date().addingTimeInterval(8)
+        runtime.previousModel = name
+        if result.ok {
+            ModelCache.save(name)
+            let stamp = ISO8601DateFormatter().string(from: Date())
+            print("\(stamp) applied SET MODEL \(name) via \(result.path)")
+        } else {
+            fputs("chatgpt-bridge: \(result.error ?? "SET MODEL failed")\n", stderr)
+        }
+        fflush(stdout)
+        fflush(stderr)
+    case .setThinking(let level):
+        runtime.ignoreThinking = runtime.previousThinking
+        let result = ChatGPTApply.thinking(
+            level,
+            app: app,
+            maxDepth: options.maxDepth,
+            maxNodes: options.maxNodes
+        )
+        runtime.suppressSerialUntil = Date().addingTimeInterval(8)
+        runtime.previousThinking = ThinkingText.canonical(level) ?? level
+        if result.ok {
+            ModelCache.saveThinking(runtime.previousThinking ?? level)
+            let stamp = ISO8601DateFormatter().string(from: Date())
+            print("\(stamp) applied SET THINKING \(level) via \(result.path)")
+        } else {
+            fputs("chatgpt-bridge: \(result.error ?? "SET THINKING failed")\n", stderr)
+        }
+        fflush(stdout)
+        fflush(stderr)
+    }
+}
+
+func drainSerial(options: Options, app: NSRunningApplication?, runtime: BridgeRuntime) {
+    guard let session = runtime.session else { return }
+    for raw in session.readLines() {
+        applyEncoderSet(
+            line: SerialBridge.parseInbound(raw),
+            options: options,
+            app: app,
+            runtime: runtime
+        )
+    }
+}
+
 func runWatch(options: Options, initialApp: NSRunningApplication?) -> Int32 {
-    var app = initialApp
-    var previousModel: String?
-    var serialFD: Int32 = -1
-    var serialBuf = ""
-    var suppressSerialEchoUntil = Date.distantPast
-    if let port = options.port, !port.isEmpty {
+    var options = options
+    if options.port != nil {
+        options.listen = true
+    }
+    if options.listen, options.port == nil, options.sendSerial {
+        fputs("chatgpt-bridge: --listen needs --port to read SET lines\n", stderr)
+    }
+
+    let runtime = BridgeRuntime()
+    if options.port != nil || options.sendSerial || options.listen {
+        let session = SerialSession(port: options.port, baud: options.baud)
         do {
-            serialFD = try SerialBridge.openPort(port, baud: options.baud)
-            // Keep NONBLOCK so we can interleave AX polls with SET listens.
-            let flags = fcntl(serialFD, F_GETFL)
-            if flags >= 0 { _ = fcntl(serialFD, F_SETFL, flags | O_NONBLOCK) }
-            if !options.json {
-                print("listening for SET MODEL / SET THINKING on \(port)")
-            }
+            try session.open()
+            runtime.session = session
         } catch {
-            fputs("chatgpt-bridge: serial listen failed: \(error)\n", stderr)
+            fputs("chatgpt-bridge: \(error)\n", stderr)
+            if options.listen, options.port != nil {
+                return 1
+            }
         }
     }
+    defer { runtime.session?.close() }
+
+    var app = initialApp
     if !options.json {
-        print(
-            "watching every \(options.intervalSeconds)s (Ctrl+C to stop); prints on change"
-        )
+        var parts = ["watching every \(options.intervalSeconds)s"]
+        if options.listen, options.port != nil {
+            parts.append("listening for SET MODEL / SET THINKING on \(options.port!)")
+        }
+        print("\(parts.joined(separator: "; ")) (Ctrl+C to stop)")
         fflush(stdout)
     }
 
+    var lastAX = Date.distantPast
     while true {
         if let found = ChatGPTProcess.find(preferredBundleID: options.bundleID) {
             app = found
         }
+        drainSerial(options: options, app: app, runtime: runtime)
 
-        // Drain encoder→Mac SET lines first so knobs feel snappy.
-        if serialFD >= 0 {
-            serialBuf += SerialBridge.readAvailable(serialFD)
-            while let nl = serialBuf.firstIndex(of: "\n") {
-                var line = String(serialBuf[..<nl])
-                serialBuf = String(serialBuf[serialBuf.index(after: nl)...])
-                if line.hasSuffix("\r") { line.removeLast() }
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { continue }
-                if trimmed.hasPrefix("SET MODEL ") {
-                    let name = String(trimmed.dropFirst("SET MODEL ".count))
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !name.isEmpty, let app else {
-                        fputs("chatgpt-bridge: SET MODEL ignored (no ChatGPT)\n", stderr)
-                        continue
-                    }
-                    fputs("chatgpt-bridge: encoder model -> \(name)\n", stderr)
-                    suppressSerialEchoUntil = Date().addingTimeInterval(2.5)
-                    previousModel = name
-                    _ = ChatGPTControl.setModel(
-                        name, app: app, maxDepth: options.maxDepth, maxNodes: options.maxNodes
-                    )
-                } else if trimmed.hasPrefix("SET THINKING ") {
-                    let name = String(trimmed.dropFirst("SET THINKING ".count))
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !name.isEmpty, let app else { continue }
-                    fputs("chatgpt-bridge: encoder thinking -> \(name)\n", stderr)
-                    suppressSerialEchoUntil = Date().addingTimeInterval(2.5)
-                    _ = ChatGPTControl.setThinking(
-                        name, app: app, maxDepth: options.maxDepth, maxNodes: options.maxNodes
-                    )
-                }
+        let now = Date()
+        if now.timeIntervalSince(lastAX) >= options.intervalSeconds {
+            lastAX = now
+            let readback: ModelReadback
+            if let app {
+                readback = ModelReader.read(
+                    app: app,
+                    maxDepth: options.maxDepth,
+                    maxNodes: options.maxNodes
+                )
+            } else {
+                readback = ModelReadback(
+                    ok: false,
+                    model: nil,
+                    source: nil,
+                    bundleID: options.bundleID,
+                    pid: nil,
+                    appName: nil,
+                    candidates: [],
+                    error: "ChatGPT is not running"
+                )
             }
-        }
-
-        let readback: ModelReadback
-        if let app {
-            readback = ModelReader.read(
-                app: app,
-                maxDepth: options.maxDepth,
-                maxNodes: options.maxNodes
-            )
-        } else {
-            readback = ModelReadback(
-                ok: false,
-                model: nil,
-                source: nil,
-                bundleID: options.bundleID,
-                pid: nil,
-                appName: nil,
-                candidates: [],
-                error: "ChatGPT is not running"
+            let usingCache = !(readback.ok && readback.model != nil)
+            _ = emitChange(
+                options: options,
+                readback: readback,
+                runtime: runtime,
+                fromCache: usingCache && runtime.previousModel != nil
             )
         }
-        let usingCache = !(readback.ok && readback.model != nil)
-        // Avoid echo-fighting the panel right after an encoder SET.
-        var sendOpts = options
-        if Date() < suppressSerialEchoUntil {
-            sendOpts.sendSerial = false
-        }
-        _ = emitChange(
-            options: sendOpts,
-            readback: readback,
-            previousModel: &previousModel,
-            fromCache: usingCache && previousModel != nil
-        )
-        // Spin faster when listening so knobs aren't laggy.
-        let sleepFor = serialFD >= 0 ? min(options.intervalSeconds, 0.25) : options.intervalSeconds
-        Thread.sleep(forTimeInterval: sleepFor)
+        Thread.sleep(forTimeInterval: 0.05)
     }
+}
+
+func runListen(options: Options, initialApp: NSRunningApplication?) -> Int32 {
+    guard options.port != nil else {
+        fputs("chatgpt-bridge: --listen needs --port\n", stderr)
+        return 2
+    }
+    var watchOptions = options
+    watchOptions.watch = true
+    watchOptions.listen = true
+    watchOptions.sendSerial = options.sendSerial
+    return runWatch(options: watchOptions, initialApp: initialApp)
 }
 
 exit(run())
