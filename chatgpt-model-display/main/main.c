@@ -153,15 +153,21 @@ static int model_index(const char *name)
 
 static int apply_model_delta(ui_state_t *ui, int delta)
 {
+    if (delta == 0 || s_models_n <= 0) {
+        return 0;
+    }
     int idx = model_index(ui->fields.has_model ? ui->fields.model : NULL);
-    int next = idx < 0 ? 0 : idx + delta;
+    if (idx < 0) {
+        idx = 0;
+    }
+    int next = idx + delta;
     if (next < 0) {
         next = 0;
     }
     if (next >= s_models_n) {
         next = s_models_n - 1;
     }
-    if (idx >= 0 && next == idx && ui->fields.has_model) {
+    if (ui->fields.has_model && next == idx) {
         return 0;
     }
     snprintf(ui->fields.model, sizeof(ui->fields.model), "%s", s_models[next]);
@@ -284,6 +290,11 @@ void app_main(void)
     /* Ignore stale Mac MODEL/THINKING for a short window after a local encoder SET. */
     TickType_t hold_rx_until = 0;
     const TickType_t hold_rx_ticks = pdMS_TO_TICKS(8000);
+    const TickType_t settle_ticks = pdMS_TO_TICKS(1000);
+    int pending_model_set = 0;
+    int pending_think_set = 0;
+    TickType_t model_settle_at = 0;
+    TickType_t think_settle_at = 0;
 
     while (1) {
         int think_d = encoder_delta(ENCODER_THINKING);
@@ -293,8 +304,8 @@ void app_main(void)
                 level = 2;
             }
             if (apply_thinking_level(&ui, level + think_d)) {
-                serial_model_send_set_thinking(ui.fields.thinking);
-                hold_rx_until = xTaskGetTickCount() + hold_rx_ticks;
+                pending_think_set = 1;
+                think_settle_at = xTaskGetTickCount() + settle_ticks;
                 ui_render(&ui);
                 last_paint = xTaskGetTickCount();
             }
@@ -304,37 +315,52 @@ void app_main(void)
             int next = level < 1 ? 1
                                  : (level >= THINKING_LEVEL_COUNT ? THINKING_LEVEL_COUNT : level + 1);
             if (apply_thinking_level(&ui, next)) {
-                serial_model_send_set_thinking(ui.fields.thinking);
-                hold_rx_until = xTaskGetTickCount() + hold_rx_ticks;
+                pending_think_set = 1;
+                think_settle_at = xTaskGetTickCount() + settle_ticks;
                 ui_render(&ui);
                 last_paint = xTaskGetTickCount();
             }
         }
 
-        /* The model encoder is mounted opposite the thinking encoder. */
-        int model_d = -encoder_delta(ENCODER_MODEL);
+        int model_d = encoder_delta(ENCODER_MODEL);
         if (model_d != 0) {
             if (apply_model_delta(&ui, model_d)) {
-                serial_model_send_set_model(ui.fields.model);
-                hold_rx_until = xTaskGetTickCount() + hold_rx_ticks;
+                pending_model_set = 1;
+                model_settle_at = xTaskGetTickCount() + settle_ticks;
                 ui_render(&ui);
                 last_paint = xTaskGetTickCount();
-            } else {
-                encoder_clear_partial(ENCODER_MODEL);
             }
         }
         if (encoder_button_pressed(ENCODER_MODEL)) {
             if (apply_model_delta(&ui, 1)) {
-                serial_model_send_set_model(ui.fields.model);
-                hold_rx_until = xTaskGetTickCount() + hold_rx_ticks;
+                pending_model_set = 1;
+                model_settle_at = xTaskGetTickCount() + settle_ticks;
                 ui_render(&ui);
                 last_paint = xTaskGetTickCount();
+            }
+        }
+
+        TickType_t now = xTaskGetTickCount();
+        if (pending_think_set && now >= think_settle_at) {
+            if (serial_model_send_set_thinking(ui.fields.thinking)) {
+                pending_think_set = 0;
+                hold_rx_until = now + hold_rx_ticks;
+            } else {
+                think_settle_at = now + pdMS_TO_TICKS(200);
+            }
+        }
+        if (pending_model_set && now >= model_settle_at) {
+            if (serial_model_send_set_model(ui.fields.model)) {
+                pending_model_set = 0;
+                hold_rx_until = now + hold_rx_ticks;
+            } else {
+                model_settle_at = now + pdMS_TO_TICKS(200);
             }
         }
 
         model_fields_t next = ui.fields;
         if (serial_model_poll(&next)) {
-            TickType_t now = xTaskGetTickCount();
+            now = xTaskGetTickCount();
             int held = hold_rx_until != 0 && now < hold_rx_until;
             if (held) {
                 ESP_LOGD(TAG, "hold Mac poll after local encoder SET");

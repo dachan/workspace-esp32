@@ -15,6 +15,3 @@ int encoder_delta(encoder_id_t id);
 
 /* 1 on a fresh button press (active-low, debounced). */
 int encoder_button_pressed(encoder_id_t id);
-
-/* Drop partial detent after a clamped (no-op) turn. */
-void encoder_clear_partial(encoder_id_t id);

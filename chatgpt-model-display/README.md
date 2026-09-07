@@ -1,28 +1,34 @@
 # chatgpt-model-display
 
-ESP32-S3 firmware that always shows the current ChatGPT/Codex **model** and
-**thinking level** on the desk-mounted 3.5" ST7796U panel.
+ESP32-S3 firmware that shows the ChatGPT **model** and **thinking** level
+on the desk-mounted 3.5" ST7796U panel. Rotary encoders change both locally
+(display + NVS). After **1 s** with no further detents the firmware sends
+`SET MODEL` / `SET THINKING` to `mac-chatgpt-bridge/`. The Mac helper
+applies those only while ChatGPT is already the foreground app.
 
 ## Protocol (USB serial, 115200)
 
-UTF-8 lines from `mac-chatgpt-bridge/` (in this folder):
+Mac → ESP (optional display updates):
 
 ```text
 MODEL <name>
-```
-
-`<name>` is the Accessibility readback string. Thinking level is often already
-embedded (for example `GPT-5.6 Luna Light`). The firmware splits a trailing
-thinking token when present; otherwise it shows the full string as the model and
-`—` for thinking.
-
-On each `MODEL` line the firmware saves model/thinking to NVS (`cgpt`/`model`,`think`) and reloads that cache on boot so the panel is not stuck on Waiting when the bridge is quiet.
-
-The bridge also sends the current thinking level separately:
-
-```text
 THINKING <level>
 ```
+
+ESP → Mac (after the 1 s encoder settle):
+
+```text
+SET MODEL <name>
+SET THINKING <level>
+```
+
+On each encoder change the firmware saves model/thinking to NVS
+(`cgpt`/`model`,`think`) and reloads that cache on boot.
+
+Dial models, in order: GPT-6 Astra, GPT-5.6 Sol, GPT-5.6 Terra,
+GPT-5.6 Luna, GPT-5.5, GPT-5.4 Mini.
+
+Thinking: Light, Medium, High, Extra High.
 
 ## Hardware
 
@@ -48,26 +54,22 @@ THINKING <level>
 | Both ENC GND | GND |
 
 USB: native USB Serial/JTAG (`/dev/cu.usbmodem*` on macOS). Flash and
-`MODEL` traffic share that port.
+`SET` traffic share that port.
 
 ## Desk control (encoders → ChatGPT)
 
-Firmware `v 0.23+` sends `SET MODEL <name>` / `SET THINKING <level>` when knobs change.
-The bridge presses the app's Accessibility model/thinking controls directly and
-falls back to configured keyboard shortcuts only when a control is unavailable.
-Run the Mac bridge with serial listen + watch:
+Firmware `v 0.35+` updates the panel immediately, then sends SET after a
+1 s rotary debounce. The Mac helper uses `NSWorkspace.frontmostApplication`
+(no AX tree walk). While ChatGPT is focused it opens the model picker with
+Control-Shift-M and steps reasoning with Control-Shift-, / Control-Shift-.
+When ChatGPT is not focused, encoder changes stay on the ESP32 display/NVS
+and the bridge queues the latest values without activating ChatGPT.
 
 ```bash
 chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
 ```
 
-Requires Accessibility for the launching app. Input Monitoring is needed only
-when the keyboard-shortcut fallback is used.
-Model knob clamps to the current ChatGPT picker range (GPT-6 Astra through
-GPT-5.4 Mini); thinking clamps Light ↔ Extra High.
-When ChatGPT is not focused, encoder changes stay on the ESP32 display/NVS and
-the bridge queues them without activating ChatGPT. It applies the latest queued
-model and thinking level after ChatGPT returns to the foreground.
+Requires Accessibility for the launching app (key posting only).
 
 ## Build / flash (Mac only)
 
@@ -85,15 +87,15 @@ Verify the port with `ls /dev/cu.usb*` or
 `swift run --package-path ./mac-chatgpt-bridge chatgpt-bridge --list-ports`
 before flashing (paths can change).
 
-Two encoders on the **right** header (see repo `s3-n16r8.jpeg`): **thinking** (GPIO41/40/39) and **model** (GPIO1/2/42). Rotate or click to step; changes persist in NVS.
+Two encoders on the **right** header (see repo `s3-n16r8.jpeg`): **thinking**
+(GPIO41/40/39) and **model** (GPIO1/2/42). Rotate or click to step; the
+panel updates immediately and SET waits 1 s after the last detent.
 
-## Bridge watch → screen
+## Bridge watch
 
 ```sh
 cd ~/Development/workspace-esp32/chatgpt-model-display/mac-chatgpt-bridge
 swift build -c release
 "$(swift build -c release --show-bin-path)/chatgpt-bridge" \
-  --watch --interval 5 --send-serial --port /dev/cu.usbmodem21201
+  --watch --port /dev/cu.usbmodem21201
 ```
-
-Watch mode sends `MODEL <name>` only when the model string changes.

@@ -32,12 +32,16 @@ Hard lanes for this repo:
 
 ## mac-chatgpt-bridge
 
-`chatgpt-model-display/mac-chatgpt-bridge/` is a macOS Accessibility CLI that reads the selected
-ChatGPT/Codex model and sends `MODEL <name>
-` over USB serial (115200) when
-`--send-serial --port` is set. Watch mode (`--watch`) sends only on change. It
-only runs on the Mac. On-device UI lives in `chatgpt-model-display/` (3.5\" ST7796 480x320). Edit and
-flash on the Mac; pull Hetzner codex after push. Bridge caches the last good model under Application Support; firmware keeps the last MODEL in NVS for boot/display fallback.
+`chatgpt-model-display/mac-chatgpt-bridge/` is a macOS CLI. Foreground is
+`NSWorkspace.frontmostApplication` (`com.openai.chat` / `com.openai.codex` /
+Cursor `com.todesktop.230313mzl4w4u92`).
+It never activates the target app and never walks the AX tree. Encoder `SET MODEL` /
+`SET THINKING` lines are applied with keyboard shortcuts only while ChatGPT or Cursor
+is already focused; otherwise they stay queued. Firmware waits 1 s after the
+last rotary detent before sending SET. The helper only runs on the Mac.
+On-device UI lives in `chatgpt-model-display/` (3.5\" ST7796 480x320). Edit
+and flash on the Mac; pull Hetzner codex after push. Firmware keeps the last
+model/thinking in NVS for boot.
 
 ### chatgpt-model-display locked view mapping
 
@@ -117,21 +121,25 @@ the LCD reset low because the receiver has no accessible EN switch.
 
 ## Desk control (encoders → ChatGPT)
 
-Firmware `v 0.23+` sends `SET MODEL <name>` / `SET THINKING <level>` when knobs change.
-The bridge presses the app's Accessibility model/thinking controls directly and
-falls back to configured keyboard shortcuts only when a control is unavailable.
+Firmware `v 0.35+` updates the panel/NVS immediately, then sends
+`SET MODEL <name>` / `SET THINKING <level>` 1 s after the last detent.
+The Mac helper applies those with keyboard shortcuts only while ChatGPT is
+already the foreground app: Control-Shift-M then type the model token and Return;
+Control-Shift-, / Control-Shift-. for Light → Extra High.
 Run the Mac bridge with serial listen + watch:
 
 ```bash
 chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
 ```
 
-Requires Accessibility for the launching app. Input Monitoring is needed only
-when the keyboard-shortcut fallback is used.
-Model knob clamps to the current ChatGPT picker range (GPT-6 Astra through
-GPT-5.4 Mini); thinking clamps Light ↔ Extra High.
-If ChatGPT is not focused, the bridge must not activate it. Encoder changes
-remain on the ESP32 display/NVS and are queued until ChatGPT returns to the
+Requires Accessibility for the launching app (key posting). Foreground
+detection does not. Thinking uses a polled falling-CLK decode; the model knob
+uses PCNT hardware quadrature (a polled decode misreads it, because the display
+flush delays the poll past the CLK/DT phase difference and the dial parks on one
+end). Model clamps GPT-6 Astra through GPT-5.4 Mini (no wrap);
+thinking clamps Light ↔ Extra High.
+If ChatGPT or Cursor is not focused, the bridge must not activate it. Encoder changes
+remain on the ESP32 display/NVS and are queued until ChatGPT or Cursor returns to the
 foreground, when the latest model and thinking settings are applied.
 
 ## Build and flash

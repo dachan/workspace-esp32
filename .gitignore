@@ -8,9 +8,4 @@
 **/.env.*
 **/*.bin
 **/sim/out.*
-
-# chatgpt-model-display release copies (tracked)
-!chatgpt-model-display/dist/
-!chatgpt-model-display/dist/**
-!chatgpt-model-display/dist/*.bin
 __pycache__/

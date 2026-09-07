@@ -1,6 +1,9 @@
 #include "encoder.h"
 
 #include "driver/gpio.h"
+#include "driver/pulse_cnt.h"
+#include "driver/rtc_io.h"
+#include "esp_log.h"
 #include "esp_timer.h"
 
 /*
@@ -8,26 +11,139 @@
  * Thinking: CLK41 DT40 SW39
  * Model:    CLK1  DT2  SW42
  *
- * CLK falling-edge + DT direction (one pulse per detent on these modules).
- * Bounce that reverses for a few ms after a real step is dropped so
- * overscroll doesn't flip the setting.
+ * Thinking: polled falling CLK, DT direction, two pulses per level, 160 ms gap.
+ *
+ * Model: PCNT hardware quadrature. Polling could not decode this knob — the
+ * same loop also runs a full 480x320 SPI flush, so DT was sampled long after
+ * CLK fell, read its resting level every time, and every detent looked like
+ * the same direction. The list then walked to one end and stayed there. PCNT
+ * counts both lines in hardware, so a blocked loop cannot lose or misread a
+ * detent. Four counts per detent; the model list clamps at Astra / Mini.
  */
 static const int s_clk[ENCODER_COUNT] = {41, 1};
 static const int s_dt[ENCODER_COUNT] = {40, 2};
 static const int s_sw[ENCODER_COUNT] = {39, 42};
 
+static const char *TAG = "encoder";
+
 static int s_last_clk[ENCODER_COUNT];
 static int s_last_dir[ENCODER_COUNT];
 static int64_t s_last_step_us[ENCODER_COUNT];
+static int s_pulses[ENCODER_COUNT];
+static int s_sign[ENCODER_COUNT];
+static int64_t s_emit_us[ENCODER_COUNT];
 static int s_last_sw[ENCODER_COUNT];
 static int64_t s_last_sw_us[ENCODER_COUNT];
 static int s_sw_armed[ENCODER_COUNT];
 
 #define MIN_STEP_US 50000
+#define EMIT_US 160000
+#define PULSES_PER_STEP 2
 #define DIR_LOCK_US 100000
+
+/* Model (PCNT) */
+#define MODEL_PCNT_LIMIT 1000
+#define MODEL_PCNT_RESET 500
+#define MODEL_COUNTS_PER_DETENT 4
+/* +1 counterclockwise → Mini. Flip to -1 if the two directions land swapped. */
+#define MODEL_SIGN 1
+
+static pcnt_unit_handle_t s_model_unit;
+static int s_model_prev_count;
+static int s_model_acc;
+
+
+static esp_err_t model_pcnt_init(void)
+{
+    pcnt_unit_config_t unit_cfg = {
+        .low_limit = -MODEL_PCNT_LIMIT,
+        .high_limit = MODEL_PCNT_LIMIT,
+    };
+    esp_err_t err = pcnt_new_unit(&unit_cfg, &s_model_unit);
+    if (err != ESP_OK) {
+        return err;
+    }
+    /* KY-040 contacts are noisy; drop sub-microsecond spikes in hardware. */
+    pcnt_glitch_filter_config_t filter_cfg = {
+        .max_glitch_ns = 1000,
+    };
+    err = pcnt_unit_set_glitch_filter(s_model_unit, &filter_cfg);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    pcnt_chan_config_t chan_a_cfg = {
+        .edge_gpio_num = s_clk[ENCODER_MODEL],
+        .level_gpio_num = s_dt[ENCODER_MODEL],
+    };
+    pcnt_channel_handle_t chan_a = NULL;
+    err = pcnt_new_channel(s_model_unit, &chan_a_cfg, &chan_a);
+    if (err != ESP_OK) {
+        return err;
+    }
+    pcnt_chan_config_t chan_b_cfg = {
+        .edge_gpio_num = s_dt[ENCODER_MODEL],
+        .level_gpio_num = s_clk[ENCODER_MODEL],
+    };
+    pcnt_channel_handle_t chan_b = NULL;
+    err = pcnt_new_channel(s_model_unit, &chan_b_cfg, &chan_b);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    /* Count all four quadrature edges so direction comes from both lines. */
+    err = pcnt_channel_set_edge_action(chan_a, PCNT_CHANNEL_EDGE_ACTION_DECREASE,
+                                      PCNT_CHANNEL_EDGE_ACTION_INCREASE);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = pcnt_channel_set_level_action(chan_a, PCNT_CHANNEL_LEVEL_ACTION_KEEP,
+                                       PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = pcnt_channel_set_edge_action(chan_b, PCNT_CHANNEL_EDGE_ACTION_INCREASE,
+                                      PCNT_CHANNEL_EDGE_ACTION_DECREASE);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = pcnt_channel_set_level_action(chan_b, PCNT_CHANNEL_LEVEL_ACTION_KEEP,
+                                        PCNT_CHANNEL_LEVEL_ACTION_INVERSE);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = pcnt_unit_enable(s_model_unit);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = pcnt_unit_clear_count(s_model_unit);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = pcnt_unit_start(s_model_unit);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    /* PCNT reconfigures its pins, so re-arm the module pull-ups afterwards. */
+    gpio_set_pull_mode(s_clk[ENCODER_MODEL], GPIO_PULLUP_ONLY);
+    gpio_set_pull_mode(s_dt[ENCODER_MODEL], GPIO_PULLUP_ONLY);
+
+    s_model_prev_count = 0;
+    s_model_acc = 0;
+    return ESP_OK;
+}
 
 esp_err_t encoder_init(void)
 {
+    const int pins[] = {41, 40, 39, 1, 2, 42};
+    for (int i = 0; i < (int)(sizeof(pins) / sizeof(pins[0])); i++) {
+        gpio_reset_pin(pins[i]);
+        if (rtc_gpio_is_valid_gpio(pins[i])) {
+            rtc_gpio_deinit(pins[i]);
+        }
+    }
     uint64_t mask = 0;
     for (int i = 0; i < ENCODER_COUNT; i++) {
         mask |= (1ULL << s_clk[i]) | (1ULL << s_dt[i]) | (1ULL << s_sw[i]);
@@ -47,11 +163,49 @@ esp_err_t encoder_init(void)
         s_last_clk[i] = gpio_get_level(s_clk[i]);
         s_last_dir[i] = 0;
         s_last_step_us[i] = 0;
+        s_pulses[i] = 0;
+        s_sign[i] = 0;
+        s_emit_us[i] = 0;
         s_last_sw[i] = gpio_get_level(s_sw[i]);
         s_sw_armed[i] = 1;
         s_last_sw_us[i] = 0;
     }
+
+    err = model_pcnt_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "model PCNT init failed: %s", esp_err_to_name(err));
+        return err;
+    }
     return ESP_OK;
+}
+
+static int model_delta(void)
+{
+    if (s_model_unit == NULL) {
+        return 0;
+    }
+    int count = 0;
+    if (pcnt_unit_get_count(s_model_unit, &count) != ESP_OK) {
+        return 0;
+    }
+    s_model_acc += count - s_model_prev_count;
+    s_model_prev_count = count;
+    if (count > MODEL_PCNT_RESET || count < -MODEL_PCNT_RESET) {
+        if (pcnt_unit_clear_count(s_model_unit) == ESP_OK) {
+            s_model_prev_count = 0;
+        }
+    }
+
+    /* One model per detent; leftover counts stay for the next poll. */
+    if (s_model_acc >= MODEL_COUNTS_PER_DETENT) {
+        s_model_acc -= MODEL_COUNTS_PER_DETENT;
+        return MODEL_SIGN;
+    }
+    if (s_model_acc <= -MODEL_COUNTS_PER_DETENT) {
+        s_model_acc += MODEL_COUNTS_PER_DETENT;
+        return -MODEL_SIGN;
+    }
+    return 0;
 }
 
 int encoder_delta(encoder_id_t id)
@@ -59,11 +213,14 @@ int encoder_delta(encoder_id_t id)
     if (id < 0 || id >= ENCODER_COUNT) {
         return 0;
     }
+    if (id == ENCODER_MODEL) {
+        return model_delta();
+    }
+
     int clk = gpio_get_level(s_clk[id]);
     int dt = gpio_get_level(s_dt[id]);
     int delta = 0;
     if (s_last_clk[id] == 1 && clk == 0) {
-        /* Desk-verified sense: clockwise increases both controls. */
         delta = (dt == 1) ? 1 : -1;
     }
     s_last_clk[id] = clk;
@@ -75,23 +232,28 @@ int encoder_delta(encoder_id_t id)
     if (now - s_last_step_us[id] < MIN_STEP_US) {
         return 0;
     }
-    /* Drop a bounce that flips direction right after a real step. */
     if (s_last_dir[id] != 0 && delta != s_last_dir[id]
         && (now - s_last_step_us[id]) < DIR_LOCK_US) {
         return 0;
     }
     s_last_dir[id] = delta;
     s_last_step_us[id] = now;
-    return delta;
-}
 
-void encoder_clear_partial(encoder_id_t id)
-{
-    if (id < 0 || id >= ENCODER_COUNT) {
-        return;
+    if (delta != s_sign[id]) {
+        s_sign[id] = delta;
+        s_pulses[id] = 1;
+        return 0;
     }
-    /* Nothing partial with edge decode; reset dir lock so clamp can reverse. */
-    s_last_dir[id] = 0;
+    s_pulses[id]++;
+    if (s_pulses[id] < PULSES_PER_STEP) {
+        return 0;
+    }
+    s_pulses[id] = 0;
+    if (now - s_emit_us[id] < EMIT_US) {
+        return 0;
+    }
+    s_emit_us[id] = now;
+    return delta;
 }
 
 int encoder_button_pressed(encoder_id_t id)
