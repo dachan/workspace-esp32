@@ -20,7 +20,6 @@ typedef struct {
 
 static sync_field_t s_fields[] = {{.kind = "MODEL"}, {.kind = "THINKING"}};
 static bool s_acknowledged_protocol;
-static bool s_hold_sync;
 
 static void update_field(sync_field_t *field, const char *value, bool local_change)
 {
@@ -38,29 +37,14 @@ static void update_field(sync_field_t *field, const char *value, bool local_chan
 
 void serial_sync_update(const model_fields_t *fields, bool local_change)
 {
-    if (local_change) {
-        s_hold_sync = false;
-    }
     update_field(&s_fields[0], fields->has_model ? fields->model : "", local_change);
     update_field(&s_fields[1], fields->has_thinking ? fields->thinking : "", local_change);
-}
-
-void serial_sync_restore(const model_fields_t *fields)
-{
-    s_hold_sync = true;
-    update_field(&s_fields[0], fields->has_model ? fields->model : "", false);
-    update_field(&s_fields[1], fields->has_thinking ? fields->thinking : "", false);
-    s_fields[0].pending = false;
-    s_fields[1].pending = false;
 }
 
 bool serial_sync_handle_line(const char *line)
 {
     if (strcmp(line, "SYNC") == 0) {
         s_acknowledged_protocol = true;
-        if (s_hold_sync) {
-            return true;
-        }
         for (size_t i = 0; i < 2; i++) {
             sync_field_t *field = &s_fields[i];
             if (field->value[0] && !field->pending) {

@@ -2,36 +2,29 @@
 
 #include <string.h>
 
-static const char kChatGPT[] = "ChatGPT";
-static const char kCursor[] = "Cursor";
-static const char *s_title = kChatGPT;
+static bool s_is_cursor;
 static bool s_dirty;
 
 bool front_title_apply_line(const char *line)
 {
-    const char *title;
+    bool is_cursor;
     if (strcmp(line, "FRONT Cursor") == 0) {
-        title = kCursor;
+        is_cursor = true;
     } else if (strcmp(line, "FRONT ChatGPT") == 0) {
-        title = kChatGPT;
+        is_cursor = false;
     } else {
         return false;
     }
-    if (s_title != title) {
-        s_title = title;
+    if (s_is_cursor != is_cursor) {
+        s_is_cursor = is_cursor;
         s_dirty = true;
     }
     return true;
 }
 
-const char *front_title_text(void)
-{
-    return s_title;
-}
-
 bool front_title_is_cursor(void)
 {
-    return s_title == kCursor;
+    return s_is_cursor;
 }
 
 bool front_title_needs_paint(void)

@@ -3,7 +3,8 @@
 macOS helper for the desk encoders. It does **not** walk the Accessibility
 tree. Foreground is one `NSWorkspace.frontmostApplication` read. While
 ChatGPT or Cursor is focused it posts that app's keyboard shortcuts;
-otherwise it queues the latest model and thinking state from the ESP32.
+otherwise it drops the ESP32's model and thinking state instead of holding
+it for later.
 
 ## What it does
 
@@ -13,9 +14,10 @@ otherwise it queues the latest model and thinking state from the ESP32.
    (`com.todesktop.230313mzl4w4u92`). `--bundle-id` can force one of those.
 3. Requests current state on connection and every two seconds. Accepts revisioned
    `STATE` updates and legacy `SET MODEL` / `SET THINKING` lines. ACKs validated
-   updates once queued; duplicate revisions are acknowledged without reapplying.
-4. If ChatGPT or Cursor is focused (or just became focused with a queue),
-   apply using that app's shortcuts. Applies start 1 s after the last
+   updates on receipt; duplicate revisions are acknowledged without reapplying.
+   An ACK means received, not applied.
+4. If ChatGPT or Cursor is focused, apply using that app's shortcuts.
+   Applies start 1 s after the last
    received change so both knobs land in one pass, and a field equal to
    the last value applied to that app is skipped. Serial is drained during
    delays; a newer SET aborts and re-targets.
@@ -30,26 +32,28 @@ otherwise it queues the latest model and thinking state from the ESP32.
    - Cursor effort: Command-/ (reopened after selecting a model when
      both changed), then Left, Up, Right directly into Reasoning, Down to
      the level, and Return once, then Escape twice to close the menus. An effort-only change skips model selection.
-5. If neither ChatGPT nor Cursor is focused: leave the ESP32 display/NVS
-   as the source of truth and apply the queued values when one of those
-   apps becomes frontmost. The helper never activates either app. A
-   `CANCEL` line from the panel drops the apply queue. The helper also sends
-   `FRONT Cursor` or `FRONT ChatGPT` so the panel title matches the focused app.
+5. If neither ChatGPT nor Cursor is focused: leave the ESP32 display/NVS as
+   the source of truth and discard the change. Nothing is applied when one of
+   those apps later becomes frontmost, and the helper never activates either
+   app. The helper also sends `FRONT Cursor` or `FRONT ChatGPT` so the panel
+   title matches the focused app.
 
 Shortcut sequences stay bound to the process that was focused when they began.
 Losing focus, including switching between ChatGPT, Codex, and Cursor,
-interrupts the sequence and retains the setting for retry. An interrupted
-model picker is dismissed with Escape before retrying in that process (an
-extra 0.1 seconds). ChatGPT thinking retries start from the absolute Light
-clamp. “Applied” means the key sequence was posted; the helper does not
-read back the app's selected value.
+interrupts the sequence and discards the setting. A superseded sequence, or one
+that failed while the app stayed focused, is retried for as long as that app
+remains frontmost. An interrupted model picker is dismissed with Escape before
+retrying in that process (an extra 0.1 seconds). ChatGPT thinking retries start
+from the absolute Light clamp. “Applied” means the key sequence was posted; the
+helper does not read back the app's selected value.
 
 Serial open, configuration, read, and write failures are logged and the configured
 port is retried every two seconds, including when missing at startup. The helper
 claims exclusive access to prevent another helper or monitor opening the port.
-Queued settings survive reconnection. Current firmware retransmits until ACK and
-answers SYNC with its state, so bridge restarts and device resets recover without
-another knob movement. Older firmware still works, but cannot replay missing
+Current firmware retransmits until ACK and answers SYNC with its state, so a
+bridge restart or device reset recovers the panel state without another knob
+movement; whether it is applied still depends on ChatGPT or Cursor being
+focused at that moment. Older firmware still works, but cannot replay missing
 changes. If the device path changes, restart with the new `--port`.
 
 See the [firmware protocol](../README.md#protocol-usb-serial-115200) for frame
@@ -114,8 +118,8 @@ swift run chatgpt-bridge --hid-info
 swift run chatgpt-bridge --list-ports
 ```
 
-`Options.swift` owns CLI parsing; `BridgeRuntime.swift` owns the pending queue and
-foreground/apply loop; `SerialProtocol.swift` owns wire parsing; `Serial.swift`
+`Options.swift` owns CLI parsing; `BridgeRuntime.swift` owns the foreground and
+apply loop; `SerialProtocol.swift` owns wire parsing; `Serial.swift`
 owns serial I/O. `Apply.swift` keeps model and thinking shortcut sequences explicit
 and returns typed applied/interrupted/failed outcomes.
 

@@ -30,12 +30,12 @@ final class BridgeRuntime {
         session = options.port.map { SerialSession(port: $0, baud: options.baud) }
     }
 
-    private func queue(_ update: SerialUpdate) {
+    private func receive(_ update: SerialUpdate) {
         guard let value = update.kind.canonicalName(update.value) else {
             fputs("chatgpt-bridge: ignore unknown \(update.kind.rawValue) \(update.value)\n", stderr)
             return
         }
-        // ACK means received and queued, never confirmation of application UI state.
+        // ACK means received, never confirmation of application UI state.
         // A repeated snapshot/ACK retry must not replay an already accepted setting.
         session?.acknowledge(update)
         if let revision = update.revision {
@@ -44,51 +44,59 @@ final class BridgeRuntime {
         }
         if update.kind == .model {
             receivedModel = value
-            // Model selection can restore a different per-model effort in Cursor.
-            if let thinking = receivedThinking { pending[.thinking] = thinking }
         } else {
             receivedThinking = value
+        }
+        // Changes are never deferred: without focus the dial state lives on the panel only.
+        guard DeskFront.isForeground(preferred: options.bundleID) else {
+            discardPending("ChatGPT/Cursor is not focused")
+            print("\(stamp()) ignored \(update.kind.rawValue) \(value) (ChatGPT/Cursor is not focused)")
+            fflush(stdout)
+            return
+        }
+        if update.kind == .model, let thinking = receivedThinking {
+            // Model selection can restore a different per-model effort in Cursor.
+            pending[.thinking] = thinking
         }
         pending[update.kind] = value
         // Batch paired knob turns: apply 1 s after the last received change.
         settleAt = ProcessInfo.processInfo.systemUptime + 1.0
         retryAt = 0
         lastFailure = nil
-        let focused = DeskFront.isForeground(preferred: options.bundleID)
-        print("\(stamp()) \(focused ? "rx" : "queued") \(update.kind.rawValue) \(value)")
-        publishQueueStatus()
+        print("\(stamp()) rx \(update.kind.rawValue) \(value)")
         fflush(stdout)
     }
 
-    private func cancelQueue() {
+    private func discardPending(_ reason: String) {
         guard !pending.isEmpty else { return }
+        let dropped = SettingKind.allCases.compactMap { kind in
+            pending[kind].map { "\(kind.rawValue) \($0)" }
+        }
         pending.removeAll()
         retryAt = 0
         lastFailure = nil
-        print("\(stamp()) cancelled queued dial state; panel restores last known")
-        publishQueueStatus()
+        print("\(stamp()) dropped \(dropped.joined(separator: ", ")) (\(reason))")
         fflush(stdout)
     }
 
     private func drainSerial() {
         guard let session else { return }
         for raw in session.readLines() {
-            if raw == "CANCEL" {
-                cancelQueue()
-                continue
-            }
-            if let update = SerialBridge.parseInbound(raw) { queue(update) }
+            if let update = SerialBridge.parseInbound(raw) { receive(update) }
         }
-        publishQueueStatus()
+        session.setPanelFront(DeskFront.panelTitle(preferred: options.bundleID))
         session.flushWrites()
     }
 
     private func applyPending() {
         // Bound immediate retries while letting the latest model take priority.
         for _ in 0..<8 {
+            guard DeskFront.isForeground(preferred: options.bundleID) else {
+                discardPending("ChatGPT/Cursor left the foreground")
+                return
+            }
             let now = ProcessInfo.processInfo.systemUptime
-            guard DeskFront.isForeground(preferred: options.bundleID),
-                  now >= retryAt, now >= settleAt,
+            guard now >= retryAt, now >= settleAt,
                   let kind = SettingKind.allCases.first(where: { pending[$0] != nil }),
                   let value = pending[kind] else { return }
             let pulse: () -> Bool = {
@@ -104,7 +112,6 @@ final class BridgeRuntime {
                 pending.removeValue(forKey: .model)
                 print("\(stamp()) skip MODEL \(model) (not in Cursor picker)")
                 fflush(stdout)
-                publishQueueStatus()
                 continue
             }
             // Re-apply only fields that changed since the last apply to this app.
@@ -112,15 +119,14 @@ final class BridgeRuntime {
             for settled in SettingKind.allCases {
                 if appKind == .cursor && settled == .thinking,
                    let model = pending[.model], lastApplied[appKind]?[.model] != model { continue }
-                guard let queued = pending[settled],
-                      lastApplied[appKind]?[settled] == queued else { continue }
+                guard let waiting = pending[settled],
+                      lastApplied[appKind]?[settled] == waiting else { continue }
                 pending.removeValue(forKey: settled)
-                print("\(stamp()) skip \(settled.rawValue) \(queued) (unchanged)")
+                print("\(stamp()) skip \(settled.rawValue) \(waiting) (unchanged)")
                 droppedUnchanged = true
             }
             if droppedUnchanged {
                 fflush(stdout)
-                publishQueueStatus()
                 continue
             }
             let result: Switcher.Result
@@ -144,16 +150,15 @@ final class BridgeRuntime {
                     lastFailure = nil
                     retryAt = 0
                     print("\(stamp()) applied MODEL \(model) THINKING \(thinking) via \(path)")
-                    publishQueueStatus()
                     fflush(stdout)
                     continue
                 case .interrupted:
-                    print("\(stamp()) interrupted Cursor model/effort; settings remain queued")
+                    print("\(stamp()) interrupted Cursor model/effort; retrying while focused")
                     fflush(stdout)
                     continue
                 case .failed(let message):
                     if message != lastFailure {
-                        fputs("chatgpt-bridge: \(message); setting remains queued\n", stderr)
+                        fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)
                     }
                     lastFailure = message
                     retryAt = ProcessInfo.processInfo.systemUptime + 2
@@ -173,12 +178,11 @@ final class BridgeRuntime {
                 lastFailure = nil
                 retryAt = 0
                 print("\(stamp()) applied \(kind.rawValue) \(value) via \(path)")
-                publishQueueStatus()
             case .interrupted:
-                print("\(stamp()) interrupted \(kind.rawValue) \(value); setting remains queued")
+                print("\(stamp()) interrupted \(kind.rawValue) \(value); retrying while focused")
             case .failed(let message):
                 if message != lastFailure {
-                    fputs("chatgpt-bridge: \(message); setting remains queued\n", stderr)
+                    fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)
                 }
                 lastFailure = message
                 retryAt = ProcessInfo.processInfo.systemUptime + 2
@@ -196,20 +200,8 @@ final class BridgeRuntime {
             lastFront = front
             lastFrontPID = pid
             print("\(stamp()) \(DeskFront.label(preferred: options.bundleID))")
-            if front && !pending.isEmpty {
-                retryAt = 0
-                lastFailure = nil
-                let target = app.map { DeskFront.displayName(for: $0) } ?? "ChatGPT/Cursor"
-                print("\(stamp()) flushing queued dial state into \(target)")
-            }
             fflush(stdout)
         }
-    }
-
-    private func publishQueueStatus() {
-        let queued = !pending.isEmpty && !DeskFront.isForeground(preferred: options.bundleID)
-        session?.setPanelQueued(queued)
-        session?.setPanelFront(DeskFront.panelTitle(preferred: options.bundleID))
     }
 
     func run() -> Never {

@@ -37,14 +37,15 @@ Hard lanes for this repo:
 or Cursor `com.todesktop.230313mzl4w4u92`). It never activates those apps
 and never walks the AX tree. Encoder `SET MODEL` / `SET THINKING` lines are
 applied with that app's keyboard shortcuts only while it is already focused;
-otherwise they stay queued. ChatGPT flush: Control-Shift-M, Down to the ESP
+otherwise they are dropped and never applied later. ChatGPT apply: Control-Shift-M, Down to the ESP
 dial index, Return; then absolute reasoning (Ctrl+Shift+, clamp to Light,
-Ctrl+Shift-. up to target). Cursor flush: Command-/ (first Down is Auto),
+Ctrl+Shift-. up to target). Cursor apply: Command-/ (first Down is Auto),
 or Left, Up, Right directly into Reasoning after reopening (Right highlights
 the first supported level; Down to the target; Return selects, then Escape twice closes the menus). A
-ChatGPT-only model name still queued (e.g. GPT-6 Astra) is skipped while
+ChatGPT-only model name (e.g. GPT-6 Astra) is skipped while
 Cursor is focused so effort can still apply. The helper sends
-`FRONT Cursor` or `FRONT ChatGPT` so the panel title matches the focused app.
+`FRONT Cursor` or `FRONT ChatGPT` so the panel's header brand lockup matches the
+focused app (the Cursor lockup or the OpenAI wordmark, white on the dark card).
 Firmware waits 0.4 s after the last rotary detent before sending SET; the
 bridge settles 1 s more, then applies only changed fields (both in one pass
 when both changed — a thinking-only change skips model selection).
@@ -72,6 +73,14 @@ Locked ST7796 settings in `chatgpt-model-display/main/display.c`:
 Do not flip only one MADCTL mirror to “fix” rotation (glyphs mirror). Do
 not remove the internal-RAM band blit without desk verification. Keep
 `HARDWARE.md` in sync when this changes.
+
+The header brand lockup is an 8-bit coverage mask in `main/logo.c`, generated
+from `assets/` by `scripts/generate_logos.py` (needs Pillow) and committed.
+Coverage is luminance times alpha so the Cursor cube keeps its shaded faces.
+Both logos render at the script's single `LOGO_HEIGHT` and share a baseline, so
+the header footprint is identical whichever app is focused; keep it that way.
+Re-run the script and commit `main/logo.c` after changing the artwork or that
+height; do not hand-edit the generated file.
 
 ## Hardware inventory (keep current)
 
@@ -137,7 +146,7 @@ The Mac helper applies those with keyboard shortcuts only while ChatGPT or
 Cursor is already the foreground app. ChatGPT: Control-Shift-M, Down to the
 dial index, Return; absolute Light clamp then Control-Shift-. for thinking.
 Cursor: Command-/ (first Down is Auto); effort is Left, Up, Right, then Down to the level.
-A ChatGPT-only queued model name is skipped while Cursor is focused. The
+A ChatGPT-only model name is skipped while Cursor is focused. The
 bridge settles 1 s after the last received change and applies only fields
 that differ from its last apply to that app; effort-only changes skip model selection.
 Run the Mac bridge with serial listen + watch:
@@ -155,14 +164,14 @@ the CLK/DT phase difference and the dial parks on one end). Model clamps
 GPT-6 Astra through GPT-5.5 on ChatGPT, Auto through GPT-5.6 Luna on Cursor
 (no wrap); thinking clamps Light ↔ Extra High or Low ↔ Max.
 If neither ChatGPT nor Cursor is focused, the bridge must not activate them.
-Encoder changes remain on the ESP32 display/NVS and are queued until one of
-those apps returns to the foreground. ChatGPT applies via Control-Shift-M
+Encoder changes remain on the ESP32 display/NVS and the bridge drops them;
+there is no queue, no CANCEL button, and no deferred apply when one of those
+apps returns to the foreground. Focus lost mid-apply drops the change as well;
+only a failed or superseded attempt retries, and only while that app stays
+focused. ChatGPT applies via Control-Shift-M
 (Down from Astra) and absolute Ctrl+Shift+, / Ctrl+Shift-.; Cursor applies
 via Command-/ (first Down is Auto) and Left, Up, Right then Down to the level.
-A bottom-left CANCEL button appears while that queue is waiting; tap it
-to send `CANCEL`, drop the Mac apply queue, and restore panel/NVS to the
-last known settings. A five-second press-and-hold starts a five-point
-touch calibration. Encoder click still cancels if the digitizer is missing.
+A five-second press-and-hold starts a five-point touch calibration.
 
 ## Build and flash
 

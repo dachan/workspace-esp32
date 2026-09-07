@@ -5,6 +5,8 @@ on the desk-mounted 3.5" ST7796U panel. Rotary encoders change both locally
 (display + NVS). After **0.4 s** with no further changes the firmware sends
 the latest state to `mac-chatgpt-bridge/`. The Mac helper
 applies those only while ChatGPT or Cursor is already the foreground app.
+Changes are never deferred: state that arrives while neither app is focused
+is dropped by the helper and stays on the panel and in NVS only.
 
 ## Protocol (USB serial, 115200)
 
@@ -22,7 +24,7 @@ Mac → ESP: ACK <16-hex revision> THINKING
 Each changed field gets a new revision, including after firmware restart.
 Unacknowledged state retries every 0.5 s; a full USB transmit buffer retries after
 0.2 s without blocking encoder polling. The helper acknowledges validated state
-when it is queued and ignores repeated revisions for application purposes.
+on receipt and ignores repeated revisions for application purposes.
 Acknowledgement does **not** confirm the app's selected value: keyboard posting
 has no UI readback. Periodic SYNC also recovers a device reset without requiring
 the USB device path to disappear.
@@ -30,16 +32,11 @@ the USB device path to disappear.
 Mac also sends `TIME <unix-seconds> <tz-offset-minutes>` on connect and every
 30 s so the panel can show a local clock. Firmware ticks minutes from that
 snapshot; it does not use Wi-Fi or SNTP. The helper also sends `FRONT Cursor`
-or `FRONT ChatGPT` when the focused desk app changes so the top-left title
-matches; it falls back to ChatGPT when neither is focused.
+or `FRONT ChatGPT` when the focused desk app changes so the top-left brand
+lockup matches; it falls back to ChatGPT when neither is focused.
 
-When neither ChatGPT nor Cursor is focused and dial state is waiting to apply,
-the helper sends `QUEUED`; it sends `CLEAR` once the queue is empty or one of
-those apps is focused.
-The panel shows a **CANCEL** button at the bottom-left; tap it (or click
-either encoder) to send `CANCEL`, drop the apply queue, and restore the
-panel/NVS to the last known model and thinking. A five-second press-and-hold
-anywhere on the glass starts a five-point touch calibration.
+A five-second press-and-hold anywhere on the glass starts a five-point touch
+calibration.
 
 Before the first `SYNC`, firmware uses the legacy `SET MODEL <name>` and
 `SET THINKING <level>` lines. The current helper accepts these from older firmware,
@@ -111,10 +108,10 @@ the level; Return selects, then Escape twice closes the menus. The bridge
 settles 1 s after the last received change, applies model and effort in one
 pass, and skips any field that matches what it last applied to that app — an
 effort-only change skips model selection. When neither is
-focused, encoder changes stay on the ESP32 display/NVS and the bridge queues
-the latest values without activating either app. A CANCEL button appears at
-the bottom-left; tap it to drop that apply queue and restore the last known
-model and thinking. A five-second hold on the glass starts touch calibration.
+focused, encoder changes stay on the ESP32 display/NVS and the bridge discards
+them without activating either app; turning the knob again while ChatGPT or
+Cursor is focused is what applies a setting. Focus lost mid-apply discards the
+change too. A five-second hold on the glass starts touch calibration.
 
 ```bash
 chatgpt-bridge --watch --port "$ESP_PORT"
@@ -159,7 +156,10 @@ swift build -c release
 
 - `main/main.c`: input/state coordination and save/paint retries.
 - `main/ui.c`: drawing; `display.c`: SPI and DMA ownership; `canvas.c`/`font.c`: pixels/text.
-- `main/front_title.c`: Mac `FRONT Cursor` / `FRONT ChatGPT` header text.
+- `main/front_title.c`: Mac `FRONT Cursor` / `FRONT ChatGPT` header selection.
+- `main/logo.c`: header brand masks generated from `assets/` by
+  `scripts/generate_logos.py`; re-run it (needs Pillow) after changing the
+  artwork or its target height, and commit the result.
 - `main/encoder.c`: existing GPIO/PCNT decoding and rate-limited step emission.
 - `main/serial_model.c`: bounded framing and legacy display commands.
 - `main/serial_sync.c`: state revisions, settling, snapshots, and ACK retries.

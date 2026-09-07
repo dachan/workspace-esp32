@@ -47,3 +47,63 @@ void display_fill(uint16_t colour)
 {
     display_fill_rect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, colour);
 }
+
+static uint8_t mix(uint8_t fg, uint8_t bg, uint8_t a)
+{
+    return (uint8_t)((fg * a + bg * (255 - a) + 127) / 255);
+}
+
+/* Framebuffer words are byte-swapped for the panel, so unswap before mixing. */
+static uint16_t blend565(uint16_t fg, uint16_t bg, uint8_t a)
+{
+    const uint16_t f = __builtin_bswap16(fg);
+    const uint16_t b = __builtin_bswap16(bg);
+    const uint16_t r = mix((f >> 11) & 0x1F, (b >> 11) & 0x1F, a);
+    const uint16_t g = mix((f >> 5) & 0x3F, (b >> 5) & 0x3F, a);
+    const uint16_t blue = mix(f & 0x1F, b & 0x1F, a);
+    return __builtin_bswap16((uint16_t)((r << 11) | (g << 5) | blue));
+}
+
+void display_blit_alpha(int x, int y, int w, int h, const uint8_t *alpha, uint16_t fg, uint16_t bg)
+{
+    if (s_fb == NULL || alpha == NULL) {
+        return;
+    }
+    const int stride = w;
+    int src_x = 0;
+    int src_y = 0;
+    if (x < 0) {
+        src_x = -x;
+        w += x;
+        x = 0;
+    }
+    if (y < 0) {
+        src_y = -y;
+        h += y;
+        y = 0;
+    }
+    if (x + w > DISPLAY_WIDTH) {
+        w = DISPLAY_WIDTH - x;
+    }
+    if (y + h > DISPLAY_HEIGHT) {
+        h = DISPLAY_HEIGHT - y;
+    }
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+
+    for (int row = 0; row < h; row++) {
+        uint16_t *line = s_fb + (size_t)(y + row) * DISPLAY_WIDTH + x;
+        const uint8_t *src = alpha + (size_t)(src_y + row) * stride + src_x;
+        for (int col = 0; col < w; col++) {
+            const uint8_t a = src[col];
+            if (a == 0) {
+                line[col] = bg;
+            } else if (a == 255) {
+                line[col] = fg;
+            } else {
+                line[col] = blend565(fg, bg, a);
+            }
+        }
+    }
+}

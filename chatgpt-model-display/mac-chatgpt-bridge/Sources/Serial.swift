@@ -18,8 +18,6 @@ final class SerialSession {
     private var lastConnectionError: String?
     private var nextSyncAt: TimeInterval = 0
     private var nextTimeAt: TimeInterval = 0
-    private var panelQueuedWanted: Bool?
-    private var panelQueuedSent: Bool?
     private var panelFrontWanted: String?
     private var panelFrontSent: String?
     private var acknowledgements: [SettingKind: UInt64] = [:]
@@ -48,7 +46,6 @@ final class SerialSession {
         fd = opened
         nextSyncAt = 0
         nextTimeAt = 0
-        panelQueuedSent = nil
         panelFrontSent = nil
         lastConnectionError = nil
         fputs("chatgpt-bridge: serial connected; requesting current dial state\n", stderr)
@@ -120,10 +117,6 @@ final class SerialSession {
         }
     }
 
-    func setPanelQueued(_ queued: Bool) {
-        panelQueuedWanted = queued
-    }
-
     func setPanelFront(_ title: String) {
         panelFrontWanted = title
     }
@@ -136,9 +129,6 @@ final class SerialSession {
                 if let kind = SettingKind.allCases.first(where: { acknowledgements[$0] != nil }),
                    let revision = acknowledgements.removeValue(forKey: kind) {
                     line = "ACK \(String(format: "%016llx", revision)) \(kind.rawValue)"
-                } else if let wanted = panelQueuedWanted, wanted != panelQueuedSent {
-                    line = wanted ? "QUEUED" : "CLEAR"
-                    panelQueuedSent = wanted
                 } else if let wanted = panelFrontWanted, wanted != panelFrontSent {
                     line = "FRONT \(wanted)"
                     panelFrontSent = wanted
