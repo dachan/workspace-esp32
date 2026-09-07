@@ -39,9 +39,9 @@ Same SPI ILI9341V pinout as `super-tamagotchi/WIRING.md` / radar-receiver:
 | Backlight | 17 |
 | SCK | 18 |
 | SD_CS (held high) | 4 |
-| Thinking ENC CLK | 12 |
-| Thinking ENC DT | 13 |
-| Thinking ENC SW | 14 |
+| Thinking ENC CLK | 41 |
+| Thinking ENC DT | 40 |
+| Thinking ENC SW | 39 |
 | Model ENC CLK | 1 |
 | Model ENC DT | 2 |
 | Model ENC SW | 42 |
@@ -67,7 +67,7 @@ Verify the port with `ls /dev/cu.usb*` or
 `swift run --package-path ../mac-chatgpt-bridge chatgpt-bridge --list-ports`
 before flashing (paths can change).
 
-Two encoders: **thinking** (GPIO12/13/14) and **model** (GPIO1/2/42). Rotate or click to step; changes persist in NVS.
+Two encoders on the **right** header (see repo `s3-n16r8.jpeg`): **thinking** (GPIO41/40/39) and **model** (GPIO1/2/42). Rotate or click to step; changes persist in NVS.
 
 ## Bridge watch → screen
 

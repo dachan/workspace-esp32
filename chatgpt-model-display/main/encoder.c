@@ -4,15 +4,16 @@
 #include "esp_timer.h"
 
 /*
- * Two KY-040-style encoders on Lonely Binary N16R8.
- * Display owns 4/8-11/16-18; touch (unused) 5/6/7/15.
+ * Two KY-040-style encoders on Lonely Binary N16R8 (see s3-n16r8.jpeg).
+ * Display SPI uses the LEFT header (4,8-11,16-18). Encoders use the RIGHT
+ * header so wiring stays on the free side of the board.
  *
- * Thinking: CLK12 DT13 SW14
+ * Thinking: CLK41 DT40 SW39
  * Model:    CLK1  DT2  SW42
  */
-static const int s_clk[ENCODER_COUNT] = {12, 1};
-static const int s_dt[ENCODER_COUNT] = {13, 2};
-static const int s_sw[ENCODER_COUNT] = {14, 42};
+static const int s_clk[ENCODER_COUNT] = {41, 1};
+static const int s_dt[ENCODER_COUNT] = {40, 2};
+static const int s_sw[ENCODER_COUNT] = {39, 42};
 
 static int s_last_clk[ENCODER_COUNT];
 static int s_last_sw[ENCODER_COUNT];
