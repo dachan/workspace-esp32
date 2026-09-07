@@ -365,6 +365,22 @@ func emitChange(
 func runWatch(options: Options, initialApp: NSRunningApplication?) -> Int32 {
     var app = initialApp
     var previousModel: String?
+    var serialFD: Int32 = -1
+    var serialBuf = ""
+    var suppressSerialEchoUntil = Date.distantPast
+    if let port = options.port, !port.isEmpty {
+        do {
+            serialFD = try SerialBridge.openPort(port, baud: options.baud)
+            // Keep NONBLOCK so we can interleave AX polls with SET listens.
+            let flags = fcntl(serialFD, F_GETFL)
+            if flags >= 0 { _ = fcntl(serialFD, F_SETFL, flags | O_NONBLOCK) }
+            if !options.json {
+                print("listening for SET MODEL / SET THINKING on \(port)")
+            }
+        } catch {
+            fputs("chatgpt-bridge: serial listen failed: \(error)\n", stderr)
+        }
+    }
     if !options.json {
         print(
             "watching every \(options.intervalSeconds)s (Ctrl+C to stop); prints on change"
@@ -375,6 +391,41 @@ func runWatch(options: Options, initialApp: NSRunningApplication?) -> Int32 {
     while true {
         if let found = ChatGPTProcess.find(preferredBundleID: options.bundleID) {
             app = found
+        }
+
+        // Drain encoder→Mac SET lines first so knobs feel snappy.
+        if serialFD >= 0 {
+            serialBuf += SerialBridge.readAvailable(serialFD)
+            while let nl = serialBuf.firstIndex(of: "\n") {
+                var line = String(serialBuf[..<nl])
+                serialBuf = String(serialBuf[serialBuf.index(after: nl)...])
+                if line.hasSuffix("\r") { line.removeLast() }
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+                if trimmed.hasPrefix("SET MODEL ") {
+                    let name = String(trimmed.dropFirst("SET MODEL ".count))
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !name.isEmpty, let app else {
+                        fputs("chatgpt-bridge: SET MODEL ignored (no ChatGPT)\n", stderr)
+                        continue
+                    }
+                    fputs("chatgpt-bridge: encoder model -> \(name)\n", stderr)
+                    suppressSerialEchoUntil = Date().addingTimeInterval(2.5)
+                    previousModel = name
+                    _ = ChatGPTControl.setModel(
+                        name, app: app, maxDepth: options.maxDepth, maxNodes: options.maxNodes
+                    )
+                } else if trimmed.hasPrefix("SET THINKING ") {
+                    let name = String(trimmed.dropFirst("SET THINKING ".count))
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !name.isEmpty, let app else { continue }
+                    fputs("chatgpt-bridge: encoder thinking -> \(name)\n", stderr)
+                    suppressSerialEchoUntil = Date().addingTimeInterval(2.5)
+                    _ = ChatGPTControl.setThinking(
+                        name, app: app, maxDepth: options.maxDepth, maxNodes: options.maxNodes
+                    )
+                }
+            }
         }
 
         let readback: ModelReadback
@@ -397,13 +448,20 @@ func runWatch(options: Options, initialApp: NSRunningApplication?) -> Int32 {
             )
         }
         let usingCache = !(readback.ok && readback.model != nil)
+        // Avoid echo-fighting the panel right after an encoder SET.
+        var sendOpts = options
+        if Date() < suppressSerialEchoUntil {
+            sendOpts.sendSerial = false
+        }
         _ = emitChange(
-            options: options,
+            options: sendOpts,
             readback: readback,
             previousModel: &previousModel,
             fromCache: usingCache && previousModel != nil
         )
-        Thread.sleep(forTimeInterval: options.intervalSeconds)
+        // Spin faster when listening so knobs aren't laggy.
+        let sleepFor = serialFD >= 0 ? min(options.intervalSeconds, 0.25) : options.intervalSeconds
+        Thread.sleep(forTimeInterval: sleepFor)
     }
 }
 

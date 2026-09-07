@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 #if canImport(Darwin)
 import Darwin
 #endif
@@ -56,6 +59,30 @@ enum SerialBridge {
         }
     }
 
+
+    /// Open serial RDWR for watch+listen. Caller owns the fd (close when done).
+    static func openPort(_ port: String, baud: Int) throws -> Int32 {
+        let fd = open(port, O_RDWR | O_NOCTTY | O_NONBLOCK)
+        guard fd >= 0 else {
+            throw StubError.io("could not open \(port) (errno \(errno))")
+        }
+        applyBaud(fd, baud: baud)
+        // Drop NONBLOCK after configure for simpler read loops (poll with select).
+        let flags = fcntl(fd, F_GETFL)
+        if flags >= 0 {
+            _ = fcntl(fd, F_SETFL, flags & ~O_NONBLOCK)
+        }
+        return fd
+    }
+
+    /// Non-blocking-ish read of available bytes; returns empty if none.
+    static func readAvailable(_ fd: Int32, max: Int = 512) -> String {
+        var buf = [UInt8](repeating: 0, count: max)
+        let n = read(fd, &buf, buf.count)
+        guard n > 0 else { return "" }
+        return String(bytes: buf[0..<n], encoding: .utf8) ?? ""
+    }
+
     private static func applyBaud(_ fd: Int32, baud: Int) {
         var term = termios()
         guard tcgetattr(fd, &term) == 0 else { return }
@@ -79,20 +106,50 @@ enum HIDBridge {
     static let chord = "Ctrl+Shift+M"
 
     static let summary = """
-    HID path (firmware later, not this helper)
-      ESP32-S3 presents as a USB keyboard and sends \(chord)
-      to open ChatGPT's model picker. This CLI never injects keys.
+    HID / CGEvent path (macOS bridge)
+      Bridge posts \(chord) to open ChatGPT's model picker, then types
+      or clicks the target model / thinking label from encoder SET lines.
 
     Notes
-      - Phase 1 only reads the current model via Accessibility.
-      - Confirm on device whether ChatGPT honors Control-Shift-M
-        versus Command-Shift-M; firmware can remap if needed.
-      - Keep the ChatGPT window focused when the HID chord fires.
+      - Requires Accessibility (and Input Monitoring on newer macOS) for the
+        Terminal / process that launches chatgpt-bridge.
+      - Keep ChatGPT focused; desk watch mode listens for SET MODEL / SET THINKING.
     """
 
     static func printInfo() {
         print(summary)
     }
+
+#if os(macOS)
+    static func postChordControlShiftM() {
+        postKey(keyCode: 46, flags: [.maskControl, .maskShift]) // M
+    }
+
+    static func postKey(keyCode: CGKeyCode, flags: CGEventFlags = []) {
+        guard let src = CGEventSource(stateID: .hidSystemState),
+              let down = CGEvent(keyboardEventSource: src, virtualKey: keyCode, keyDown: true),
+              let up = CGEvent(keyboardEventSource: src, virtualKey: keyCode, keyDown: false)
+        else { return }
+        down.flags = flags
+        up.flags = flags
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+    }
+
+    static func typeText(_ text: String) {
+        guard let src = CGEventSource(stateID: .hidSystemState) else { return }
+        for ch in text.utf16 {
+            var chars = [UniChar(ch)]
+            guard let down = CGEvent(keyboardEventSource: src, virtualKey: 0, keyDown: true),
+                  let up = CGEvent(keyboardEventSource: src, virtualKey: 0, keyDown: false)
+            else { continue }
+            down.keyboardSetUnicodeString(stringLength: 1, unicodeString: &chars)
+            up.keyboardSetUnicodeString(stringLength: 1, unicodeString: &chars)
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
+    }
+#endif
 }
 
 enum StubError: Error, CustomStringConvertible {

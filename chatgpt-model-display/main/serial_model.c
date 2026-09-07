@@ -1,16 +1,18 @@
 #include "serial_model.h"
 
 #include <ctype.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "driver/usb_serial_jtag.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
 
 static const char *TAG = "serial_model";
 
-#define LINE_MAX 192
+#define SERIAL_LINE_MAX 192
 
-static char s_line[LINE_MAX];
+static char s_line[SERIAL_LINE_MAX];
 static size_t s_len;
 static char s_thinking_override[MODEL_PARSE_MAX];
 static int s_has_override;
@@ -48,6 +50,11 @@ static int handle_line(const char *line, model_fields_t *fields)
         line++;
     }
     if (*line == '\0') {
+        return 0;
+    }
+
+    /* Ignore our own ESP→Mac commands if they echo on the wire. */
+    if (strncmp(line, "SET ", 4) == 0) {
         return 0;
     }
 
@@ -118,4 +125,47 @@ int serial_model_poll(model_fields_t *fields)
         }
     }
     return updated;
+}
+
+static esp_err_t serial_write_line(const char *line)
+{
+    if (line == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    size_t n = strlen(line);
+    int wrote = usb_serial_jtag_write_bytes(line, n, pdMS_TO_TICKS(50));
+    if (wrote < 0 || (size_t)wrote != n) {
+        return ESP_FAIL;
+    }
+    const char nl = '\n';
+    (void)usb_serial_jtag_write_bytes(&nl, 1, pdMS_TO_TICKS(20));
+    return ESP_OK;
+}
+
+esp_err_t serial_model_send_set_model(const char *model)
+{
+    if (model == NULL || model[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+    char buf[SERIAL_LINE_MAX];
+    int n = snprintf(buf, sizeof(buf), "SET MODEL %s", model);
+    if (n <= 0 || n >= (int)sizeof(buf)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    ESP_LOGI(TAG, "%s", buf);
+    return serial_write_line(buf);
+}
+
+esp_err_t serial_model_send_set_thinking(const char *thinking)
+{
+    if (thinking == NULL || thinking[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+    char buf[SERIAL_LINE_MAX];
+    int n = snprintf(buf, sizeof(buf), "SET THINKING %s", thinking);
+    if (n <= 0 || n >= (int)sizeof(buf)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    ESP_LOGI(TAG, "%s", buf);
+    return serial_write_line(buf);
 }

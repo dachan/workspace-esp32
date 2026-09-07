@@ -114,6 +114,18 @@ OFF. Receiver SLEEP and POWER OFF are both tap-to-wake deep-sleep modes. Keep
 the touch reset high and backlight low during either mode; POWER OFF also holds
 the LCD reset low because the receiver has no accessible EN switch.
 
+## Desk control (encoders → ChatGPT)
+
+Firmware `v 0.23+` sends `SET MODEL <name>` / `SET THINKING <level>` when knobs change.
+Run the Mac bridge with serial listen + watch:
+
+```bash
+chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
+```
+
+Requires Accessibility (and Input Monitoring) for the launching Terminal.
+Model knob clamps GPT-5.6 Luna ↔ o4-mini; thinking clamps Instant ↔ Extra High.
+
 ## Build and flash
 
 Use a local ESP-IDF installation without embedding its path in scripts or

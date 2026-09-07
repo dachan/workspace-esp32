@@ -51,6 +51,18 @@ Same SPI ILI9341V pinout as `super-tamagotchi/WIRING.md` / radar-receiver:
 USB: native USB Serial/JTAG (`/dev/cu.usbmodem*` on macOS). Flash and
 `MODEL` traffic share that port.
 
+## Desk control (encoders → ChatGPT)
+
+Firmware `v 0.23+` sends `SET MODEL <name>` / `SET THINKING <level>` when knobs change.
+Run the Mac bridge with serial listen + watch:
+
+```bash
+chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
+```
+
+Requires Accessibility (and Input Monitoring) for the launching Terminal.
+Model knob clamps GPT-5.6 Luna ↔ o4-mini; thinking clamps Instant ↔ Extra High.
+
 ## Build / flash (Mac only)
 
 ```sh

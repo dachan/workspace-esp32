@@ -122,6 +122,7 @@ static void apply_thinking_level(ui_state_t *ui, int level)
         ui->waiting = 0;
     }
     (void)model_nvs_save(&ui->fields);
+    (void)serial_model_send_set_thinking(ui->fields.thinking);
 }
 
 /* Preset model names for the model encoder (desk UI). */
@@ -171,6 +172,7 @@ static void apply_model_delta(ui_state_t *ui, int delta)
         ui->fields.has_thinking = 1;
     }
     (void)model_nvs_save(&ui->fields);
+    (void)serial_model_send_set_model(ui->fields.model);
 }
 
 static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_level,
