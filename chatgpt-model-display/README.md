@@ -4,7 +4,7 @@ ESP32-S3 firmware that shows the ChatGPT **model** and **thinking** level
 on the desk-mounted 3.5" ST7796U panel. Rotary encoders change both locally
 (display + NVS). After **0.4 s** with no further changes the firmware sends
 the latest state to `mac-chatgpt-bridge/`. The Mac helper
-applies those only while ChatGPT is already the foreground app.
+applies those only while ChatGPT or Cursor is already the foreground app.
 
 ## Protocol (USB serial, 115200)
 
@@ -29,10 +29,13 @@ the USB device path to disappear.
 
 Mac also sends `TIME <unix-seconds> <tz-offset-minutes>` on connect and every
 30 s so the panel can show a local clock. Firmware ticks minutes from that
-snapshot; it does not use Wi-Fi or SNTP.
+snapshot; it does not use Wi-Fi or SNTP. The helper also sends `FRONT Cursor`
+or `FRONT ChatGPT` when the focused desk app changes so the top-left title
+matches; it falls back to ChatGPT when neither is focused.
 
-When ChatGPT is not focused and dial state is waiting to apply, the helper
-sends `QUEUED`; it sends `CLEAR` once the queue is empty or ChatGPT is focused.
+When neither ChatGPT nor Cursor is focused and dial state is waiting to apply,
+the helper sends `QUEUED`; it sends `CLEAR` once the queue is empty or one of
+those apps is focused.
 The panel shows a **CANCEL** button at the bottom-left; tap it (or click
 either encoder) to send `CANCEL`, drop the apply queue, and restore the
 panel/NVS to the last known model and thinking. A five-second press-and-hold
@@ -56,9 +59,12 @@ to recover framing after a disconnect mid-transfer.
 Changed values are saved once per input pass to NVS (`cgpt`/`model`,`think`)
 and reloaded on boot. Unchanged values do not trigger persistence or display work.
 
-Dial models, in order: GPT-6 Astra, GPT-5.6 Sol, GPT-5.6 Terra,
-GPT-5.6 Luna, GPT-5.5. Thinking: Light, Medium, High, Extra High.
-Canonical names and thinking aliases live in firmware `main/catalog.c` and Swift
+Dial models follow the focused app. ChatGPT: GPT-6 Astra, GPT-5.6 Sol,
+GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5; thinking Light, Medium, High,
+Extra High. Cursor: Auto, Cursor Grok 4.6, Composer 2.5, Claude Opus 5,
+GPT-5.6 Sol, Claude Fable 5, GPT-5.6 Terra, GPT-5.6 Luna;
+effort depends on the model (see Cursor effort ranges below).
+Canonical names live in firmware `main/catalog.c` and Swift
 `Sources/Catalog.swift`; keep these small tables aligned when adding entries.
 
 ## Hardware
@@ -91,7 +97,7 @@ Canonical names and thinking aliases live in firmware `main/catalog.c` and Swift
 USB: native USB Serial/JTAG (`/dev/cu.usbmodem*` on macOS). Flash and
 `SET` traffic share that port.
 
-## Desk control (encoders → ChatGPT)
+## Desk control (encoders → ChatGPT / Cursor)
 
 Firmware `v 0.35+` updates the panel immediately, then sends SET after a
 0.4 s settle window. Thinking pulses are held until the knob pauses so
@@ -99,11 +105,16 @@ two detents are one level and a quick turn can run Light↔Extra High. Model
 steps still use a 160 ms emit gap. The Mac helper uses `NSWorkspace.frontmostApplication`
 (no AX tree walk). While ChatGPT is focused it opens the model picker with
 Control-Shift-M and steps reasoning with Control-Shift-, / Control-Shift-.
-When ChatGPT is not focused, encoder changes stay on the ESP32 display/NVS
-and the bridge queues the latest values without activating ChatGPT. A
-CANCEL button appears at the bottom-left; tap it to drop that apply queue
-and restore the last known model and thinking. A five-second hold on the
-glass starts touch calibration.
+While Cursor is focused it opens the model list with Command-backslash (first Down
+is Auto), then reopens it for Effort with Left, Up, Right, then Down-only to
+the level; Return selects. The bridge
+settles 1 s after the last received change, applies model and effort in one
+pass, and skips any field that matches what it last applied to that app — an
+effort-only change skips model selection. When neither is
+focused, encoder changes stay on the ESP32 display/NVS and the bridge queues
+the latest values without activating either app. A CANCEL button appears at
+the bottom-left; tap it to drop that apply queue and restore the last known
+model and thinking. A five-second hold on the glass starts touch calibration.
 
 ```bash
 chatgpt-bridge --watch --port "$ESP_PORT"
@@ -148,6 +159,7 @@ swift build -c release
 
 - `main/main.c`: input/state coordination and save/paint retries.
 - `main/ui.c`: drawing; `display.c`: SPI and DMA ownership; `canvas.c`/`font.c`: pixels/text.
+- `main/front_title.c`: Mac `FRONT Cursor` / `FRONT ChatGPT` header text.
 - `main/encoder.c`: existing GPIO/PCNT decoding and rate-limited step emission.
 - `main/serial_model.c`: bounded framing and legacy display commands.
 - `main/serial_sync.c`: state revisions, settling, snapshots, and ACK retries.
@@ -158,3 +170,16 @@ configuration are unchanged. A DMA completion timeout retains buffer ownership;
 the main loop retries rendering after 0.5 s instead of overwriting in-flight data.
 The thinking encoder remains polled, so long display operations can still miss
 physical edges; the pending-step fix does not replace the existing decoder.
+
+### Cursor effort ranges
+
+- Auto, Composer 2.5: unsupported (effort knob ignored).
+- Cursor Grok 4.6: Low, Medium, High, Extra High.
+- Claude Opus 5, Claude Fable 5: Low, Medium, High, Extra High, Max.
+- GPT-5.6 Sol, Terra, Luna: None, Low, Medium, High, Extra High, Max.
+
+Command-backslash → Left → Up → Right highlights the first supported effort.
+Down moves by the target's zero-based index; Return selects once. Model changes
+reapply effort, even when the requested level is unchanged. Unsupported endpoints
+clamp to the model's range. The bridge needs a known model for effort-only
+commands; CLI callers supply `--set-model` together with `--set-thinking`.

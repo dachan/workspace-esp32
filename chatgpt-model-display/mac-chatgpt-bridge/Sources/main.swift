@@ -39,7 +39,7 @@ func run() -> Int32 {
             if status != 0 { return status }
         }
         if let level = options.setThinking {
-            let status = report(Switcher.thinking(level, preferredBundleID: options.bundleID))
+            let status = report(Switcher.thinking(level, model: options.setModel, preferredBundleID: options.bundleID))
             if status != 0 { return status }
         }
         if !options.watch && !options.listen { return 0 }

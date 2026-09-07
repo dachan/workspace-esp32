@@ -10,6 +10,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "front_title.h"
 #include "model_nvs.h"
 #include "queue_status.h"
 #include "serial_model.h"
@@ -24,24 +25,24 @@ static const char *TAG = "chatgpt_model";
 
 static bool apply_thinking_delta(model_fields_t *fields, int delta)
 {
-    if (!delta) {
+    if (!delta || catalog_thinking_count(fields->model) == 0) {
         return false;
     }
-    int level = catalog_thinking_level(fields->thinking);
+    int level = catalog_thinking_level(fields->model, fields->thinking);
     if (!level) {
         level = 2;
     }
     level += delta;
     if (level < 1) level = 1;
-    if (level > THINKING_LEVEL_COUNT) level = THINKING_LEVEL_COUNT;
-    const char *name = catalog_thinking_name(level);
+    if (level > catalog_thinking_count(fields->model)) level = catalog_thinking_count(fields->model);
+    const char *name = catalog_thinking_name(fields->model, level);
     if (fields->has_thinking && strcmp(fields->thinking, name) == 0) {
         return false;
     }
     snprintf(fields->thinking, sizeof(fields->thinking), "%s", name);
     fields->has_thinking = 1;
     if (!fields->has_model) {
-        snprintf(fields->model, sizeof(fields->model), "%s", "GPT-5.6 Luna");
+        snprintf(fields->model, sizeof(fields->model), "%s", catalog_model_at(0));
         fields->has_model = 1;
     }
     return true;
@@ -56,8 +57,8 @@ static bool apply_model_delta(model_fields_t *fields, int delta)
     if (index < 0) index = 0;
     index += delta;
     if (index < 0) index = 0;
-    if (index >= catalog_model_count) index = catalog_model_count - 1;
-    const char *name = catalog_models[index];
+    if (index >= catalog_model_count()) index = catalog_model_count() - 1;
+    const char *name = catalog_model_at(index);
     if (fields->has_model && strcmp(fields->model, name) == 0) {
         return false;
     }
@@ -68,6 +69,15 @@ static bool apply_model_delta(model_fields_t *fields, int delta)
         fields->has_thinking = 1;
     }
     return true;
+}
+
+static void adapt_fields_for_front(model_fields_t *fields)
+{
+    if (catalog_thinking_count(fields->model) == 0) return;
+    int level = catalog_thinking_level(fields->model, fields->thinking);
+    const char *name = catalog_thinking_name(fields->model, level);
+    snprintf(fields->thinking, sizeof(fields->thinking), "%s", name);
+    fields->has_thinking = 1;
 }
 
 static bool same_fields(const model_fields_t *a, const model_fields_t *b)
@@ -93,13 +103,13 @@ void app_main(void)
     bool save_pending = false;
     if (model_nvs_load(&fields)) {
         model_fields_t cached = fields;
-        // Removed models migrate to the last dial entry; normalize legacy effort.
-        if (catalog_model_index(fields.model) < 0) {
-            snprintf(fields.model, sizeof(fields.model), "%s", catalog_models[catalog_model_count - 1]);
+        // Unknown to both catalogs migrate to the last ChatGPT dial entry.
+        if (!catalog_model_known(fields.model)) {
+            snprintf(fields.model, sizeof(fields.model), "%s", catalog_model_at(catalog_model_count() - 1));
         }
-        if (fields.has_thinking) {
+        if (fields.has_thinking && !catalog_thinking_known(fields.thinking)) {
             snprintf(fields.thinking, sizeof(fields.thinking), "%s",
-                     catalog_thinking_name(catalog_thinking_level(cached.thinking)));
+                     catalog_thinking_name(fields.model, catalog_thinking_level(fields.model, cached.thinking)));
         }
         save_pending = !same_fields(&cached, &fields);
     }
@@ -107,6 +117,7 @@ void app_main(void)
 
     model_fields_t known = fields;
     bool known_dirty = false;
+    bool was_cursor = false;
     TickType_t known_dirty_at = 0;
     bool hold_calibrated = false;
     bool paint_pending = true;
@@ -136,8 +147,9 @@ void app_main(void)
             touch_clear_state();
             paint_pending = true;
         }
-        bool local_changed = apply_thinking_delta(&fields, thinking_delta);
-        local_changed |= apply_model_delta(&fields, model_delta);
+        bool local_changed = apply_model_delta(&fields, model_delta);
+        if (local_changed) adapt_fields_for_front(&fields);
+        local_changed |= apply_thinking_delta(&fields, thinking_delta);
         bool cancel = queue_status_visible()
             && ((touch.released && touch.held_ms < CALIBRATE_HOLD_MS
                  && ui_cancel_hit(touch.x, touch.y))
@@ -161,6 +173,7 @@ void app_main(void)
             }
         }
         if (local_changed) {
+            adapt_fields_for_front(&fields);
             if (!known_dirty) {
                 known = before;
                 known_dirty = true;
@@ -179,9 +192,15 @@ void app_main(void)
         model_fields_t incoming = fields;
         if (serial_model_poll(&incoming) && !hold_rx) {
             fields = incoming;
+            adapt_fields_for_front(&fields);
             serial_sync_update(&fields, false);
         }
         serial_sync_poll();
+        if (front_title_is_cursor() != was_cursor) {
+            adapt_fields_for_front(&fields);
+            was_cursor = front_title_is_cursor();
+            serial_sync_update(&fields, true);
+        }
         if (!queue_status_visible() && !known_dirty) {
             known = fields;
         } else if (!queue_status_visible() && known_dirty
@@ -194,7 +213,7 @@ void app_main(void)
             save_pending = fields.has_model;
             paint_pending = true;
         }
-        if (clock_needs_paint() || queue_status_needs_paint()) {
+        if (clock_needs_paint() || queue_status_needs_paint() || front_title_needs_paint()) {
             paint_pending = true;
         }
         now = xTaskGetTickCount();

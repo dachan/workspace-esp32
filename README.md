@@ -13,7 +13,7 @@ a portable virtual pet.
   native creature simulator and the display, touch, and audio drivers.
 - `chatgpt-model-display/` — ESP32-S3 desk panel (ST7796) for ChatGPT model/thinking, plus
   `chatgpt-model-display/mac-chatgpt-bridge/` macOS CLI that applies encoder `SET` lines over USB
-  serial while ChatGPT is focused (`--watch --send-serial`).
+  serial while ChatGPT or Cursor is focused (`--watch --send-serial`).
 
 ## Wiring
 

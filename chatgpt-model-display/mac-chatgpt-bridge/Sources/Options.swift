@@ -69,7 +69,10 @@ func parseOptions(_ args: [String]) -> Options? {
             options.baud = parsed
         case "--bundle-id":
             guard let value = takeValue(), DeskFront.bundleIDs.contains(value) else {
-                fputs("chatgpt-bridge: --bundle-id must be com.openai.chat or com.openai.codex\n", stderr)
+                fputs(
+                    "chatgpt-bridge: --bundle-id must be com.openai.chat, com.openai.codex, or com.todesktop.230313mzl4w4u92\n",
+                    stderr
+                )
                 return nil
             }
             options.bundleID = value
@@ -91,20 +94,21 @@ func usage() -> String {
     Usage: chatgpt-bridge [options]
 
     Apply ESP32 encoder SET MODEL / SET THINKING with keyboard
-    shortcuts, only while ChatGPT is already the foreground app.
-    Model: Ctrl+Shift+M, Down to dial index. Thinking: Ctrl+Shift+, / .
+    shortcuts, only while ChatGPT or Cursor is already the foreground app.
+    ChatGPT: Ctrl+Shift+M, Down to dial index; thinking Ctrl+Shift+, / .
+    Cursor: Command-backslash model first, then Command-backslash again for Effort.
 
     Options:
-      --front             Print whether ChatGPT is foreground and exit
+      --front             Print whether ChatGPT or Cursor is foreground and exit
       --watch             Follow foreground + optional serial SET lines
       --listen            Read SET MODEL / SET THINKING from --port
                           (implied by --watch --port)
       --port PATH         USB serial device
       --baud N            Serial baud (default 115200)
       --list-ports        List likely USB serial devices
-      --set-model NAME    One-shot: select NAME if ChatGPT is focused
-      --set-thinking LVL  One-shot: set reasoning if ChatGPT is focused
-      --bundle-id ID      Force com.openai.chat or com.openai.codex
+      --set-model NAME    One-shot: select NAME if ChatGPT or Cursor is focused
+      --set-thinking LVL  One-shot: set reasoning if ChatGPT or Cursor is focused
+      --bundle-id ID      Force ChatGPT, Codex, or Cursor
       --hid-info          Describe the keyboard control path
       --check-ax          Check Accessibility permission and exit
       --send-serial       Accepted for the old watch command; unused

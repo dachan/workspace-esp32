@@ -34,13 +34,20 @@ Hard lanes for this repo:
 
 `chatgpt-model-display/mac-chatgpt-bridge/` is a macOS CLI. Foreground is
 `NSWorkspace.frontmostApplication` (`com.openai.chat` / `com.openai.codex`
-only — not Cursor). It never activates ChatGPT and never walks the AX tree.
-Encoder `SET MODEL` / `SET THINKING` lines are applied with keyboard shortcuts
-only while ChatGPT is already focused; otherwise they stay queued. On the
-ChatGPT foreground edge the helper flushes the queue: Control-Shift-M,
-Down to the ESP dial index, Return; then absolute reasoning
-(Ctrl+Shift+, clamp to Light, Ctrl+Shift-. up to target). Firmware waits
-0.4 s after the last rotary detent before sending SET.
+or Cursor `com.todesktop.230313mzl4w4u92`). It never activates those apps
+and never walks the AX tree. Encoder `SET MODEL` / `SET THINKING` lines are
+applied with that app's keyboard shortcuts only while it is already focused;
+otherwise they stay queued. ChatGPT flush: Control-Shift-M, Down to the ESP
+dial index, Return; then absolute reasoning (Ctrl+Shift+, clamp to Light,
+Ctrl+Shift-. up to target). Cursor flush: Command-backslash (first Down is Auto),
+or Left, Up, Right directly into Reasoning after reopening (Right highlights
+the first supported level; Down to the target; Return selects once). A
+ChatGPT-only model name still queued (e.g. GPT-6 Astra) is skipped while
+Cursor is focused so effort can still apply. The helper sends
+`FRONT Cursor` or `FRONT ChatGPT` so the panel title matches the focused app.
+Firmware waits 0.4 s after the last rotary detent before sending SET; the
+bridge settles 1 s more, then applies only changed fields (both in one pass
+when both changed — a thinking-only change skips model selection).
 The helper only runs on the Mac.
 On-device UI lives in `chatgpt-model-display/` (3.5\" ST7796 480x320). Edit
 and flash on the Mac; pull Hetzner codex after push. Firmware keeps the last
@@ -122,13 +129,17 @@ OFF. Receiver SLEEP and POWER OFF are both tap-to-wake deep-sleep modes. Keep
 the touch reset high and backlight low during either mode; POWER OFF also holds
 the LCD reset low because the receiver has no accessible EN switch.
 
-## Desk control (encoders → ChatGPT)
+## Desk control (encoders → ChatGPT / Cursor)
 
 Firmware `v 0.35+` updates the panel/NVS immediately, then sends
 `SET MODEL <name>` / `SET THINKING <level>` 0.4 s after the last detent.
-The Mac helper applies those with keyboard shortcuts only while ChatGPT is
-already the foreground app: Control-Shift-M, Down to the dial
-index, Return; absolute Light clamp then Control-Shift-. for thinking.
+The Mac helper applies those with keyboard shortcuts only while ChatGPT or
+Cursor is already the foreground app. ChatGPT: Control-Shift-M, Down to the
+dial index, Return; absolute Light clamp then Control-Shift-. for thinking.
+Cursor: Command-backslash (first Down is Auto); effort is Left, Up, Right, then Down to the level.
+A ChatGPT-only queued model name is skipped while Cursor is focused. The
+bridge settles 1 s after the last received change and applies only fields
+that differ from its last apply to that app; effort-only changes skip model selection.
 Run the Mac bridge with serial listen + watch:
 
 ```bash
@@ -141,11 +152,13 @@ pulses until the knob pauses (two detents = one level; a quick turn can
 run Light↔Extra High). The model knob uses PCNT hardware quadrature (a
 polled decode misreads it, because the display flush delays the poll past
 the CLK/DT phase difference and the dial parks on one end). Model clamps
-GPT-6 Astra through GPT-5.5 (no wrap); thinking clamps Light ↔ Extra High.
-If ChatGPT is not focused, the bridge must not activate it. Encoder changes
-remain on the ESP32 display/NVS and are queued until ChatGPT returns to the
-foreground, when the latest model and thinking settings are applied via
-Control-Shift-M (Down from Astra) and absolute Ctrl+Shift+, / Ctrl+Shift-.
+GPT-6 Astra through GPT-5.5 on ChatGPT, Auto through GPT-5.6 Luna on Cursor
+(no wrap); thinking clamps Light ↔ Extra High or Low ↔ Max.
+If neither ChatGPT nor Cursor is focused, the bridge must not activate them.
+Encoder changes remain on the ESP32 display/NVS and are queued until one of
+those apps returns to the foreground. ChatGPT applies via Control-Shift-M
+(Down from Astra) and absolute Ctrl+Shift+, / Ctrl+Shift-.; Cursor applies
+via Command-backslash (first Down is Auto) and Left, Up, Right then Down to the level.
 A bottom-left CANCEL button appears while that queue is waiting; tap it
 to send `CANCEL`, drop the Mac apply queue, and restore panel/NVS to the
 last known settings. A five-second press-and-hold starts a five-point
@@ -236,3 +249,14 @@ distinct diagrams: the physical-header layout above, plus a second sequential
 diagram ordered by the peripheral's connector/pin order. The second diagram
 must show each peripheral pin paired with its ESP32 GPIO or power connection;
 do not reorder it to match visual placement on the board.
+
+### Cursor effort capabilities
+
+Right highlights the first supported effort; use its zero-based menu index for
+Down presses, then Return once. Auto and Composer 2.5 have no effort support.
+Cursor Grok 4.6 supports Low, Medium, High, Extra High. Claude Opus 5 and
+Claude Fable 5 add Max. GPT-5.6 Sol, Terra, and Luna support None, Low, Medium,
+High, Extra High, Max. Model changes must reapply effort because Cursor can
+restore its own per-model value. Unsupported endpoints clamp to the supported
+range. Firmware shows Unsupported and ignores effort rotation for models without
+reasoning; None is a selectable GPT effort, not a synonym for unsupported.

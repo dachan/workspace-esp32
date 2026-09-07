@@ -7,6 +7,7 @@
 #include "clock.h"
 #include "display.h"
 #include "font.h"
+#include "front_title.h"
 #include "queue_status.h"
 
 static int s_cancel_x;
@@ -109,7 +110,7 @@ esp_err_t ui_render(const model_fields_t *fields)
     char date_text[16];
     const int have_clock = clock_format(time_text, sizeof(time_text))
         && clock_format_date(date_text, sizeof(date_text));
-    font_draw_text(pad, header_y, "ChatGPT", accent, card, title_scale);
+    font_draw_text(pad, header_y, front_title_text(), accent, card, title_scale);
     if (have_clock) {
         const int right = DISPLAY_WIDTH - pad;
         const int tw = font_text_width(time_text, title_scale);
@@ -130,13 +131,14 @@ esp_err_t ui_render(const model_fields_t *fields)
 
     if (!fields->has_model) {
         font_draw_text(20, 82, "Waiting for bridge...", muted, card, 2);
-        draw_thinking_bar(bar_x, bar_y, bar_w, bar_h, 0, THINKING_LEVEL_COUNT, track, bar_fill);
+        draw_thinking_bar(bar_x, bar_y, bar_w, bar_h, 0, catalog_thinking_count(fields->model), track, bar_fill);
         font_draw_text(20, bar_y + bar_h + 8, "-", muted, card, 1);
     } else {
         draw_wrapped(20, 82, DISPLAY_WIDTH - 48, fields->model, text, card, 2);
-        const char *thinking = fields->has_thinking ? fields->thinking : "-";
-        const int level = fields->has_thinking ? catalog_thinking_level(thinking) : 0;
-        draw_thinking_bar(bar_x, bar_y, bar_w, bar_h, level, THINKING_LEVEL_COUNT, track, bar_fill);
+        const char *thinking = catalog_thinking_count(fields->model) == 0
+            ? "Unsupported" : (fields->has_thinking ? fields->thinking : "-");
+        const int level = fields->has_thinking ? catalog_thinking_level(fields->model, thinking) : 0;
+        draw_thinking_bar(bar_x, bar_y, bar_w, bar_h, level, catalog_thinking_count(fields->model), track, bar_fill);
         font_draw_text(20, bar_y + bar_h + 8, thinking, text, card, 1);
     }
 
@@ -169,6 +171,7 @@ esp_err_t ui_render(const model_fields_t *fields)
     esp_err_t err = display_flush();
     if (err == ESP_OK) {
         queue_status_mark_drawn();
+        front_title_mark_drawn();
     }
     return err;
 }

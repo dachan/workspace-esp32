@@ -3,53 +3,157 @@
 #include <stddef.h>
 #include <strings.h>
 
-const char *const catalog_models[] = {
+#include "front_title.h"
+
+static const char *const chatgpt_models[] = {
     "GPT-6 Astra", "GPT-5.6 Sol", "GPT-5.6 Terra", "GPT-5.6 Luna", "GPT-5.5",
 };
-const int catalog_model_count = sizeof(catalog_models) / sizeof(catalog_models[0]);
-
-static const char *const thinking_names[] = {"Light", "Medium", "High", "Extra High"};
-static const struct {
-    const char *name;
-    int level;
-} thinking_aliases[] = {
-    {"minimal", 1}, {"instant", 1}, {"fast", 1}, {"low", 1},
-    {"standard", 2}, {"auto", 2},
-    {"advanced", 3}, {"thinking", 3},
-    {"xhigh", 4}, {"max", 4}, {"ultra", 4}, {"heavy", 4},
+static const char *const cursor_models[] = {
+    "Auto",
+    "Cursor Grok 4.6",
+    "Composer 2.5",
+    "Claude Opus 5",
+    "GPT-5.6 Sol",
+    "Claude Fable 5",
+    "GPT-5.6 Terra",
+    "GPT-5.6 Luna",
 };
+static const char *const chatgpt_thinking[] = {"Light", "Medium", "High", "Extra High"};
+static const char *const cursor_thinking[] = {"None", "Low", "Medium", "High", "Extra High", "Max"};
 
-int catalog_model_index(const char *name)
+static int table_count(const char *const *names, int n, const char *name)
 {
-    if (name) {
-        for (int i = 0; i < catalog_model_count; i++) {
-            if (strcasecmp(name, catalog_models[i]) == 0) {
-                return i;
-            }
+    if (!name) {
+        return -1;
+    }
+    for (int i = 0; i < n; i++) {
+        if (strcasecmp(name, names[i]) == 0) {
+            return i;
         }
     }
     return -1;
 }
 
-int catalog_thinking_level(const char *name)
+static const char *const *active_models(int *count)
+{
+    if (front_title_is_cursor()) {
+        *count = (int)(sizeof(cursor_models) / sizeof(cursor_models[0]));
+        return cursor_models;
+    }
+    *count = (int)(sizeof(chatgpt_models) / sizeof(chatgpt_models[0]));
+    return chatgpt_models;
+}
+
+static const char *const *active_thinking(const char *model, int *count)
+{
+    if (front_title_is_cursor()) {
+        int index = table_count(cursor_models, (int)(sizeof(cursor_models) / sizeof(cursor_models[0])), model);
+        if (index == 0 || index == 2 || index < 0) {
+            *count = 0;
+            return cursor_thinking;
+        }
+        if (index == 1 || index == 3 || index == 5) {
+            *count = index == 1 ? 4 : 5;
+            return cursor_thinking + 1;
+        }
+        *count = 6;
+        return cursor_thinking;
+    }
+    *count = (int)(sizeof(chatgpt_thinking) / sizeof(chatgpt_thinking[0]));
+    return chatgpt_thinking;
+}
+
+int catalog_model_count(void)
+{
+    int count;
+    active_models(&count);
+    return count;
+}
+
+const char *catalog_model_at(int index)
+{
+    int count;
+    const char *const *names = active_models(&count);
+    if (index < 0 || index >= count) {
+        return names[0];
+    }
+    return names[index];
+}
+
+int catalog_model_index(const char *name)
+{
+    int count;
+    const char *const *names = active_models(&count);
+    return table_count(names, count, name);
+}
+
+bool catalog_model_known(const char *name)
+{
+    int n = (int)(sizeof(chatgpt_models) / sizeof(chatgpt_models[0]));
+    if (table_count(chatgpt_models, n, name) >= 0) {
+        return true;
+    }
+    n = (int)(sizeof(cursor_models) / sizeof(cursor_models[0]));
+    return table_count(cursor_models, n, name) >= 0;
+}
+
+int catalog_thinking_count(const char *model)
+{
+    int count;
+    active_thinking(model, &count);
+    return count;
+}
+
+int catalog_thinking_level(const char *model, const char *name)
 {
     if (!name || !name[0]) {
         return 0;
     }
-    for (int i = 0; i < THINKING_LEVEL_COUNT; i++) {
-        if (strcasecmp(name, thinking_names[i]) == 0) {
-            return i + 1;
-        }
+    int count;
+    const char *const *names = active_thinking(model, &count);
+    int index = table_count(names, count, name);
+    if (index >= 0) {
+        return index + 1;
     }
-    for (size_t i = 0; i < sizeof(thinking_aliases) / sizeof(thinking_aliases[0]); i++) {
-        if (strcasecmp(name, thinking_aliases[i].name) == 0) {
-            return thinking_aliases[i].level;
+    if (count == 0) return 0;
+    // Preserve names across app/model changes; clamp unsupported endpoints.
+    if (strcasecmp(name, "None") == 0 || strcasecmp(name, "Low") == 0
+        || strcasecmp(name, "Light") == 0) {
+        int low = table_count(names, count, front_title_is_cursor() ? "Low" : "Light");
+        return low + 1;
+    }
+    if (strcasecmp(name, "Max") == 0) return count;
+    static const struct { const char *alias; const char *name; } aliases[] = {
+        {"minimal", "Low"}, {"instant", "Low"}, {"fast", "Low"},
+        {"standard", "Medium"}, {"auto", "Medium"},
+        {"advanced", "High"}, {"thinking", "High"},
+        {"xhigh", "Extra High"}, {"ultra", "Extra High"}, {"heavy", "Extra High"},
+    };
+    for (size_t i = 0; i < sizeof(aliases) / sizeof(aliases[0]); i++) {
+        if (strcasecmp(name, aliases[i].alias) == 0) {
+            return catalog_thinking_level(model, aliases[i].name);
         }
     }
     return 0;
 }
 
-const char *catalog_thinking_name(int level)
+const char *catalog_thinking_name(const char *model, int level)
 {
-    return level >= 1 && level <= THINKING_LEVEL_COUNT ? thinking_names[level - 1] : "Medium";
+    int count;
+    const char *const *names = active_thinking(model, &count);
+    if (count == 0) return "Unsupported";
+    if (level < 1 || level > count) {
+        return names[count > 1 ? 1 : 0];
+    }
+    return names[level - 1];
+}
+
+bool catalog_thinking_known(const char *name)
+{
+    int n = (int)(sizeof(chatgpt_thinking) / sizeof(chatgpt_thinking[0]));
+    if (table_count(chatgpt_thinking, n, name) >= 0) {
+        return true;
+    }
+    n = (int)(sizeof(cursor_thinking) / sizeof(cursor_thinking[0]));
+    return table_count(cursor_thinking, n, name) >= 0;
 }

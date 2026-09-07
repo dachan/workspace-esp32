@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-07 (chatgpt-model-display v0.62 flash)
+Last inventory pass: 2026-09-07 (chatgpt-model-display v0.65 flash)
 
 ## radar-transmitter
 
@@ -59,12 +59,13 @@ Last inventory pass: 2026-09-07 (chatgpt-model-display v0.62 flash)
   - Board pinout image: [`s3-n16r8.jpeg`](s3-n16r8.jpeg)
 - Touch: FT6336 — SDA GPIO6, SCL GPIO15, reset GPIO7, INT GPIO5 (CANCEL tap; 5 s hold starts five-point calibration, NVS `touch`/`c35_desk`)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Firmware currently on device: `chatgpt-model-display/` **v 0.62**
+- Pending source update (not flashed): model-specific Cursor effort ranges, including GPT None and unsupported Auto/Composer.
+- Firmware currently on device: `chatgpt-model-display/` **v 0.65**
 - Display settings (LOCKED — title-strip noise fix 2026-09-07):
   - Controller: ST7796U, 480×320 landscape, SPI 26 MHz, `invert_color(true)`, RGB
   - MADCTL: `swap_xy(true)`, `mirror(true, true)` — desk 180 in hardware; do not flip only one mirror (glyphs)
   - Software 180 flush: ON via internal-RAM band blit + SPI transfer sync (v 0.22+)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → ChatGPT title at top of glass, MODEL left, version bottom-right
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
-- Last verified: 2026-09-07 — v0.62 flash on `/dev/cu.usbmodem21201` (hash-verified); CANCEL restores last known; 5 s hold calibrates touch; thinking 2 detents per level; model CLK/DT wiring fault still open (see above)
+- Last verified: 2026-09-07 — v0.65 flash on `/dev/cu.usbmodem21201` (hash-verified); Cursor picker Auto…Luna (no Gemini); FRONT title; CANCEL restores last known; 5 s hold calibrates touch; thinking 2 detents per level; model CLK/DT wiring fault still open (see above)
 - Notes: edit+flash on Mac `~/Development/workspace-esp32`; push then pull Hetzner `/home/codex/workspace-esp32`

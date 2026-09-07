@@ -34,7 +34,7 @@ static int streq_ci(const char *a, const char *b)
 
 static int is_thinking_token(const char *tok)
 {
-    return catalog_thinking_level(tok) != 0;
+    return catalog_thinking_known(tok) || catalog_thinking_level(NULL, tok) != 0;
 }
 
 static int is_extra_high_pair(const char *a, const char *b)

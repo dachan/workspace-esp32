@@ -20,6 +20,8 @@ final class SerialSession {
     private var nextTimeAt: TimeInterval = 0
     private var panelQueuedWanted: Bool?
     private var panelQueuedSent: Bool?
+    private var panelFrontWanted: String?
+    private var panelFrontSent: String?
     private var acknowledgements: [SettingKind: UInt64] = [:]
     private var outgoing: [UInt8] = []
     private var outgoingOffset = 0
@@ -47,6 +49,7 @@ final class SerialSession {
         nextSyncAt = 0
         nextTimeAt = 0
         panelQueuedSent = nil
+        panelFrontSent = nil
         lastConnectionError = nil
         fputs("chatgpt-bridge: serial connected; requesting current dial state\n", stderr)
     }
@@ -121,6 +124,10 @@ final class SerialSession {
         panelQueuedWanted = queued
     }
 
+    func setPanelFront(_ title: String) {
+        panelFrontWanted = title
+    }
+
     func flushWrites() {
         guard fd >= 0 else { return }
         for _ in 0..<4 {
@@ -132,6 +139,9 @@ final class SerialSession {
                 } else if let wanted = panelQueuedWanted, wanted != panelQueuedSent {
                     line = wanted ? "QUEUED" : "CLEAR"
                     panelQueuedSent = wanted
+                } else if let wanted = panelFrontWanted, wanted != panelFrontSent {
+                    line = "FRONT \(wanted)"
+                    panelFrontSent = wanted
                 } else if ProcessInfo.processInfo.systemUptime >= nextSyncAt {
                     // Repeated snapshots recover a reset even if the USB device did not reopen.
                     line = "SYNC"

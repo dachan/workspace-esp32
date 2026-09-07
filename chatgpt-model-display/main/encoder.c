@@ -22,7 +22,8 @@
  * the same direction. The list then walked to one end and stayed there. PCNT
  * counts both lines in hardware, so a blocked loop cannot lose or misread a
  * detent. Eight counts (two mechanical detents) plus a 160 ms gap per model
- * step so the dial is less twitchy; the list clamps at Astra / GPT-5.5.
+ * step so the dial is less twitchy; the list clamps at the ends of the
+ * active catalog (ChatGPT or Cursor).
  */
 static const int s_clk[ENCODER_COUNT] = {41, 1};
 static const int s_dt[ENCODER_COUNT] = {40, 2};

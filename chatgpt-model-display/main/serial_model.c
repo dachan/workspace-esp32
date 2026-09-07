@@ -6,6 +6,7 @@
 
 #include "catalog.h"
 #include "clock.h"
+#include "front_title.h"
 #include "queue_status.h"
 #include "driver/usb_serial_jtag.h"
 #include "esp_log.h"
@@ -51,6 +52,9 @@ static int handle_line(const char *line, model_fields_t *fields)
     if (clock_apply_line(line)) {
         return 0;
     }
+    if (front_title_apply_line(line)) {
+        return 0;
+    }
     if (queue_status_apply_line(line)) {
         return 0;
     }
@@ -69,10 +73,12 @@ static int handle_line(const char *line, model_fields_t *fields)
             ESP_LOGW(TAG, "ignore unknown MODEL");
             return 0;
         }
-        snprintf(parsed.model, sizeof(parsed.model), "%s", catalog_models[model]);
+        snprintf(parsed.model, sizeof(parsed.model), "%s", catalog_model_at(model));
         if (parsed.has_thinking) {
-            int level = catalog_thinking_level(parsed.thinking);
-            snprintf(parsed.thinking, sizeof(parsed.thinking), "%s", catalog_thinking_name(level));
+            int level = catalog_thinking_level(parsed.model, parsed.thinking);
+            if (level > 0) {
+                snprintf(parsed.thinking, sizeof(parsed.thinking), "%s", catalog_thinking_name(parsed.model, level));
+            }
         }
         *fields = parsed;
         return 1;
@@ -87,12 +93,12 @@ static int handle_line(const char *line, model_fields_t *fields)
         if (n >= sizeof(name)) return 0;
         memcpy(name, value, n);
         name[n] = '\0';
-        int level = catalog_thinking_level(name);
+        int level = catalog_thinking_level(fields->model, name);
         if (!level) {
             ESP_LOGW(TAG, "ignore unknown THINKING");
             return 0;
         }
-        snprintf(fields->thinking, sizeof(fields->thinking), "%s", catalog_thinking_name(level));
+        snprintf(fields->thinking, sizeof(fields->thinking), "%s", catalog_thinking_name(fields->model, level));
         fields->has_thinking = 1;
         return 1;
     }
