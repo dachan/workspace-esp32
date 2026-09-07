@@ -116,8 +116,9 @@ esp_err_t display_init(void)
     ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(s_panel), TAG, "reset");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_init(s_panel), TAG, "init");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(s_panel, true), TAG, "invert");
-    /* Desk pose lock: swap_xy + mirror(true,true) for glyph direction,
-     * plus software 180 so title is top-left / version bottom-right. */
+    /* Desk pose: swap_xy + both mirrors is MADCTL 180 (glyphs stay LTR).
+     * Do not software-reverse the PSRAM framebuffer — in-place 180 races
+     * SPI DMA and snows the first rows (ChatGPT title strip). */
     ESP_RETURN_ON_ERROR(esp_lcd_panel_swap_xy(s_panel, true), TAG, "swap_xy");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, true, true), TAG, "mirror");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "disp on");
@@ -137,19 +138,6 @@ esp_err_t display_init(void)
 
 esp_err_t display_flush(void)
 {
-    /* Software 180 on top of MADCTL mirror(true,true): rotates layout without
-     * changing glyph chirality. */
-    const size_t n = (size_t)DISPLAY_WIDTH * (size_t)DISPLAY_HEIGHT;
-    for (size_t i = 0; i < n / 2; ++i) {
-        uint16_t tmp = s_fb[i];
-        s_fb[i] = s_fb[n - 1 - i];
-        s_fb[n - 1 - i] = tmp;
-    }
-    esp_err_t err = esp_lcd_panel_draw_bitmap(s_panel, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, s_fb);
-    for (size_t i = 0; i < n / 2; ++i) {
-        uint16_t tmp = s_fb[i];
-        s_fb[i] = s_fb[n - 1 - i];
-        s_fb[n - 1 - i] = tmp;
-    }
-    return err;
+    /* MADCTL alone sets desk pose. Keep the canvas framebuffer upright. */
+    return esp_lcd_panel_draw_bitmap(s_panel, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, s_fb);
 }
