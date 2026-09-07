@@ -14,50 +14,52 @@ enum Keys {
     static let hidInfo = """
     Keyboard path (Mac helper)
       Foreground: NSWorkspace.frontmostApplication (ChatGPT / Codex only).
-      Model: Control-Shift-M opens the picker (Astra highlighted); Down to dial index (250 ms apart), Return.
-      Reasoning: Control-Shift-, decreases; Control-Shift-. increases.
+      Model: Control-Shift-M, Up to park on Astra, Down to dial index, Return.
+      Reasoning: absolute Light clamp then Control-Shift-. up to target.
       Bind those shortcuts in ChatGPT if they are Unassigned.
       The helper never activates ChatGPT; keys fire only while it is focused.
+      Serial is drained during key delays so a newer SET supersedes in-flight apply.
     """
 
-    static func wait(_ seconds: Double) {
-        Thread.sleep(forTimeInterval: seconds)
+    /// Run-loop wait so serial drain / focus checks can run during key delays.
+    /// `pulse` returning true aborts the wait early (caller should stop applying).
+    @discardableResult
+    static func wait(_ seconds: Double, pulse: (() -> Bool)? = nil) -> Bool {
+        if seconds <= 0 {
+            return !(pulse?() ?? false)
+        }
+        let end = Date().addingTimeInterval(seconds)
+        while Date() < end {
+            if pulse?() == true {
+                return false
+            }
+            let slice = min(0.05, end.timeIntervalSinceNow)
+            if slice <= 0 {
+                break
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(slice))
+        }
+        return !(pulse?() ?? false)
     }
 
     @discardableResult
-    static func key(_ code: UInt16, flags: CGEventFlags = []) -> Bool {
-        post(code, flags: flags, down: true) && post(code, flags: flags, down: false)
+    static func key(_ code: UInt16, flags: CGEventFlags = [], pulse: (() -> Bool)? = nil) -> Bool {
+        if pulse?() == true {
+            return false
+        }
+        return post(code, flags: flags, down: true) && post(code, flags: flags, down: false)
     }
 
     static let controlShiftFlags: CGEventFlags = [.maskControl, .maskShift]
 
     @discardableResult
-    static func chord(_ code: UInt16, _ flags: CGEventFlags) -> Bool {
-        key(code, flags: flags)
+    static func chord(_ code: UInt16, _ flags: CGEventFlags, pulse: (() -> Bool)? = nil) -> Bool {
+        key(code, flags: flags, pulse: pulse)
     }
 
     @discardableResult
-    static func controlShift(_ code: UInt16) -> Bool {
-        chord(code, controlShiftFlags)
-    }
-
-    @discardableResult
-    static func type(_ text: String) -> Bool {
-        for scalar in text.unicodeScalars {
-            var utf16 = Array(String(scalar).utf16)
-            guard let source = CGEventSource(stateID: .hidSystemState),
-                  let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
-                  let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
-            else {
-                return false
-            }
-            down.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
-            up.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
-            wait(0.03)
-        }
-        return true
+    static func controlShift(_ code: UInt16, pulse: (() -> Bool)? = nil) -> Bool {
+        chord(code, controlShiftFlags, pulse: pulse)
     }
 
     private static func post(_ code: UInt16, flags: CGEventFlags, down: Bool) -> Bool {

@@ -294,7 +294,7 @@ void app_main(void)
     /* Ignore stale Mac MODEL/THINKING for a short window after a local encoder SET. */
     TickType_t hold_rx_until = 0;
     const TickType_t hold_rx_ticks = pdMS_TO_TICKS(8000);
-    const TickType_t settle_ticks = pdMS_TO_TICKS(1000);
+    const TickType_t settle_ticks = pdMS_TO_TICKS(400);
     int pending_model_set = 0;
     int pending_think_set = 0;
     TickType_t model_settle_at = 0;

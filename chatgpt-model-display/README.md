@@ -2,7 +2,7 @@
 
 ESP32-S3 firmware that shows the ChatGPT **model** and **thinking** level
 on the desk-mounted 3.5" ST7796U panel. Rotary encoders change both locally
-(display + NVS). After **1 s** with no further detents the firmware sends
+(display + NVS). After **0.4 s** with no further detents the firmware sends
 `SET MODEL` / `SET THINKING` to `mac-chatgpt-bridge/`. The Mac helper
 applies those only while ChatGPT is already the foreground app.
 
@@ -15,7 +15,7 @@ MODEL <name>
 THINKING <level>
 ```
 
-ESP → Mac (after the 1 s encoder settle):
+ESP → Mac (after the 0.4 s encoder settle):
 
 ```text
 SET MODEL <name>
@@ -59,7 +59,7 @@ USB: native USB Serial/JTAG (`/dev/cu.usbmodem*` on macOS). Flash and
 ## Desk control (encoders → ChatGPT)
 
 Firmware `v 0.35+` updates the panel immediately, then sends SET after a
-1 s rotary debounce. The Mac helper uses `NSWorkspace.frontmostApplication`
+0.4 s rotary debounce. The Mac helper uses `NSWorkspace.frontmostApplication`
 (no AX tree walk). While ChatGPT is focused it opens the model picker with
 Control-Shift-M and steps reasoning with Control-Shift-, / Control-Shift-.
 When ChatGPT is not focused, encoder changes stay on the ESP32 display/NVS
@@ -89,7 +89,7 @@ before flashing (paths can change).
 
 Two encoders on the **right** header (see repo `s3-n16r8.jpeg`): **thinking**
 (GPIO41/40/39) and **model** (GPIO1/2/42). Rotate or click to step; the
-panel updates immediately and SET waits 1 s after the last detent.
+panel updates immediately and SET waits 0.4 s after the last detent.
 
 ## Bridge watch
 

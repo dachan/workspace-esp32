@@ -117,7 +117,6 @@ func usage() -> String {
 final class BridgeRuntime {
     var pendingModel: String?
     var pendingThinking: String?
-    var lastThinking: String?
     var lastFront: Bool?
     var retryAt = Date.distantPast
     var lastFailure: String?
@@ -176,35 +175,78 @@ func applyPending(options: Options, runtime: BridgeRuntime) {
     guard runtime.pendingModel != nil || runtime.pendingThinking != nil else { return }
     guard Date() >= runtime.retryAt else { return }
 
-    // Model picker first (Ctrl+Shift+M), then reasoning (Ctrl+Shift+, / .).
-    if let name = runtime.pendingModel {
-        let result = Switcher.model(name, preferredBundleID: options.bundleID)
-        if result.ok {
-            runtime.pendingModel = nil
-            print("\(stamp()) applied MODEL \(name) via \(result.path)")
-        } else {
+    // Re-enter after supersede so a newer SET wins without 2s backoff.
+    for _ in 0..<8 {
+        guard DeskFront.isForeground(preferred: options.bundleID) else { return }
+        guard Date() >= runtime.retryAt else { return }
+
+        if let name = runtime.pendingModel {
+            let applying = name
+            let pulse: () -> Bool = {
+                drainSerial(options: options, runtime: runtime)
+                if let pending = runtime.pendingModel, pending != applying {
+                    return true
+                }
+                return false
+            }
+            let result = Switcher.model(
+                name,
+                preferredBundleID: options.bundleID,
+                pulse: pulse
+            )
+            if result.error == "superseded" {
+                print("\(stamp()) superseded MODEL \(applying) → \(runtime.pendingModel ?? "?")")
+                fflush(stdout)
+                continue
+            }
+            if result.ok {
+                if runtime.pendingModel == applying {
+                    runtime.pendingModel = nil
+                }
+                print("\(stamp()) applied MODEL \(name) via \(result.path)")
+                fflush(stdout)
+                continue
+            }
             fail(result.error ?? "SET MODEL failed", runtime: runtime)
             return
         }
-    }
 
-    if let level = runtime.pendingThinking {
-        // Absolute only when we have no trusted baseline (just came to
-        // foreground). While ChatGPT stays focused, relative bumps from
-        // lastThinking — absolute Escape+reset was breaking live dial turns.
-        let result = Switcher.thinking(
-            level,
-            preferredBundleID: options.bundleID,
-            from: runtime.lastThinking
-        )
-        if result.ok {
-            runtime.lastThinking = Catalog.thinkingName(level) ?? level
-            runtime.pendingThinking = nil
-            print("\(stamp()) applied THINKING \(level) via \(result.path)")
-        } else {
+        if let level = runtime.pendingThinking {
+            let applying = level
+            let pulse: () -> Bool = {
+                drainSerial(options: options, runtime: runtime)
+                // Prefer a fresh model SET over finishing an in-flight thinking apply.
+                if runtime.pendingModel != nil {
+                    return true
+                }
+                if let pending = runtime.pendingThinking, pending != applying {
+                    return true
+                }
+                return false
+            }
+            let result = Switcher.thinking(
+                level,
+                preferredBundleID: options.bundleID,
+                pulse: pulse
+            )
+            if result.error == "superseded" {
+                print("\(stamp()) superseded THINKING \(applying)")
+                fflush(stdout)
+                continue
+            }
+            if result.ok {
+                if runtime.pendingThinking == applying {
+                    runtime.pendingThinking = nil
+                }
+                print("\(stamp()) applied THINKING \(level) via \(result.path)")
+                fflush(stdout)
+                continue
+            }
             fail(result.error ?? "SET THINKING failed", runtime: runtime)
             return
         }
+
+        break
     }
 
     runtime.lastFailure = nil
@@ -234,18 +276,12 @@ func noteFront(options: Options, runtime: BridgeRuntime) {
     let front = DeskFront.isForeground(preferred: options.bundleID)
     if front != runtime.lastFront {
         let becameFocused = front && runtime.lastFront == false
-        let lostFocus = !front && runtime.lastFront == true
         runtime.lastFront = front
         print("\(stamp()) \(DeskFront.label(preferred: options.bundleID))")
-        if lostFocus {
-            // ChatGPT may change effort while we're away; don't reuse a stale baseline.
-            runtime.lastThinking = nil
-        }
         if becameFocused, runtime.pendingModel != nil || runtime.pendingThinking != nil {
             // ChatGPT just took focus — flush queued dial state with shortcuts.
             runtime.retryAt = .distantPast
             runtime.lastFailure = nil
-            runtime.lastThinking = nil
             print("\(stamp()) flushing queued dial state into ChatGPT")
         }
         fflush(stdout)
@@ -335,7 +371,7 @@ func run() -> Int32 {
     }
     if let level = options.setThinking {
         guard AXTrust.require(prompt: true) else { return 2 }
-        let result = Switcher.thinking(level, preferredBundleID: options.bundleID, from: nil)
+        let result = Switcher.thinking(level, preferredBundleID: options.bundleID)
         if result.ok {
             print("applied thinking \(level) via \(result.path)")
             return 0

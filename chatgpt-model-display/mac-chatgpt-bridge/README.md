@@ -12,8 +12,11 @@ queues the latest `SET MODEL` / `SET THINKING` line from the ESP32.
    `com.openai.chat` or `com.openai.codex`.
 3. Reads `SET MODEL <name>` / `SET THINKING <level>` from USB serial.
 4. If ChatGPT is focused (or just became focused with a queue):
-   - Model: Control-Shift-M, Up to GPT-6 Astra, Down to the ESP dial index, Return
-   - Reasoning: Control-Shift-, / Control-Shift-.
+   - Model: Control-Shift-M, Up to park on Astra, Down to the ESP dial
+     index, Return. Serial is drained during delays; a newer SET aborts
+     and re-targets.
+   - Reasoning: absolute Light clamp (Ctrl+Shift+,) then climb with
+     Ctrl+Shift-.
 5. If ChatGPT is not focused: leave the ESP32 display/NVS as the source
    of truth and apply the queued values when ChatGPT becomes frontmost.
    The helper never activates ChatGPT. Cursor is never a target.
@@ -29,7 +32,7 @@ Dial models, in order:
 Reasoning: Light, Medium, High, Extra High.
 
 Bind the three shortcuts in ChatGPT if they are Unassigned. Firmware waits
-1 s after the last encoder detent before sending a SET line.
+0.4 s after the last encoder detent before sending a SET line.
 
 ## Requirements
 
