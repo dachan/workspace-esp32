@@ -17,12 +17,14 @@ Serial path:
 
 - USB serial line: `MODEL <name>\n` at 115200 (dry-run when `--port` is omitted;
   real open/write on macOS when `--port` is set)
-- `--watch` polls and sends when the model or thinking level changes
+- `--watch` independently reads the model and thinking controls, then sends
+  whenever either value changes
 - Last successful model is cached at `~/Library/Application Support/chatgpt-bridge/last-model.txt`; on AX failure the bridge prints `using cached model: …` and still `--send-serial`s that line when requested
 - Thinking is split from titles such as `GPT-5.6 Luna Light` and sent as
   `THINKING <level>\n`
-- Encoder `SET MODEL` / `SET THINKING` commands use ChatGPT's model-picker and
-  reasoning keyboard shortcuts
+- Encoder `SET MODEL` / `SET THINKING` commands press ChatGPT's Accessibility
+  model and reasoning controls directly. Configured keyboard shortcuts remain a
+  fallback for app versions that do not expose a pressable control.
 
 ## Requirements
 
@@ -59,7 +61,8 @@ Run the Mac bridge with serial listen + watch:
 chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
 ```
 
-Requires Accessibility (and Input Monitoring) for the launching Terminal.
+Requires Accessibility for the launching app. Input Monitoring is needed only
+when the keyboard-shortcut fallback is used.
 Model knob uses the current ChatGPT picker range (GPT-6 Astra through
 GPT-5.4 Mini); thinking clamps Light ↔ Extra High.
 
@@ -168,12 +171,18 @@ swift run chatgpt-bridge --send-serial --port /dev/cu.usbmodemXXXX --baud 115200
 
 Default baud is 115200. This repo does not flash firmware.
 
-## Keyboard control
+## App control
 
-The bridge applies encoder commands by activating ChatGPT. It opens the model
-picker with Control-Shift-M and presses the matching Accessibility button.
-Thinking uses the configured Increase/Decrease Reasoning shortcuts
-(Control-Shift-. / Control-Shift-,).
+The bridge applies encoder commands by activating ChatGPT and pressing the
+model or thinking control through Accessibility. It accepts button, menu,
+radio, combo-box, and pop-up control roles because the Electron hierarchy can
+change between app releases. It also normalizes current reasoning labels such
+as `low`, `xhigh`, `max`, and `ultra` to the display's Light through Extra High
+scale.
+
+If the app does not expose a pressable control, the fallback opens the model
+picker with Control-Shift-M and uses the configured Increase/Decrease Reasoning
+shortcuts (Control-Shift-. / Control-Shift-,).
 
 ```sh
 swift run chatgpt-bridge --hid-info

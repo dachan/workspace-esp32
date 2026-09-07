@@ -153,6 +153,12 @@ func printJSON(_ value: some Encodable) {
 func printHuman(_ readback: ModelReadback) {
     if readback.ok, let model = readback.model {
         print("ChatGPT model: \(model)")
+        if let thinking = readback.thinking {
+            print("thinking: \(thinking)")
+            if let thinkingSource = readback.thinkingSource {
+                print("thinking source: \(thinkingSource)")
+            }
+        }
         if let source = readback.source {
             print("source: \(source)")
         }
@@ -323,7 +329,9 @@ func emitOnce(options: Options, app: NSRunningApplication?) -> Int32 {
         readback = ModelReadback(
             ok: false,
             model: nil,
+            thinking: nil,
             source: nil,
+            thinkingSource: nil,
             bundleID: options.bundleID,
             pid: nil,
             appName: nil,
@@ -334,7 +342,7 @@ func emitOnce(options: Options, app: NSRunningApplication?) -> Int32 {
 
     if readback.ok, let model = readback.model {
         let base = modelBaseName(model)
-        let thinking = thinkingFrom(model)
+        let thinking = readback.thinking ?? thinkingFrom(model)
         ModelCache.save(base)
         if let thinking {
             ModelCache.saveThinking(thinking)
@@ -406,14 +414,14 @@ func emitChange(
     let sourceOverride: String?
     if readback.ok, let live = readback.model {
         model = live
-        thinking = thinkingFrom(live)
+        thinking = readback.thinking ?? thinkingFrom(live)
         sourceOverride = nil
     } else if let cached = ModelCache.load() {
         if !fromCache {
             fputs("chatgpt-bridge: using cached model: \(cached)\n", stderr)
         }
         model = cached
-        thinking = thinkingFrom(cached) ?? ModelCache.loadThinking()
+        thinking = readback.thinking ?? thinkingFrom(cached) ?? ModelCache.loadThinking()
         sourceOverride = "disk-cache"
     } else {
         model = nil
@@ -621,7 +629,9 @@ func runWatch(options: Options, initialApp: NSRunningApplication?) -> Int32 {
                 readback = ModelReadback(
                     ok: false,
                     model: nil,
+                    thinking: nil,
                     source: nil,
+                    thinkingSource: nil,
                     bundleID: options.bundleID,
                     pid: nil,
                     appName: nil,

@@ -14,7 +14,9 @@ struct ModelCandidate: Codable {
 struct ModelReadback: Codable {
     var ok: Bool
     var model: String?
+    var thinking: String?
     var source: String?
+    var thinkingSource: String?
     var bundleID: String?
     var pid: Int32?
     var appName: String?
@@ -67,8 +69,11 @@ enum ModelReader {
             return lhs.path < rhs.path
         }
 
+        let thinking = ThinkingReader.read(snaps)
         var result = ModelReadback(
             ok: false,
+            thinking: thinking?.level,
+            thinkingSource: thinking?.source,
             bundleID: app.bundleIdentifier,
             pid: app.processIdentifier,
             appName: app.localizedName,
@@ -140,6 +145,11 @@ enum ModelReader {
         }
 
         let haystack = ([snap.identifier, snap.help, snap.description].compactMap { $0 }.joined(separator: " ")).lowercased()
+        if (haystack.contains("reasoning") || haystack.contains("thinking effort")
+            || haystack.contains("thinking level")),
+           ["auto", "instant", "thinking", "standard", "pro"].contains(model.lowercased()) {
+            return nil
+        }
         if haystack.contains("model") {
             score += 5
             source += "+id"
@@ -165,6 +175,16 @@ enum ModelReader {
         let lower = text.lowercased()
         if chrome.contains(lower) { return nil }
 
+        let aliases = [
+            "astra": "GPT-6 Astra",
+            "sol": "GPT-5.6 Sol",
+            "terra": "GPT-5.6 Terra",
+            "luna": "GPT-5.6 Luna",
+        ]
+        if let model = aliases[lower] {
+            return model
+        }
+
         let exactModes = ["auto", "instant", "thinking", "standard", "pro"]
         if exactModes.contains(lower) { return text }
 
@@ -180,6 +200,92 @@ enum ModelReader {
             return text
         }
         return nil
+    }
+}
+
+enum ThinkingReader {
+    struct Selection {
+        var level: String
+        var source: String
+    }
+
+    static func read(_ snaps: [AXSnapshot]) -> Selection? {
+        let matches = snaps.compactMap(score).sorted { lhs, rhs in
+            if lhs.score != rhs.score { return lhs.score > rhs.score }
+            return lhs.path < rhs.path
+        }
+        guard let best = matches.first, best.score >= 7 else { return nil }
+        return Selection(level: best.level, source: best.source)
+    }
+
+    private struct Match {
+        var level: String
+        var source: String
+        var path: String
+        var score: Int
+    }
+
+    private static func score(_ snap: AXSnapshot) -> Match? {
+        guard let scored = ThinkingMatch.score(snap) else { return nil }
+        return Match(
+            level: scored.level,
+            source: scored.source,
+            path: snap.path,
+            score: scored.score
+        )
+    }
+}
+
+enum ThinkingMatch {
+    struct Scored {
+        var level: String
+        var source: String
+        var score: Int
+    }
+
+    static func score(_ snap: AXSnapshot) -> Scored? {
+        let labels = snap.labels.map {
+            $0.replacingOccurrences(of: "\u{FFFC}", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let raw = labels.first(where: { ThinkingText.canonical($0) != nil }),
+              let level = ThinkingText.canonical(raw) else {
+            return nil
+        }
+
+        let context = labels.joined(separator: " ").lowercased()
+        let modelTitle = ModelReader.normalizeModel(raw) != nil
+        var score = ThinkingText.isLevelLabel(raw) ? 5 : 0
+        var source = "\(snap.role)"
+
+        if context.contains("reasoning") || context.contains("thinking effort")
+            || context.contains("thinking level") {
+            score += 8
+            source += "+reasoning"
+        }
+        switch snap.role {
+        case AXRoleName.popUpButton, AXRoleName.comboBox, AXRoleName.menuButton:
+            score += 5
+        case AXRoleName.radioButton:
+            score += snap.mark == nil ? 1 : 5
+        case AXRoleName.menuItem:
+            score += snap.mark == nil ? 0 : 5
+        case AXRoleName.button:
+            score += 2
+        default:
+            break
+        }
+        if modelTitle {
+            score += 4
+            source += "+model-chip"
+        }
+        if snap.inList && snap.mark == nil { score -= 4 }
+        if snap.inMenuBar && snap.mark == nil { score -= 3 }
+        if let y = snap.position?.y, y >= 0, y < 180, !snap.inMenuBar {
+            score += 2
+            source += "+top"
+        }
+        return Scored(level: level, source: source, score: score)
     }
 }
 #endif

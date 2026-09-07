@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-07 (chatgpt-model-display title-strip fix)
+Last inventory pass: 2026-09-06 (chatgpt-model-display v0.31 flash)
 
 ## radar-transmitter
 
@@ -49,13 +49,12 @@ Last inventory pass: 2026-09-07 (chatgpt-model-display title-strip fix)
   - Board pinout image: [`s3-n16r8.jpeg`](s3-n16r8.jpeg)
 - Touch: not used by this firmware (FT6336 may be present)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Firmware currently on device: `chatgpt-model-display/` **v 0.30**
+- Firmware currently on device: `chatgpt-model-display/` **v 0.31**
 - Display settings (LOCKED — title-strip noise fix 2026-09-07):
   - Controller: ST7796U, 480×320 landscape, SPI 26 MHz, `invert_color(true)`, RGB
   - MADCTL: `swap_xy(true)`, `mirror(true, true)` — desk 180 in hardware; do not flip only one mirror (glyphs)
   - Software 180 flush: ON via internal-RAM band blit + SPI transfer sync (v 0.22+)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → ChatGPT title at top of glass, MODEL left, version bottom-right
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
-- Last verified: 2026-09-07 — v0.30 flash and encoder→ChatGPT Extra High change verified; display band blit retained
+- Last verified: 2026-09-06 — v0.31 bootloader, partition table, and application image hash-verified after flash; display band blit retained
 - Notes: edit+flash on Mac `~/Development/workspace-esp32`; push then pull Hetzner `/home/codex/workspace-esp32`
-

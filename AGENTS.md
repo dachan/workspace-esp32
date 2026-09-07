@@ -118,13 +118,16 @@ the LCD reset low because the receiver has no accessible EN switch.
 ## Desk control (encoders → ChatGPT)
 
 Firmware `v 0.23+` sends `SET MODEL <name>` / `SET THINKING <level>` when knobs change.
+The bridge presses the app's Accessibility model/thinking controls directly and
+falls back to configured keyboard shortcuts only when a control is unavailable.
 Run the Mac bridge with serial listen + watch:
 
 ```bash
 chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
 ```
 
-Requires Accessibility (and Input Monitoring) for the launching Terminal.
+Requires Accessibility for the launching app. Input Monitoring is needed only
+when the keyboard-shortcut fallback is used.
 Model knob uses the current ChatGPT picker range (GPT-6 Astra through
 GPT-5.4 Mini); thinking clamps Light ↔ Extra High.
 

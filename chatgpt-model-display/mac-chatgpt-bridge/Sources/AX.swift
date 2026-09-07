@@ -47,6 +47,16 @@ enum AXRoleName {
 enum AXAction {
     static let press = kAXPressAction as CFString
 
+    static func isPressableRole(_ role: String) -> Bool {
+        switch role {
+        case AXRoleName.popUpButton, AXRoleName.comboBox, AXRoleName.menuButton,
+             AXRoleName.menuItem, AXRoleName.button, AXRoleName.radioButton:
+            return true
+        default:
+            return false
+        }
+    }
+
     @discardableResult
     static func press(_ element: AXUIElement) -> Bool {
         AXUIElementPerformAction(element, press) == .success
