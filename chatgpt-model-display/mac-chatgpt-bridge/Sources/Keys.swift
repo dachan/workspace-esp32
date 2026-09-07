@@ -14,7 +14,7 @@ enum Keys {
     static let hidInfo = """
     Keyboard path (Mac helper)
       Foreground: NSWorkspace.frontmostApplication (ChatGPT / Codex only).
-      Model: Control-Shift-M, Up to park on Astra, Down to dial index, Return.
+      Model: Control-Shift-M (picker opens on Astra), Down to dial index, Return.
       Reasoning: absolute Light clamp then Control-Shift-. up to target.
       Bind those shortcuts in ChatGPT if they are Unassigned.
       The helper never activates ChatGPT; keys fire only while it is focused.

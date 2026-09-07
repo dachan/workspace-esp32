@@ -10,7 +10,7 @@ enum Switcher {
         static let superseded = Result(ok: false, path: "superseded", error: "superseded")
     }
 
-    /// Ctrl+Shift+M → Up to park on Astra → Down to dial index → Return.
+    /// Ctrl+Shift+M opens the picker on Astra; Down N to the dial index; Return.
     /// `pulse` may drain serial / check focus; return true to abort as superseded.
     static func model(
         _ raw: String,
@@ -28,7 +28,7 @@ enum Switcher {
         }
 
         fputs(
-            "chatgpt-bridge: open model picker via Ctrl+Shift+M, Up park, Down \(index) to \(name)\n",
+            "chatgpt-bridge: open model picker via Ctrl+Shift+M, Down \(index) to \(name)\n",
             stderr
         )
         guard Keys.controlShift(Keys.m, pulse: pulse) else {
@@ -37,25 +37,6 @@ enum Switcher {
                 : Result(ok: false, path: "shortcut", error: "could not post Ctrl+Shift+M")
         }
         guard Keys.wait(0.45, pulse: pulse) else {
-            return .superseded
-        }
-        guard DeskFront.isForeground(preferred: preferredBundleID) else {
-            return Result(ok: false, path: "deferred", error: "ChatGPT is not focused")
-        }
-
-        // Park at the top (Astra). Extra Ups are harmless if already there.
-        let parkUps = max(Catalog.models.count, 5)
-        for _ in 0..<parkUps {
-            guard Keys.key(Keys.up, pulse: pulse) else {
-                return pulse?() == true
-                    ? .superseded
-                    : Result(ok: false, path: "picker", error: "could not park on Astra")
-            }
-            guard Keys.wait(0.08, pulse: pulse) else {
-                return .superseded
-            }
-        }
-        guard Keys.wait(0.12, pulse: pulse) else {
             return .superseded
         }
         guard DeskFront.isForeground(preferred: preferredBundleID) else {
@@ -84,7 +65,7 @@ enum Switcher {
         guard Keys.wait(0.15, pulse: pulse) else {
             return .superseded
         }
-        return Result(ok: true, path: "Ctrl+Shift+M Up/Down \(index) \(name)", error: nil)
+        return Result(ok: true, path: "Ctrl+Shift+M Down \(index) \(name)", error: nil)
     }
 
     /// Always absolute: clamp to Light, then climb. Avoids relative desync when

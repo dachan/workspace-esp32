@@ -94,7 +94,7 @@ func usage() -> String {
 
     Apply ESP32 encoder SET MODEL / SET THINKING with keyboard
     shortcuts, only while ChatGPT is already the foreground app.
-    Model: Ctrl+Shift+M, Up/Down to dial index. Thinking: Ctrl+Shift+, / .
+    Model: Ctrl+Shift+M, Down to dial index. Thinking: Ctrl+Shift+, / .
 
     Options:
       --front             Print whether ChatGPT is foreground and exit

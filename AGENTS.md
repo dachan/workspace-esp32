@@ -37,8 +37,8 @@ Hard lanes for this repo:
 only — not Cursor). It never activates ChatGPT and never walks the AX tree.
 Encoder `SET MODEL` / `SET THINKING` lines are applied with keyboard shortcuts
 only while ChatGPT is already focused; otherwise they stay queued. On the
-ChatGPT foreground edge the helper flushes the queue: Control-Shift-M, Up to
-GPT-6 Astra, Down to the ESP dial index, Return; then absolute reasoning
+ChatGPT foreground edge the helper flushes the queue: Control-Shift-M,
+Down to the ESP dial index, Return; then absolute reasoning
 (Ctrl+Shift+, clamp to Light, Ctrl+Shift-. up to target). Firmware waits
 0.4 s after the last rotary detent before sending SET.
 The helper only runs on the Mac.
@@ -127,7 +127,7 @@ the LCD reset low because the receiver has no accessible EN switch.
 Firmware `v 0.35+` updates the panel/NVS immediately, then sends
 `SET MODEL <name>` / `SET THINKING <level>` 0.4 s after the last detent.
 The Mac helper applies those with keyboard shortcuts only while ChatGPT is
-already the foreground app: Control-Shift-M, Up to Astra, Down to the dial
+already the foreground app: Control-Shift-M, Down to the dial
 index, Return; absolute Light clamp then Control-Shift-. for thinking.
 Run the Mac bridge with serial listen + watch:
 
@@ -144,7 +144,7 @@ thinking clamps Light ↔ Extra High.
 If ChatGPT is not focused, the bridge must not activate it. Encoder changes
 remain on the ESP32 display/NVS and are queued until ChatGPT returns to the
 foreground, when the latest model and thinking settings are applied via
-Control-Shift-M (Up park + Down) and absolute Ctrl+Shift+, / Ctrl+Shift-..
+Control-Shift-M (Down from Astra) and absolute Ctrl+Shift+, / Ctrl+Shift-..
 
 ## Build and flash
 

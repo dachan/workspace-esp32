@@ -66,5 +66,5 @@ Last inventory pass: 2026-09-07 (chatgpt-model-display v0.53 flash)
   - Software 180 flush: ON via internal-RAM band blit + SPI transfer sync (v 0.22+)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → ChatGPT title at top of glass, MODEL left, version bottom-right
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
-- Last verified: 2026-09-07 — v0.53 flash; 0.4 s SET settle; bridge drains serial during key delays and supersedes in-flight applies; model picker parks with Ups then Downs; thinking always absolute; model CLK/DT wiring fault still open (see above)
+- Last verified: 2026-09-07 — v0.53 flash; 0.4 s SET settle; bridge drains serial during key delays and supersedes in-flight applies; model picker is Ctrl+Shift+M then Down from Astra; thinking always absolute; model CLK/DT wiring fault still open (see above)
 - Notes: edit+flash on Mac `~/Development/workspace-esp32`; push then pull Hetzner `/home/codex/workspace-esp32`
