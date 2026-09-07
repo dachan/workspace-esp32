@@ -156,10 +156,13 @@ static void apply_model_delta(ui_state_t *ui, int delta)
         idx = 0;
     }
     idx += delta;
-    while (idx < 0) {
-        idx += s_models_n;
+    /* Clamp — no wrap past first/last preset. */
+    if (idx < 0) {
+        idx = 0;
     }
-    idx %= s_models_n;
+    if (idx >= s_models_n) {
+        idx = s_models_n - 1;
+    }
     snprintf(ui->fields.model, sizeof(ui->fields.model), "%s", s_models[idx]);
     ui->fields.has_model = 1;
     ui->waiting = 0;

@@ -1,0 +1,4 @@
+#pragma once
+#define FIRMWARE_VERSION_MAJOR 0
+#define FIRMWARE_VERSION_MINOR 19
+#define FIRMWARE_BUILD_STRING "v 0.19"
