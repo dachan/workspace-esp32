@@ -1,0 +1,3 @@
+# Legacy archives from builds made before archives moved into the build tree.
+/dist/
+/main/build_number.h

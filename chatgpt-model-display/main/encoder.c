@@ -143,15 +143,15 @@ static esp_err_t model_pcnt_init(void)
 
 esp_err_t encoder_init(void)
 {
-    const int pins[] = {41, 40, 39, 1, 2, 42};
-    for (int i = 0; i < (int)(sizeof(pins) / sizeof(pins[0])); i++) {
-        gpio_reset_pin(pins[i]);
-        if (rtc_gpio_is_valid_gpio(pins[i])) {
-            rtc_gpio_deinit(pins[i]);
-        }
-    }
     uint64_t mask = 0;
     for (int i = 0; i < ENCODER_COUNT; i++) {
+        const int pins[] = {s_clk[i], s_dt[i], s_sw[i]};
+        for (int j = 0; j < 3; j++) {
+            gpio_reset_pin(pins[j]);
+            if (rtc_gpio_is_valid_gpio(pins[j])) {
+                rtc_gpio_deinit(pins[j]);
+            }
+        }
         mask |= (1ULL << s_clk[i]) | (1ULL << s_dt[i]) | (1ULL << s_sw[i]);
     }
     gpio_config_t io = {
@@ -201,16 +201,14 @@ static int model_delta(void)
             s_model_prev_count = 0;
         }
     }
-    if (delta_counts == 0) {
-        return 0;
-    }
-
-    int sign = delta_counts > 0 ? 1 : -1;
-    if (sign != s_model_sign) {
-        s_model_sign = sign;
-        s_model_acc = delta_counts;
-    } else {
-        s_model_acc += delta_counts;
+    if (delta_counts != 0) {
+        int sign = delta_counts > 0 ? 1 : -1;
+        if (sign != s_model_sign) {
+            s_model_sign = sign;
+            s_model_acc = delta_counts;
+        } else {
+            s_model_acc += delta_counts;
+        }
     }
 
     /* Do not consume acc until the emit gap allows a step — otherwise fast
@@ -248,37 +246,29 @@ int encoder_delta(encoder_id_t id)
         delta = (dt == 1) ? 1 : -1;
     }
     s_last_clk[id] = clk;
-    if (delta == 0) {
-        return 0;
-    }
-
     int64_t now = esp_timer_get_time();
-    if (now - s_last_step_us[id] < MIN_STEP_US) {
-        return 0;
-    }
+    bool accepted = delta != 0 && now - s_last_step_us[id] >= MIN_STEP_US;
     if (s_last_dir[id] != 0 && delta != s_last_dir[id]
-        && (now - s_last_step_us[id]) < DIR_LOCK_US) {
-        return 0;
+        && now - s_last_step_us[id] < DIR_LOCK_US) {
+        accepted = false;
     }
-    s_last_dir[id] = delta;
-    s_last_step_us[id] = now;
+    if (accepted) {
+        s_last_dir[id] = delta;
+        s_last_step_us[id] = now;
+        if (delta != s_sign[id]) {
+            s_sign[id] = delta;
+            s_pulses[id] = 0;
+        }
+        s_pulses[id]++;
+    }
 
-    if (delta != s_sign[id]) {
-        s_sign[id] = delta;
-        s_pulses[id] = 1;
+    // Completed steps must drain even after the knob stops producing edges.
+    if (s_pulses[id] < PULSES_PER_STEP || now - s_emit_us[id] < EMIT_US) {
         return 0;
     }
-    s_pulses[id]++;
-    if (s_pulses[id] < PULSES_PER_STEP) {
-        return 0;
-    }
-    /* Keep the completed pulse pair until the emit gap elapses. */
-    if (now - s_emit_us[id] < EMIT_US) {
-        return 0;
-    }
-    s_pulses[id] = 0;
+    s_pulses[id] -= PULSES_PER_STEP;
     s_emit_us[id] = now;
-    return delta;
+    return s_sign[id];
 }
 
 int encoder_button_pressed(encoder_id_t id)

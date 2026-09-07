@@ -11,37 +11,24 @@ enum DeskFront {
         "com.openai.codex",
     ]
 
-    static func allowedIDs(preferred: String?) -> Set<String> {
-        if let preferred, !preferred.isEmpty {
-            return [preferred]
-        }
-        return bundleIDs
-    }
-
     static func isTarget(_ app: NSRunningApplication, preferred: String?) -> Bool {
-        if let id = app.bundleIdentifier, allowedIDs(preferred: preferred).contains(id) {
-            return true
-        }
-        guard preferred == nil || preferred?.isEmpty == true else {
-            return false
-        }
-        let name = (app.localizedName ?? "").lowercased()
-        return name == "chatgpt" || name.hasPrefix("chatgpt ")
+        guard let id = app.bundleIdentifier, bundleIDs.contains(id) else { return false }
+        return preferred == nil || preferred == id
     }
 
-    static func frontmost(preferred: String? = nil) -> NSRunningApplication? {
+    static func frontmost() -> NSRunningApplication? {
         NSWorkspace.shared.frontmostApplication
     }
 
     static func isForeground(preferred: String? = nil) -> Bool {
-        guard let front = frontmost(preferred: preferred) else {
+        guard let front = frontmost() else {
             return false
         }
         return isTarget(front, preferred: preferred)
     }
 
     static func label(preferred: String? = nil) -> String {
-        let app = frontmost(preferred: preferred)
+        let app = frontmost()
         let name = app?.localizedName ?? "?"
         if let app, isTarget(app, preferred: preferred) {
             return "ChatGPT foreground"

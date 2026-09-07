@@ -1,4 +1,5 @@
 #include "model_parse.h"
+#include "catalog.h"
 
 #include <ctype.h>
 #include <string.h>
@@ -33,27 +34,7 @@ static int streq_ci(const char *a, const char *b)
 
 static int is_thinking_token(const char *tok)
 {
-    static const char *k_tokens[] = {
-        "Light",
-        "Heavy",
-        "Instant",
-        "Fast",
-        "Thinking",
-        "High",
-        "Medium",
-        "Low",
-        "Standard",
-        "Advanced",
-        "Max",
-        "Auto",
-        NULL,
-    };
-    for (int i = 0; k_tokens[i]; i++) {
-        if (streq_ci(tok, k_tokens[i])) {
-            return 1;
-        }
-    }
-    return 0;
+    return catalog_thinking_level(tok) != 0;
 }
 
 static int is_extra_high_pair(const char *a, const char *b)

@@ -67,8 +67,10 @@ esp_err_t model_nvs_save(const model_fields_t *fields)
             err = nvs_set_str(h, KEY_THINK, fields->thinking);
         } else {
             // Clear stale thinking so boot does not show an old level.
-            nvs_erase_key(h, KEY_THINK);
-            err = ESP_OK;
+            err = nvs_erase_key(h, KEY_THINK);
+            if (err == ESP_ERR_NVS_NOT_FOUND) {
+                err = ESP_OK;
+            }
         }
     }
     if (err == ESP_OK) {

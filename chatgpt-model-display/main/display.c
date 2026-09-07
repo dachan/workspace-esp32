@@ -44,7 +44,7 @@ static uint16_t *s_fb;
 #define FLUSH_BAND_H 16
 static uint16_t *s_band;
 static SemaphoreHandle_t s_xfer_done;
-static volatile int s_flush_pending;
+static bool s_flush_pending;
 
 static bool IRAM_ATTR on_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
                                           esp_lcd_panel_io_event_data_t *edata,
@@ -54,19 +54,23 @@ static bool IRAM_ATTR on_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
     (void)edata;
     (void)user_ctx;
     BaseType_t hp = pdFALSE;
-    s_flush_pending = 0;
     if (s_xfer_done) {
         xSemaphoreGiveFromISR(s_xfer_done, &hp);
     }
     return hp == pdTRUE;
 }
 
-static void wait_flush_done(void)
+static esp_err_t wait_flush_done(void)
 {
-    if (s_flush_pending && s_xfer_done) {
-        (void)xSemaphoreTake(s_xfer_done, pdMS_TO_TICKS(200));
-        s_flush_pending = 0;
+    if (!s_flush_pending) {
+        return ESP_OK;
     }
+    if (xSemaphoreTake(s_xfer_done, pdMS_TO_TICKS(200)) != pdTRUE) {
+        ESP_LOGE(TAG, "SPI transfer timed out; retaining DMA buffer ownership");
+        return ESP_ERR_TIMEOUT;
+    }
+    s_flush_pending = false;
+    return ESP_OK;
 }
 
 static esp_err_t backlight_init(void)
@@ -161,8 +165,6 @@ esp_err_t display_init(void)
     if (s_xfer_done == NULL) {
         return ESP_ERR_NO_MEM;
     }
-    /* Primed so first wait is a no-op until a real transfer starts. */
-    xSemaphoreGive(s_xfer_done);
 
     s_fb = heap_caps_malloc(fb_bytes, MALLOC_CAP_SPIRAM);
     const size_t band_bytes = (size_t)DISPLAY_WIDTH * FLUSH_BAND_H * sizeof(uint16_t);
@@ -191,7 +193,7 @@ esp_err_t display_flush(void)
     for (int y = 0; y < h; y += FLUSH_BAND_H) {
         const int band_h = (y + FLUSH_BAND_H <= h) ? FLUSH_BAND_H : (h - y);
         /* Wait before filling — s_band is still owned by SPI until done. */
-        wait_flush_done();
+        ESP_RETURN_ON_ERROR(wait_flush_done(), TAG, "wait for SPI band");
         for (int row = 0; row < band_h; row++) {
             const int panel_y = y + row;
             const int src_y = h - 1 - panel_y;
@@ -201,14 +203,12 @@ esp_err_t display_flush(void)
                 dst[x] = src[w - 1 - x];
             }
         }
-        s_flush_pending = 1;
-        (void)xSemaphoreTake(s_xfer_done, 0);
+        s_flush_pending = true;
         err = esp_lcd_panel_draw_bitmap(s_panel, 0, y, w, y + band_h, s_band);
         if (err != ESP_OK) {
-            s_flush_pending = 0;
+            s_flush_pending = false;
             return err;
         }
     }
-    wait_flush_done();
-    return ESP_OK;
+    return wait_flush_done();
 }

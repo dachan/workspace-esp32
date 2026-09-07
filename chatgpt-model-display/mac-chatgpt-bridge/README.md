@@ -3,14 +3,16 @@
 macOS helper for the desk encoders. It does **not** walk ChatGPT's
 Accessibility tree. Foreground is one `NSWorkspace.frontmostApplication`
 read. While ChatGPT is focused it posts keyboard shortcuts; otherwise it
-queues the latest `SET MODEL` / `SET THINKING` line from the ESP32.
+queues the latest model and thinking state from the ESP32.
 
 ## What it does
 
 1. Optional Accessibility check (needed only to post keys).
 2. Treats ChatGPT as foreground when the frontmost app is
    `com.openai.chat` or `com.openai.codex`.
-3. Reads `SET MODEL <name>` / `SET THINKING <level>` from USB serial.
+3. Requests current state on connection and every two seconds. Accepts revisioned
+   `STATE` updates and legacy `SET MODEL` / `SET THINKING` lines. ACKs validated
+   updates once queued; duplicate revisions are acknowledged without reapplying.
 4. If ChatGPT is focused (or just became focused with a queue):
    - Model: Control-Shift-M (picker opens on Astra), Down to the ESP
      dial index, Return. Serial is drained during delays; a newer SET
@@ -28,10 +30,17 @@ dismissed with Escape before retrying in that process (an extra 0.1 seconds).
 Thinking retries start from the absolute Light clamp. “Applied” means the key
 sequence was posted; the helper does not read back the app's selected value.
 
-Serial read failures are logged and the configured port is retried every two
-seconds. Queued settings survive reconnection, but changes sent while the port
-was disconnected are not replayed by the firmware. If the device path changes,
-restart with the new `--port`.
+Serial open, configuration, read, and write failures are logged and the configured
+port is retried every two seconds, including when missing at startup. The helper
+claims exclusive access to prevent another helper or monitor opening the port.
+Queued settings survive reconnection. Current firmware retransmits until ACK and
+answers SYNC with its state, so bridge restarts and device resets recover without
+another knob movement. Older firmware still works, but cannot replay missing
+changes. If the device path changes, restart with the new `--port`.
+
+See the [firmware protocol](../README.md#protocol-usb-serial-115200) for frame
+formats and compatibility details. Buffers and bytes processed per poll are
+bounded. Retry and key-delay durations use a monotonic clock.
 
 Dial models, in order:
 
@@ -71,20 +80,30 @@ swift run chatgpt-bridge --front
 ## Desk control
 
 ```bash
-chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
+chatgpt-bridge --watch --port "$ESP_PORT"
 ```
 
-`--send-serial` is accepted so the old command still runs; the rewrite does
-not push AX readback to the ESP32. `--watch --port` is enough.
+`--send-serial` is accepted for existing launch commands; it has no effect.
+SYNC/ACK traffic is automatic. `--watch --port` is enough. Set `ESP_PORT` to the
+verified device path. `--bundle-id` only accepts `com.openai.chat` or
+`com.openai.codex`; unsupported baud rates and setting names fail validation.
 
 ```sh
 cd chatgpt-model-display/mac-chatgpt-bridge
 swift build -c release
 "$(swift build -c release --show-bin-path)/chatgpt-bridge" \
-  --watch --port /dev/cu.usbmodem21201
+  --watch --port "$ESP_PORT"
 ```
 
 ```sh
 swift run chatgpt-bridge --hid-info
 swift run chatgpt-bridge --list-ports
 ```
+
+`Options.swift` owns CLI parsing; `BridgeRuntime.swift` owns the pending queue and
+foreground/apply loop; `SerialProtocol.swift` owns wire parsing; `Serial.swift`
+owns serial I/O. `Apply.swift` keeps model and thinking shortcut sequences explicit
+and returns typed applied/interrupted/failed outcomes.
+
+Rebuilding does not replace a running helper. To deploy an updated binary, stop
+the previous helper and relaunch it from the same Accessibility-authorized app.

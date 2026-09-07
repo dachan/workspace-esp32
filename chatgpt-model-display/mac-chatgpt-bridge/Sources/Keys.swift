@@ -8,7 +8,6 @@ enum Keys {
     static let m: UInt16 = 0x2E
     static let escape: UInt16 = 0x35
     static let `return`: UInt16 = 0x24
-    static let up: UInt16 = 0x7E
     static let down: UInt16 = 0x7D
 
     static let hidInfo = """
@@ -28,12 +27,12 @@ enum Keys {
         if seconds <= 0 {
             return !(pulse?() ?? false)
         }
-        let end = Date().addingTimeInterval(seconds)
-        while Date() < end {
+        let end = ProcessInfo.processInfo.systemUptime + seconds
+        while ProcessInfo.processInfo.systemUptime < end {
             if pulse?() == true {
                 return false
             }
-            let slice = min(0.05, end.timeIntervalSinceNow)
+            let slice = min(0.05, end - ProcessInfo.processInfo.systemUptime)
             if slice <= 0 {
                 break
             }

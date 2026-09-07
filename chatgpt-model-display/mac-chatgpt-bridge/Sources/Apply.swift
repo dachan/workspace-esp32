@@ -4,12 +4,10 @@ import Foundation
 enum Switcher {
     private static var interruptedPickers: Set<Int32> = []
 
-    struct Result {
-        var ok: Bool
-        var path: String
-        var error: String?
-
-        static let superseded = Result(ok: false, path: "superseded", error: "superseded")
+    enum Result {
+        case applied(path: String)
+        case interrupted
+        case failed(String)
     }
 
     /// Ctrl+Shift+M opens the picker on Astra; Down N to the dial index; Return.
@@ -20,7 +18,7 @@ enum Switcher {
         pulse: (() -> Bool)? = nil
     ) -> Result {
         guard let focus = FocusOperation(preferred: preferredBundleID) else {
-            return Result(ok: false, path: "deferred", error: "ChatGPT is not focused")
+            return .failed("ChatGPT is not focused")
         }
         let upstream = pulse
         let pulse: () -> Bool = {
@@ -28,10 +26,10 @@ enum Switcher {
             return !focus.isCurrent || superseded
         }
         guard let index = Catalog.modelIndex(raw), let name = Catalog.modelName(raw) else {
-            return Result(ok: false, path: "none", error: "unknown model \(raw)")
+            return .failed("unknown model \(raw)")
         }
-        if pulse() == true {
-            return .superseded
+        if pulse() {
+            return .interrupted
         }
 
         fputs(
@@ -41,47 +39,47 @@ enum Switcher {
         // Only dismiss a picker this helper may have left open in this process.
         if interruptedPickers.contains(focus.pid) {
             guard Keys.key(Keys.escape, pulse: pulse), Keys.wait(0.1, pulse: pulse) else {
-                return .superseded
+                return .interrupted
             }
             interruptedPickers.remove(focus.pid)
         }
         interruptedPickers.insert(focus.pid)
         guard Keys.controlShift(Keys.m, pulse: pulse) else {
-            return pulse() == true
-                ? .superseded
-                : Result(ok: false, path: "shortcut", error: "could not post Ctrl+Shift+M")
+            return pulse()
+                ? .interrupted
+                : .failed("could not post Ctrl+Shift+M")
         }
         guard Keys.wait(0.45, pulse: pulse) else {
-            return .superseded
+            return .interrupted
         }
         guard DeskFront.isForeground(preferred: preferredBundleID) else {
-            return Result(ok: false, path: "deferred", error: "ChatGPT is not focused")
+            return .failed("ChatGPT is not focused")
         }
 
         for _ in 0..<index {
             guard Keys.key(Keys.down, pulse: pulse) else {
-                return pulse() == true
-                    ? .superseded
-                    : Result(ok: false, path: "picker", error: "could not move to \(name)")
+                return pulse()
+                    ? .interrupted
+                    : .failed("could not move to \(name)")
             }
             guard Keys.wait(0.25, pulse: pulse) else {
-                return .superseded
+                return .interrupted
             }
             guard DeskFront.isForeground(preferred: preferredBundleID) else {
-                return Result(ok: false, path: "deferred", error: "ChatGPT is not focused")
+                return .failed("ChatGPT is not focused")
             }
         }
 
         guard Keys.key(Keys.return, pulse: pulse) else {
-            return pulse() == true
-                ? .superseded
-                : Result(ok: false, path: "picker", error: "could not confirm \(name)")
+            return pulse()
+                ? .interrupted
+                : .failed("could not confirm \(name)")
         }
         interruptedPickers.remove(focus.pid)
         guard Keys.wait(0.15, pulse: pulse) else {
-            return .superseded
+            return .interrupted
         }
-        return Result(ok: true, path: "Ctrl+Shift+M Down \(index) \(name)", error: nil)
+        return .applied(path: "Ctrl+Shift+M Down \(index) \(name)")
     }
 
     /// Always absolute: clamp to Light, then climb. Avoids relative desync when
@@ -92,7 +90,7 @@ enum Switcher {
         pulse: (() -> Bool)? = nil
     ) -> Result {
         guard let focus = FocusOperation(preferred: preferredBundleID) else {
-            return Result(ok: false, path: "deferred", error: "ChatGPT is not focused")
+            return .failed("ChatGPT is not focused")
         }
         let upstream = pulse
         let pulse: () -> Bool = {
@@ -100,34 +98,34 @@ enum Switcher {
             return !focus.isCurrent || superseded
         }
         guard let target = Catalog.thinkingIndex(raw), let name = Catalog.thinkingName(raw) else {
-            return Result(ok: false, path: "none", error: "unknown thinking \(raw)")
+            return .failed("unknown thinking \(raw)")
         }
-        if pulse() == true {
-            return .superseded
+        if pulse() {
+            return .interrupted
         }
 
         fputs(
             "chatgpt-bridge: reasoning absolute set via Ctrl+Shift+, then up to \(name)\n",
             stderr
         )
-        // 3× decrease covers Extra High → Light.
-        guard bump(delta: -3, pulse: pulse) else {
-            return pulse() == true
-                ? .superseded
-                : Result(ok: false, path: "shortcut", error: "could not clamp reasoning to Light")
+        // Clamp from the highest supported level before climbing.
+        guard bump(delta: -(Catalog.thinking.count - 1), pulse: pulse) else {
+            return pulse()
+                ? .interrupted
+                : .failed("could not clamp reasoning to Light")
         }
         guard bump(delta: target, pulse: pulse) else {
-            return pulse() == true
-                ? .superseded
-                : Result(ok: false, path: "shortcut", error: "could not set reasoning to \(name)")
+            return pulse()
+                ? .interrupted
+                : .failed("could not set reasoning to \(name)")
         }
         guard Keys.wait(0.1, pulse: pulse) else {
-            return .superseded
+            return .interrupted
         }
         guard DeskFront.isForeground(preferred: preferredBundleID) else {
-            return Result(ok: false, path: "deferred", error: "ChatGPT is not focused")
+            return .failed("ChatGPT is not focused")
         }
-        return Result(ok: true, path: "Ctrl+Shift+,/. absolute \(name)", error: nil)
+        return .applied(path: "Ctrl+Shift+,/. absolute \(name)")
     }
 
     private static func bump(delta: Int, pulse: (() -> Bool)?) -> Bool {

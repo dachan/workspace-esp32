@@ -4,20 +4,18 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "catalog.h"
 #include "driver/usb_serial_jtag.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "hal/usb_serial_jtag_ll.h"
+#include "serial_sync.h"
 
 static const char *TAG = "serial_model";
 
-#define SERIAL_LINE_MAX 192
-
 static char s_line[SERIAL_LINE_MAX];
 static size_t s_len;
-static char s_thinking_override[MODEL_PARSE_MAX];
-static int s_has_override;
+static bool s_discard_line;
 
 esp_err_t serial_model_init(void)
 {
@@ -31,19 +29,9 @@ esp_err_t serial_model_init(void)
         return err;
     }
     s_len = 0;
-    s_has_override = 0;
-    s_thinking_override[0] = '\0';
-    ESP_LOGI(TAG, "USB Serial/JTAG ready for MODEL/THINKING RX and SET TX @ 115200");
+    s_discard_line = false;
+    ESP_LOGI(TAG, "USB Serial/JTAG ready for SYNC/STATE/ACK and legacy display updates");
     return ESP_OK;
-}
-
-static void apply_override(model_fields_t *fields)
-{
-    if (s_has_override) {
-        strncpy(fields->thinking, s_thinking_override, sizeof(fields->thinking) - 1);
-        fields->thinking[sizeof(fields->thinking) - 1] = '\0';
-        fields->has_thinking = fields->thinking[0] != '\0';
-    }
 }
 
 static int handle_line(const char *line, model_fields_t *fields)
@@ -55,6 +43,10 @@ static int handle_line(const char *line, model_fields_t *fields)
         return 0;
     }
 
+    if (serial_sync_handle_line(line)) {
+        return 0;
+    }
+
     /* Outbound SET lines must not be treated as display updates. */
     if (strncmp(line, "SET ", 4) == 0 || strncmp(line, "SET\t", 4) == 0) {
         ESP_LOGD(TAG, "ignore SET line");
@@ -62,34 +54,38 @@ static int handle_line(const char *line, model_fields_t *fields)
     }
 
     if (strncmp(line, "MODEL ", 6) == 0 || strncmp(line, "MODEL\t", 6) == 0) {
-        s_has_override = 0;
-        s_thinking_override[0] = '\0';
-        model_parse_name(line + 6, fields);
-        ESP_LOGI(TAG, "MODEL raw='%s' -> model='%s' thinking='%s'",
-                 line + 6, fields->model, fields->has_thinking ? fields->thinking : "-");
-        return fields->has_model;
+        model_fields_t parsed;
+        model_parse_name(line + 6, &parsed);
+        int model = catalog_model_index(parsed.model);
+        if (model < 0) {
+            ESP_LOGW(TAG, "ignore unknown MODEL");
+            return 0;
+        }
+        snprintf(parsed.model, sizeof(parsed.model), "%s", catalog_models[model]);
+        if (parsed.has_thinking) {
+            int level = catalog_thinking_level(parsed.thinking);
+            snprintf(parsed.thinking, sizeof(parsed.thinking), "%s", catalog_thinking_name(level));
+        }
+        *fields = parsed;
+        return 1;
     }
 
     if (strncmp(line, "THINKING ", 9) == 0 || strncmp(line, "THINKING\t", 9) == 0) {
-        const char *val = line + 9;
-        while (*val && isspace((unsigned char)*val)) {
-            val++;
+        const char *value = line + 9;
+        while (*value && isspace((unsigned char)*value)) value++;
+        char name[MODEL_PARSE_MAX];
+        size_t n = strlen(value);
+        while (n && isspace((unsigned char)value[n - 1])) n--;
+        if (n >= sizeof(name)) return 0;
+        memcpy(name, value, n);
+        name[n] = '\0';
+        int level = catalog_thinking_level(name);
+        if (!level) {
+            ESP_LOGW(TAG, "ignore unknown THINKING");
+            return 0;
         }
-        strncpy(s_thinking_override, val, sizeof(s_thinking_override) - 1);
-        s_thinking_override[sizeof(s_thinking_override) - 1] = '\0';
-        // trim trailing spaces
-        size_t n = strlen(s_thinking_override);
-        while (n > 0 && isspace((unsigned char)s_thinking_override[n - 1])) {
-            s_thinking_override[--n] = '\0';
-        }
-        s_has_override = s_thinking_override[0] != '\0';
-        if (fields->has_model) {
-            apply_override(fields);
-        } else {
-            memset(fields, 0, sizeof(*fields));
-            apply_override(fields);
-        }
-        ESP_LOGI(TAG, "THINKING override='%s'", s_thinking_override);
+        snprintf(fields->thinking, sizeof(fields->thinking), "%s", catalog_thinking_name(level));
+        fields->has_thinking = 1;
         return 1;
     }
 
@@ -102,7 +98,8 @@ int serial_model_poll(model_fields_t *fields)
     uint8_t chunk[64];
     int updated = 0;
 
-    while (1) {
+    // Leave time for encoder polling even under continuous serial traffic.
+    for (int reads = 0; reads < 4; reads++) {
         int n = usb_serial_jtag_read_bytes(chunk, sizeof(chunk), 0);
         if (n <= 0) {
             break;
@@ -114,92 +111,43 @@ int serial_model_poll(model_fields_t *fields)
             }
             if (c == '\n') {
                 s_line[s_len] = '\0';
-                if (handle_line(s_line, fields)) {
+                if (!s_discard_line && handle_line(s_line, fields)) {
                     updated = 1;
                 }
                 s_len = 0;
+                s_discard_line = false;
+                continue;
+            }
+            if (s_discard_line) {
+                continue;
+            }
+            if (c == '\0') {
+                s_discard_line = true;
                 continue;
             }
             if (s_len + 1 < sizeof(s_line)) {
                 s_line[s_len++] = c;
             } else {
-                // overflow — reset
-                s_len = 0;
+                s_discard_line = true;
+                ESP_LOGW(TAG, "discard oversized serial line");
             }
         }
     }
     return updated;
 }
 
-/* USB Serial/JTAG can accept bytes into soft/HW buffers and still not push
- * them to the Mac until the TX FIFO is flushed. Clearing pending on a soft
- * "success" without a flush drops SET lines while the panel already updated. */
-static int write_all(const void *data, size_t n, TickType_t timeout)
+bool serial_model_write_line(const char *line)
 {
-    const uint8_t *p = (const uint8_t *)data;
-    size_t left = n;
-    TickType_t deadline = xTaskGetTickCount() + timeout;
-    while (left > 0) {
-        TickType_t now = xTaskGetTickCount();
-        TickType_t slice = (deadline > now) ? (deadline - now) : 1;
-        int wrote = usb_serial_jtag_write_bytes(p, left, slice);
-        if (wrote <= 0) {
-            return 0;
-        }
-        p += (size_t)wrote;
-        left -= (size_t)wrote;
+    if (!line || !line[0]) {
+        return false;
     }
-    usb_serial_jtag_ll_txfifo_flush();
-    return 1;
-}
-
-static int write_line(const char *line)
-{
-    if (line == NULL || line[0] == '\0') {
-        return 0;
+    char frame[SERIAL_LINE_MAX + 2];
+    // Leading newline restores framing after a disconnect mid-transfer.
+    int n = snprintf(frame, sizeof(frame), "\n%s\n", line);
+    if (n <= 0 || n >= (int)sizeof(frame)) {
+        return false;
     }
-    size_t n = strlen(line);
-    if (!write_all(line, n, pdMS_TO_TICKS(100))) {
-        return 0;
-    }
-    const char nl = '\n';
-    return write_all(&nl, 1, pdMS_TO_TICKS(40));
-}
-
-int serial_model_send_set_model(const char *name)
-{
-    if (name == NULL || name[0] == '\0') {
-        return 0;
-    }
-    char buf[SERIAL_LINE_MAX];
-    int n = snprintf(buf, sizeof(buf), "SET MODEL %s", name);
-    if (n <= 0 || n >= (int)sizeof(buf)) {
-        return 0;
-    }
-    int ok = write_line(buf);
-    if (ok) {
-        ESP_LOGI(TAG, "TX %s", buf);
-    } else {
-        ESP_LOGW(TAG, "TX failed %s", buf);
-    }
-    return ok;
-}
-
-int serial_model_send_set_thinking(const char *level)
-{
-    if (level == NULL || level[0] == '\0') {
-        return 0;
-    }
-    char buf[SERIAL_LINE_MAX];
-    int n = snprintf(buf, sizeof(buf), "SET THINKING %s", level);
-    if (n <= 0 || n >= (int)sizeof(buf)) {
-        return 0;
-    }
-    int ok = write_line(buf);
-    if (ok) {
-        ESP_LOGI(TAG, "TX %s", buf);
-    } else {
-        ESP_LOGW(TAG, "TX failed %s", buf);
-    }
-    return ok;
+    // IDF enqueues this ring-buffer item in full or returns zero. Its ISR owns
+    // FIFO flushing. Never block input sampling while a host is disconnected.
+    return usb_serial_jtag_write_bytes(frame, n, 0) == n;
 }

@@ -2,33 +2,53 @@
 
 ESP32-S3 firmware that shows the ChatGPT **model** and **thinking** level
 on the desk-mounted 3.5" ST7796U panel. Rotary encoders change both locally
-(display + NVS). After **0.4 s** with no further detents the firmware sends
-`SET MODEL` / `SET THINKING` to `mac-chatgpt-bridge/`. The Mac helper
+(display + NVS). After **0.4 s** with no further changes the firmware sends
+the latest state to `mac-chatgpt-bridge/`. The Mac helper
 applies those only while ChatGPT is already the foreground app.
 
 ## Protocol (USB serial, 115200)
 
-Mac → ESP (optional display updates):
+The current helper sends `SYNC` on connection and every two seconds. Firmware
+responds with its latest model and thinking after any active 0.4 s settle window:
 
 ```text
-MODEL <name>
-THINKING <level>
+Mac → ESP: SYNC
+ESP → Mac: STATE <16-hex revision> MODEL <name>
+ESP → Mac: STATE <16-hex revision> THINKING <level>
+Mac → ESP: ACK <16-hex revision> MODEL
+Mac → ESP: ACK <16-hex revision> THINKING
 ```
 
-ESP → Mac (after the 0.4 s encoder settle):
+Each changed field gets a new revision, including after firmware restart.
+Unacknowledged state retries every 0.5 s; a full USB transmit buffer retries after
+0.2 s without blocking encoder polling. The helper acknowledges validated state
+when it is queued and ignores repeated revisions for application purposes.
+Acknowledgement does **not** confirm the app's selected value: keyboard posting
+has no UI readback. Periodic SYNC also recovers a device reset without requiring
+the USB device path to disappear.
 
-```text
-SET MODEL <name>
-SET THINKING <level>
-```
+Before the first `SYNC`, firmware uses the legacy `SET MODEL <name>` and
+`SET THINKING <level>` lines. The current helper accepts these from older firmware,
+but recovery/acknowledgements require both updated components. An old helper used
+after a new helper negotiated SYNC requires a device restart to restore legacy TX.
 
-On each encoder change the firmware saves model/thinking to NVS
-(`cgpt`/`model`,`think`) and reloads that cache on boot.
+Optional legacy display updates remain accepted as `MODEL <name>` and
+`THINKING <level>`. MODEL can include a thinking suffix. Unsupported values are
+ignored; local edits suppress these updates for 8.4 s (settle plus the original
+8 s hold), while ACK and SYNC remain active. The current helper does not send
+legacy display updates.
+
+Frames are newline-delimited, bounded to 191 content bytes, and oversized frames
+are discarded through the next newline. Transmissions include a leading newline
+to recover framing after a disconnect mid-transfer.
+
+Changed values are saved once per input pass to NVS (`cgpt`/`model`,`think`)
+and reloaded on boot. Unchanged values do not trigger persistence or display work.
 
 Dial models, in order: GPT-6 Astra, GPT-5.6 Sol, GPT-5.6 Terra,
-GPT-5.6 Luna, GPT-5.5.
-
-Thinking: Light, Medium, High, Extra High.
+GPT-5.6 Luna, GPT-5.5. Thinking: Light, Medium, High, Extra High.
+Canonical names and thinking aliases live in firmware `main/catalog.c` and Swift
+`Sources/Catalog.swift`; keep these small tables aligned when adding entries.
 
 ## Hardware
 
@@ -59,33 +79,38 @@ USB: native USB Serial/JTAG (`/dev/cu.usbmodem*` on macOS). Flash and
 ## Desk control (encoders → ChatGPT)
 
 Firmware `v 0.35+` updates the panel immediately, then sends SET after a
-0.4 s rotary debounce. The Mac helper uses `NSWorkspace.frontmostApplication`
+0.4 s settle window. Completed encoder steps drain after the 160 ms emit gap
+even when no further edge arrives. The Mac helper uses `NSWorkspace.frontmostApplication`
 (no AX tree walk). While ChatGPT is focused it opens the model picker with
 Control-Shift-M and steps reasoning with Control-Shift-, / Control-Shift-.
 When ChatGPT is not focused, encoder changes stay on the ESP32 display/NVS
 and the bridge queues the latest values without activating ChatGPT.
 
 ```bash
-chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
+chatgpt-bridge --watch --port "$ESP_PORT"
 ```
 
 Requires Accessibility for the launching app (key posting only).
 
 ## Build / flash (Mac only)
 
+Activate the local ESP-IDF environment and set `ESP_PORT` to the verified device.
+From this project directory:
+
 ```sh
-cd ~/Development/workspace-esp32
-git pull
-source ~/esp/esp-idf-v6.0.2/export.sh
-cd chatgpt-model-display
-idf.py set-target esp32s3
-idf.py build
-idf.py -p /dev/cu.usbmodem21201 flash monitor
+idf.py -B build build
+idf.py -B build -p "$ESP_PORT" flash monitor
 ```
 
-Verify the port with `ls /dev/cu.usb*` or
-`swift run --package-path ./mac-chatgpt-bridge chatgpt-bridge --list-ports`
-before flashing (paths can change).
+Verify the intended board and port before flashing. Use `--list-ports` on the
+helper to list candidates. A successful build does not update the running board.
+
+`VERSION` is the authoritative firmware version; update it intentionally for a
+release. Builds generate `build_number.h` in their own build directory, then
+archive the successfully generated binary under `<build-directory>/dist/`.
+`CURRENT` is replaced only after the binary copies succeed. Source files and
+version numbers are never modified by the build. Generated headers and archives
+are not tracked in Git. Alternate `idf.py -B ...` directories are supported.
 
 Two encoders on the **right** header (see repo `s3-n16r8.jpeg`): **thinking**
 (GPIO41/40/39) and **model** (GPIO1/2/42). Rotate or click to step; the
@@ -94,8 +119,23 @@ panel updates immediately and SET waits 0.4 s after the last detent.
 ## Bridge watch
 
 ```sh
-cd ~/Development/workspace-esp32/chatgpt-model-display/mac-chatgpt-bridge
+cd mac-chatgpt-bridge
 swift build -c release
 "$(swift build -c release --show-bin-path)/chatgpt-bridge" \
-  --watch --port /dev/cu.usbmodem21201
+  --watch --port "$ESP_PORT"
 ```
+
+## Code organization
+
+- `main/main.c`: input/state coordination and save/paint retries.
+- `main/ui.c`: drawing; `display.c`: SPI and DMA ownership; `canvas.c`/`font.c`: pixels/text.
+- `main/encoder.c`: existing GPIO/PCNT decoding and rate-limited step emission.
+- `main/serial_model.c`: bounded framing and legacy display commands.
+- `main/serial_sync.c`: state revisions, settling, snapshots, and ACK retries.
+- `main/model_nvs.c`: persistence; `model_parse.c`: legacy combined-name parsing.
+
+Display rotation, the internal-RAM 180-degree band blit, and encoder pin/direction
+configuration are unchanged. A DMA completion timeout retains buffer ownership;
+the main loop retries rendering after 0.5 s instead of overwriting in-flight data.
+The thinking encoder remains polled, so long display operations can still miss
+physical edges; the pending-step fix does not replace the existing decoder.

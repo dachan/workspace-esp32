@@ -30,23 +30,18 @@ enum Catalog {
         return aliases[name.lowercased()]
     }
 
+    // Keep these small protocol tables aligned with firmware catalog.c.
+    static let thinkingAliases = [
+        "minimal": 0, "instant": 0, "fast": 0, "low": 0,
+        "standard": 1, "auto": 1,
+        "advanced": 2, "thinking": 2,
+        "xhigh": 3, "max": 3, "ultra": 3, "heavy": 3,
+    ]
+
     static func thinkingIndex(_ raw: String) -> Int? {
-        let buf = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if buf.contains("extra high") || buf.contains("xhigh") || buf == "max"
-            || buf == "ultra" || buf.contains("heavy") {
-            return 3
-        }
-        if buf.contains("high") || buf == "advanced" || buf == "thinking" {
-            return 2
-        }
-        if buf.contains("medium") || buf.contains("standard") || buf == "auto" {
-            return 1
-        }
-        if buf.contains("light") || buf == "minimal" || buf.contains("instant")
-            || buf.contains("fast") || buf == "low" {
-            return 0
-        }
-        return thinking.firstIndex(where: { $0.caseInsensitiveCompare(raw) == .orderedSame })
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return thinking.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame })
+            ?? thinkingAliases[name.lowercased()]
     }
 
     static func modelName(_ raw: String) -> String? {
