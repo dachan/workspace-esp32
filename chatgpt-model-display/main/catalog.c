@@ -34,9 +34,9 @@ static int table_count(const char *const *names, int n, const char *name)
     return -1;
 }
 
-static const char *const *active_models(int *count)
+static const char *const *models_table(bool cursor, int *count)
 {
-    if (front_title_is_cursor()) {
+    if (cursor) {
         *count = (int)(sizeof(cursor_models) / sizeof(cursor_models[0]));
         return cursor_models;
     }
@@ -44,10 +44,16 @@ static const char *const *active_models(int *count)
     return chatgpt_models;
 }
 
-static const char *const *active_thinking(const char *model, int *count)
+static const char *const *active_models(int *count)
 {
-    if (front_title_is_cursor()) {
-        int index = table_count(cursor_models, (int)(sizeof(cursor_models) / sizeof(cursor_models[0])), model);
+    return models_table(front_title_is_cursor(), count);
+}
+
+static const char *const *thinking_table(bool cursor, const char *model, int *count)
+{
+    if (cursor) {
+        int n = (int)(sizeof(cursor_models) / sizeof(cursor_models[0]));
+        int index = table_count(cursor_models, n, model);
         if (index == 0 || index == 2 || index < 0) {
             *count = 0;
             return cursor_thinking;
@@ -61,6 +67,11 @@ static const char *const *active_thinking(const char *model, int *count)
     }
     *count = (int)(sizeof(chatgpt_thinking) / sizeof(chatgpt_thinking[0]));
     return chatgpt_thinking;
+}
+
+static const char *const *active_thinking(const char *model, int *count)
+{
+    return thinking_table(front_title_is_cursor(), model, count);
 }
 
 int catalog_model_count(void)
@@ -82,8 +93,13 @@ const char *catalog_model_at(int index)
 
 int catalog_model_index(const char *name)
 {
+    return catalog_model_index_in(front_title_is_cursor(), name);
+}
+
+int catalog_model_index_in(bool cursor, const char *name)
+{
     int count;
-    const char *const *names = active_models(&count);
+    const char *const *names = models_table(cursor, &count);
     return table_count(names, count, name);
 }
 
@@ -99,8 +115,13 @@ bool catalog_model_known(const char *name)
 
 int catalog_thinking_count(const char *model)
 {
+    return catalog_thinking_count_in(front_title_is_cursor(), model);
+}
+
+int catalog_thinking_count_in(bool cursor, const char *model)
+{
     int count;
-    active_thinking(model, &count);
+    thinking_table(cursor, model, &count);
     return count;
 }
 

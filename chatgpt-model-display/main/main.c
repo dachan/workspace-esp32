@@ -60,8 +60,10 @@ static bool apply_model_delta(model_fields_t *fields, int delta)
     if (fields->has_model && strcmp(fields->model, name) == 0) {
         return false;
     }
+    model_nvs_remember_effort(fields);
     snprintf(fields->model, sizeof(fields->model), "%s", name);
     fields->has_model = 1;
+    model_nvs_restore_effort(fields);
     if (!fields->has_thinking) {
         snprintf(fields->thinking, sizeof(fields->thinking), "%s", "Medium");
         fields->has_thinking = 1;
@@ -154,6 +156,7 @@ void app_main(void)
         }
         if (local_changed) {
             adapt_fields_for_front(&fields);
+            model_nvs_remember_effort(&fields);
             hold_rx = true;
             local_changed_at = now;
             serial_sync_update(&fields, true);
@@ -168,11 +171,15 @@ void app_main(void)
         if (serial_model_poll(&incoming) && !hold_rx) {
             fields = incoming;
             adapt_fields_for_front(&fields);
+            model_nvs_remember_effort(&fields);
             serial_sync_update(&fields, false);
         }
         serial_sync_poll();
         if (front_title_is_cursor() != was_cursor) {
+            model_nvs_remember_effort_for(&fields, was_cursor);
+            model_nvs_restore_effort_for(&fields, front_title_is_cursor());
             adapt_fields_for_front(&fields);
+            model_nvs_remember_effort(&fields);
             was_cursor = front_title_is_cursor();
             serial_sync_update(&fields, true);
         }

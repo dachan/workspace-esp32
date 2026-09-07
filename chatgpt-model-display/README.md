@@ -53,8 +53,11 @@ Frames are newline-delimited, bounded to 191 content bytes, and oversized frames
 are discarded through the next newline. Transmissions include a leading newline
 to recover framing after a disconnect mid-transfer.
 
-Changed values are saved once per input pass to NVS (`cgpt`/`model`,`think`)
-and reloaded on boot. Unchanged values do not trigger persistence or display work.
+Changed values are saved once per input pass to NVS (`cgpt`/`model`,`think`
+for the last displayed pair, plus `cgpt`/`effort` for each app's last thinking
+level per model) and reloaded on boot. Changing models restores that model's
+saved effort for the focused app; a first visit keeps the current level and
+clamps it. Unchanged values do not trigger persistence or display work.
 
 Dial models follow the focused app. ChatGPT: GPT-6 Astra, GPT-5.6 Sol,
 GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5; thinking Light, Medium, High,
@@ -163,7 +166,8 @@ swift build -c release
 - `main/encoder.c`: existing GPIO/PCNT decoding and rate-limited step emission.
 - `main/serial_model.c`: bounded framing and legacy display commands.
 - `main/serial_sync.c`: state revisions, settling, snapshots, and ACK retries.
-- `main/model_nvs.c`: persistence; `model_parse.c`: legacy combined-name parsing.
+- `main/model_nvs.c`: persistence of the current pair and per-app per-model effort;
+  `model_parse.c`: legacy combined-name parsing.
 
 Display rotation, the internal-RAM 180-degree band blit, and encoder pin/direction
 configuration are unchanged. A DMA completion timeout retains buffer ownership;

@@ -52,7 +52,8 @@ when both changed — a thinking-only change skips model selection).
 The helper only runs on the Mac.
 On-device UI lives in `chatgpt-model-display/` (3.5\" ST7796 480x320). Edit
 and flash on the Mac; pull Hetzner codex after push. Firmware keeps the last
-model/thinking in NVS for boot.
+model/thinking in NVS for boot, and the last thinking level per app+model so
+the dial restores it when switching models.
 
 ### chatgpt-model-display locked view mapping
 
