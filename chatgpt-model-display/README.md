@@ -105,7 +105,7 @@ two detents are one level and a quick turn can run Light↔Extra High. Model
 steps still use a 160 ms emit gap. The Mac helper uses `NSWorkspace.frontmostApplication`
 (no AX tree walk). While ChatGPT is focused it opens the model picker with
 Control-Shift-M and steps reasoning with Control-Shift-, / Control-Shift-.
-While Cursor is focused it opens the model list with Command-backslash (first Down
+While Cursor is focused it opens the model list with Command-/ (first Down
 is Auto), then reopens it for Effort with Left, Up, Right, then Down-only to
 the level; Return selects. The bridge
 settles 1 s after the last received change, applies model and effort in one
@@ -178,7 +178,7 @@ physical edges; the pending-step fix does not replace the existing decoder.
 - Claude Opus 5, Claude Fable 5: Low, Medium, High, Extra High, Max.
 - GPT-5.6 Sol, Terra, Luna: None, Low, Medium, High, Extra High, Max.
 
-Command-backslash → Left → Up → Right highlights the first supported effort.
+Command-/ → Left → Up → Right highlights the first supported effort.
 Down moves by the target's zero-based index; Return selects once. Model changes
 reapply effort, even when the requested level is unchanged. Unsupported endpoints
 clamp to the model's range. The bridge needs a known model for effort-only

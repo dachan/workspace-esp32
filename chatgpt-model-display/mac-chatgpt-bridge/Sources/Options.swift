@@ -96,7 +96,7 @@ func usage() -> String {
     Apply ESP32 encoder SET MODEL / SET THINKING with keyboard
     shortcuts, only while ChatGPT or Cursor is already the foreground app.
     ChatGPT: Ctrl+Shift+M, Down to dial index; thinking Ctrl+Shift+, / .
-    Cursor: Command-backslash model first, then Command-backslash again for Effort.
+    Cursor: Command-/ model first, then Command-/ again for Effort.
 
     Options:
       --front             Print whether ChatGPT or Cursor is foreground and exit

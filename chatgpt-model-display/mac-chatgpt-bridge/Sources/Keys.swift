@@ -6,7 +6,7 @@ enum Keys {
     static let comma: UInt16 = 0x2B
     static let period: UInt16 = 0x2F
     static let m: UInt16 = 0x2E
-    static let backslash: UInt16 = 0x2A
+    static let slash: UInt16 = 0x2C
     static let escape: UInt16 = 0x35
     static let `return`: UInt16 = 0x24
     static let down: UInt16 = 0x7D
@@ -24,9 +24,9 @@ enum Keys {
         Reasoning: absolute Light clamp then Control-Shift-. up to target.
         Bind those shortcuts in ChatGPT if they are Unassigned.
       Cursor
-        Command-backslash opens the model list on Search. First Down is Auto,
+        Command-/ opens the model list on Search. First Down is Auto,
         then the enabled picker order. Return selects.
-        Effort: Command-backslash, Left, Up, Right directly into Reasoning,
+        Effort: Command-/, Left, Up, Right directly into Reasoning,
         then Down to the level and Return once. Chat/agent input must be focused.
         Fast/Slow is not set from the dial.
       Serial is drained during key delays so a newer SET supersedes in-flight apply.

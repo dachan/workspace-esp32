@@ -168,7 +168,7 @@ enum Switcher {
         )
     }
 
-    /// Command-backslash focuses Search; first Down is Auto, then picker order.
+    /// Command-/ focuses Search; first Down is Auto, then picker order.
     private static func cursorModel(
         index: Int,
         name: String,
@@ -177,7 +177,7 @@ enum Switcher {
         pulse: @escaping () -> Bool
     ) -> Result {
         fputs(
-            "chatgpt-bridge: Cursor model via Command-backslash, Down \(index + 1) to \(name)\n",
+            "chatgpt-bridge: Cursor model via Command-/, Down \(index + 1) to \(name)\n",
             stderr
         )
         if let stopped = cursorSelectModel(
@@ -185,7 +185,7 @@ enum Switcher {
         ) {
             return stopped
         }
-        return .applied(path: "Command-backslash Down \(index + 1) \(name)")
+        return .applied(path: "Command-/ Down \(index + 1) \(name)")
     }
 
     /// Always absolute: clamp to Light, then climb. Avoids relative desync when
@@ -257,7 +257,7 @@ enum Switcher {
         pulse: @escaping () -> Bool
     ) -> Result {
         fputs(
-            "chatgpt-bridge: Cursor effort via Command-backslash Left Up Right, Effort Down \(target) to \(name)\n",
+            "chatgpt-bridge: Cursor effort via Command-/ Left Up Right, Effort Down \(target) to \(name)\n",
             stderr
         )
         if let stopped = openCursorPopover(focus: focus, preferred: preferred, pulse: pulse) {
@@ -283,7 +283,7 @@ enum Switcher {
         }
         return pickCursorSubmenuIndex(
             target, name: name, focus: focus, preferred: preferred, pulse: pulse,
-            path: "Command-backslash Left Up Right Reasoning \(name)"
+            path: "Command-/ Left Up Right Reasoning \(name)"
         )
     }
 
@@ -303,8 +303,8 @@ enum Switcher {
             return stopped
         }
         interruptedPickers.insert(focus.pid)
-        guard Keys.command(Keys.backslash, pulse: pulse) else {
-            return pulse() ? .interrupted : .failed("could not post Command-backslash")
+        guard Keys.command(Keys.slash, pulse: pulse) else {
+            return pulse() ? .interrupted : .failed("could not post Command-/")
         }
         guard Keys.wait(0.45, pulse: pulse) else {
             return .interrupted

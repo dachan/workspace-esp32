@@ -23,11 +23,11 @@ otherwise it queues the latest model and thinking state from the ESP32.
      to the ESP dial index, Return.
    - ChatGPT / Codex reasoning: absolute Light clamp (Ctrl+Shift+,) then
      climb with Ctrl+Shift-.
-   - Cursor model: Command-backslash opens Search; first Down is Auto, then the
+   - Cursor model: Command-/ opens Search; first Down is Auto, then the
      enabled picker order; Return selects. A ChatGPT-only name still on
      the panel (e.g. GPT-6 Astra) is skipped, not retried, so effort can
      still apply.
-   - Cursor effort: Command-backslash (reopened after selecting a model when
+   - Cursor effort: Command-/ (reopened after selecting a model when
      both changed), then Left, Up, Right directly into Reasoning, Down to
      the level, and Return once. An effort-only change skips model selection.
 5. If neither ChatGPT nor Cursor is focused: leave the ESP32 display/NVS
@@ -64,7 +64,7 @@ Reasoning: Light, Medium, High, Extra High.
 Cursor: Auto, Cursor Grok 4.6, Composer 2.5, Claude Opus 5, GPT-5.6 Sol,
 Claude Fable 5, GPT-5.6 Terra, GPT-5.6 Luna. Effort depends on the model (see below).
 
-Bind ChatGPT's three shortcuts if they are Unassigned. Cursor uses Command-backslash
+Bind ChatGPT's three shortcuts if they are Unassigned. Cursor uses Command-/
 to open the model list (first Down is Auto). Firmware waits 0.4 s after the
 last encoder detent before sending a SET line.
 
@@ -129,7 +129,7 @@ the previous helper and relaunch it from the same Accessibility-authorized app.
 - Claude Opus 5, Claude Fable 5: Low, Medium, High, Extra High, Max.
 - GPT-5.6 Sol, Terra, Luna: None, Low, Medium, High, Extra High, Max.
 
-Command-backslash → Left → Up → Right highlights the first supported effort.
+Command-/ → Left → Up → Right highlights the first supported effort.
 Down moves by the target's zero-based index; Return selects once. Model changes
 reapply effort, even when the requested level is unchanged. Unsupported endpoints
 clamp to the model's range. The bridge needs a known model for effort-only

@@ -39,7 +39,7 @@ and never walks the AX tree. Encoder `SET MODEL` / `SET THINKING` lines are
 applied with that app's keyboard shortcuts only while it is already focused;
 otherwise they stay queued. ChatGPT flush: Control-Shift-M, Down to the ESP
 dial index, Return; then absolute reasoning (Ctrl+Shift+, clamp to Light,
-Ctrl+Shift-. up to target). Cursor flush: Command-backslash (first Down is Auto),
+Ctrl+Shift-. up to target). Cursor flush: Command-/ (first Down is Auto),
 or Left, Up, Right directly into Reasoning after reopening (Right highlights
 the first supported level; Down to the target; Return selects once). A
 ChatGPT-only model name still queued (e.g. GPT-6 Astra) is skipped while
@@ -136,7 +136,7 @@ Firmware `v 0.35+` updates the panel/NVS immediately, then sends
 The Mac helper applies those with keyboard shortcuts only while ChatGPT or
 Cursor is already the foreground app. ChatGPT: Control-Shift-M, Down to the
 dial index, Return; absolute Light clamp then Control-Shift-. for thinking.
-Cursor: Command-backslash (first Down is Auto); effort is Left, Up, Right, then Down to the level.
+Cursor: Command-/ (first Down is Auto); effort is Left, Up, Right, then Down to the level.
 A ChatGPT-only queued model name is skipped while Cursor is focused. The
 bridge settles 1 s after the last received change and applies only fields
 that differ from its last apply to that app; effort-only changes skip model selection.
@@ -158,7 +158,7 @@ If neither ChatGPT nor Cursor is focused, the bridge must not activate them.
 Encoder changes remain on the ESP32 display/NVS and are queued until one of
 those apps returns to the foreground. ChatGPT applies via Control-Shift-M
 (Down from Astra) and absolute Ctrl+Shift+, / Ctrl+Shift-.; Cursor applies
-via Command-backslash (first Down is Auto) and Left, Up, Right then Down to the level.
+via Command-/ (first Down is Auto) and Left, Up, Right then Down to the level.
 A bottom-left CANCEL button appears while that queue is waiting; tap it
 to send `CANCEL`, drop the Mac apply queue, and restore panel/NVS to the
 last known settings. A five-second press-and-hold starts a five-point
