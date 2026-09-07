@@ -2,16 +2,23 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "calibrate.h"
 #include "catalog.h"
+#include "clock.h"
 #include "display.h"
 #include "encoder.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "model_nvs.h"
+#include "queue_status.h"
 #include "serial_model.h"
 #include "serial_sync.h"
+#include "touch.h"
 #include "ui.h"
+
+#define CALIBRATE_HOLD_MS 5000
+#define KNOWN_COMMIT_MS 2000
 
 static const char *TAG = "chatgpt_model";
 
@@ -77,6 +84,10 @@ void app_main(void)
     ESP_ERROR_CHECK(display_set_backlight(80));
     ESP_ERROR_CHECK(serial_model_init());
     ESP_ERROR_CHECK(encoder_init());
+    if (touch_init() != ESP_OK) {
+        ESP_LOGW(TAG, "touch unavailable; CANCEL still works via encoder click");
+    }
+    ESP_ERROR_CHECK(calibrate_init());
 
     model_fields_t fields = {0};
     bool save_pending = false;
@@ -94,6 +105,10 @@ void app_main(void)
     }
     serial_sync_update(&fields, false);
 
+    model_fields_t known = fields;
+    bool known_dirty = false;
+    TickType_t known_dirty_at = 0;
+    bool hold_calibrated = false;
     bool paint_pending = true;
     bool hold_rx = false;
     TickType_t local_changed_at = 0;
@@ -109,17 +124,48 @@ void app_main(void)
         int model_delta = encoder_delta(ENCODER_MODEL);
         bool thinking_pressed = encoder_button_pressed(ENCODER_THINKING);
         bool model_pressed = encoder_button_pressed(ENCODER_MODEL);
-        bool local_changed = apply_thinking_delta(&fields, thinking_delta);
-        if (thinking_pressed) {
-            // Empty panel: the default Medium minus one selects Light.
-            local_changed |= apply_thinking_delta(&fields, fields.has_thinking ? 1 : -1);
-        }
-        local_changed |= apply_model_delta(&fields, model_delta);
-        if (model_pressed) {
-            local_changed |= apply_model_delta(&fields, 1);
-        }
+        touch_sample_t touch = {0};
+        touch_poll(&touch);
         TickType_t now = xTaskGetTickCount();
+        if (!touch.down) {
+            hold_calibrated = false;
+        }
+        if (touch.down && touch.held_ms >= CALIBRATE_HOLD_MS && !hold_calibrated) {
+            hold_calibrated = true;
+            calibrate_run();
+            touch_clear_state();
+            paint_pending = true;
+        }
+        bool local_changed = apply_thinking_delta(&fields, thinking_delta);
+        local_changed |= apply_model_delta(&fields, model_delta);
+        bool cancel = queue_status_visible()
+            && ((touch.released && touch.held_ms < CALIBRATE_HOLD_MS
+                 && ui_cancel_hit(touch.x, touch.y))
+                || thinking_pressed || model_pressed);
+        if (cancel) {
+            serial_model_write_line("CANCEL");
+            queue_status_hide();
+            fields = known;
+            known_dirty = false;
+            serial_sync_restore(&fields);
+            thinking_pressed = false;
+            model_pressed = false;
+            local_changed = false;
+        } else {
+            if (thinking_pressed) {
+                // Empty panel: the default Medium minus one selects Light.
+                local_changed |= apply_thinking_delta(&fields, fields.has_thinking ? 1 : -1);
+            }
+            if (model_pressed) {
+                local_changed |= apply_model_delta(&fields, 1);
+            }
+        }
         if (local_changed) {
+            if (!known_dirty) {
+                known = before;
+                known_dirty = true;
+                known_dirty_at = now;
+            }
             hold_rx = true;
             local_changed_at = now;
             serial_sync_update(&fields, true);
@@ -136,9 +182,19 @@ void app_main(void)
             serial_sync_update(&fields, false);
         }
         serial_sync_poll();
+        if (!queue_status_visible() && !known_dirty) {
+            known = fields;
+        } else if (!queue_status_visible() && known_dirty
+                   && (TickType_t)(now - known_dirty_at) >= pdMS_TO_TICKS(KNOWN_COMMIT_MS)) {
+            known = fields;
+            known_dirty = false;
+        }
 
         if (!same_fields(&before, &fields)) {
             save_pending = fields.has_model;
+            paint_pending = true;
+        }
+        if (clock_needs_paint() || queue_status_needs_paint()) {
             paint_pending = true;
         }
         now = xTaskGetTickCount();
@@ -147,7 +203,8 @@ void app_main(void)
             save_failed = model_nvs_save(&fields) != ESP_OK;
             save_pending = save_failed;
         }
-        if (paint_pending && (!paint_failed || (TickType_t)(now - last_paint_attempt) >= pdMS_TO_TICKS(500))) {
+        if (paint_pending && !encoder_hold_paint()
+            && (!paint_failed || (TickType_t)(now - last_paint_attempt) >= pdMS_TO_TICKS(500))) {
             last_paint_attempt = now;
             paint_failed = ui_render(&fields) != ESP_OK;
             paint_pending = paint_failed;

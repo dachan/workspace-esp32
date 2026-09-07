@@ -21,7 +21,8 @@ queues the latest model and thinking state from the ESP32.
      Ctrl+Shift-.
 5. If ChatGPT is not focused: leave the ESP32 display/NVS as the source
    of truth and apply the queued values when ChatGPT becomes frontmost.
-   The helper never activates ChatGPT. Cursor is never a target.
+   The helper never activates ChatGPT. Cursor is never a target. A
+   `CANCEL` line from the panel drops the apply queue.
 
 Shortcut sequences stay bound to the process that was focused when they began.
 Losing focus, including switching between ChatGPT and Codex, interrupts the

@@ -136,15 +136,20 @@ chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
 ```
 
 Requires Accessibility for the launching app (key posting). Foreground
-detection does not. Thinking uses a polled falling-CLK decode; the model knob
-uses PCNT hardware quadrature (a polled decode misreads it, because the display
-flush delays the poll past the CLK/DT phase difference and the dial parks on one
-end). Model clamps GPT-6 Astra through GPT-5.5 (no wrap);
-thinking clamps Light ↔ Extra High.
+detection does not. Thinking uses a polled falling-CLK decode and holds
+pulses until the knob pauses (two detents = one level; a quick turn can
+run Light↔Extra High). The model knob uses PCNT hardware quadrature (a
+polled decode misreads it, because the display flush delays the poll past
+the CLK/DT phase difference and the dial parks on one end). Model clamps
+GPT-6 Astra through GPT-5.5 (no wrap); thinking clamps Light ↔ Extra High.
 If ChatGPT is not focused, the bridge must not activate it. Encoder changes
 remain on the ESP32 display/NVS and are queued until ChatGPT returns to the
 foreground, when the latest model and thinking settings are applied via
-Control-Shift-M (Down from Astra) and absolute Ctrl+Shift+, / Ctrl+Shift-..
+Control-Shift-M (Down from Astra) and absolute Ctrl+Shift+, / Ctrl+Shift-.
+A bottom-left CANCEL button appears while that queue is waiting; tap it
+to send `CANCEL`, drop the Mac apply queue, and restore panel/NVS to the
+last known settings. A five-second press-and-hold starts a five-point
+touch calibration. Encoder click still cancels if the digitizer is missing.
 
 ## Build and flash
 

@@ -17,6 +17,9 @@ final class SerialSession {
     private var reconnectAt: TimeInterval = 0
     private var lastConnectionError: String?
     private var nextSyncAt: TimeInterval = 0
+    private var nextTimeAt: TimeInterval = 0
+    private var panelQueuedWanted: Bool?
+    private var panelQueuedSent: Bool?
     private var acknowledgements: [SettingKind: UInt64] = [:]
     private var outgoing: [UInt8] = []
     private var outgoingOffset = 0
@@ -42,6 +45,8 @@ final class SerialSession {
         }
         fd = opened
         nextSyncAt = 0
+        nextTimeAt = 0
+        panelQueuedSent = nil
         lastConnectionError = nil
         fputs("chatgpt-bridge: serial connected; requesting current dial state\n", stderr)
     }
@@ -112,6 +117,10 @@ final class SerialSession {
         }
     }
 
+    func setPanelQueued(_ queued: Bool) {
+        panelQueuedWanted = queued
+    }
+
     func flushWrites() {
         guard fd >= 0 else { return }
         for _ in 0..<4 {
@@ -120,10 +129,18 @@ final class SerialSession {
                 if let kind = SettingKind.allCases.first(where: { acknowledgements[$0] != nil }),
                    let revision = acknowledgements.removeValue(forKey: kind) {
                     line = "ACK \(String(format: "%016llx", revision)) \(kind.rawValue)"
+                } else if let wanted = panelQueuedWanted, wanted != panelQueuedSent {
+                    line = wanted ? "QUEUED" : "CLEAR"
+                    panelQueuedSent = wanted
                 } else if ProcessInfo.processInfo.systemUptime >= nextSyncAt {
                     // Repeated snapshots recover a reset even if the USB device did not reopen.
                     line = "SYNC"
                     nextSyncAt = ProcessInfo.processInfo.systemUptime + 2
+                } else if ProcessInfo.processInfo.systemUptime >= nextTimeAt {
+                    let unix = Int64(Date().timeIntervalSince1970)
+                    let tzMin = TimeZone.current.secondsFromGMT() / 60
+                    line = "TIME \(unix) \(tzMin)"
+                    nextTimeAt = ProcessInfo.processInfo.systemUptime + 30
                 } else {
                     break
                 }

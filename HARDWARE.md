@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-07 (chatgpt-model-display v0.53 flash)
+Last inventory pass: 2026-09-07 (chatgpt-model-display v0.62 flash)
 
 ## radar-transmitter
 
@@ -43,7 +43,7 @@ Last inventory pass: 2026-09-07 (chatgpt-model-display v0.53 flash)
 - MAC: 28:84:85:44:1b:5c
 - Display: **3.5" TFT SPI 480x320 v1 (ST7796U)** — pins MOSI 8, DC 9, RST 10, CS 11, MISO 16, BL 17, SCK 18; SD_CS 4 held high
 - Rotary encoders (×2 KY-040-style) on the **RIGHT** header of `s3-n16r8.jpeg` (left header is display SPI). Both `+`→3V3 / `GND`→GND (right-side GND pins OK):
-  - **Thinking** — CLK GPIO41, DT GPIO40, SW GPIO39 (Light→Medium→High→Extra High; click = next)
+  - **Thinking** — CLK GPIO41, DT GPIO40, SW GPIO39 (polled falling CLK; two detents per level; burst until pause so a quick turn can span Light↔Extra High; click = next)
   - **Model** — CLK GPIO1, DT GPIO2, SW GPIO42 (PCNT hardware quadrature, 8 counts / two detents + 160 ms gap per model step; clamps at GPT-6 Astra / GPT-5.5; click = next)
     - **Known desk fault (2026-09-07, unresolved):** GPIO1 and GPIO2 carry the
       same signal. A 1 kHz sample of both pins while turning showed matched
@@ -57,14 +57,14 @@ Last inventory pass: 2026-09-07 (chatgpt-model-display v0.53 flash)
   - Panel/NVS update immediately; `SET MODEL` / `SET THINKING` wait 0.4 s after the last detent
   - Changes persist in NVS
   - Board pinout image: [`s3-n16r8.jpeg`](s3-n16r8.jpeg)
-- Touch: not used by this firmware (FT6336 may be present)
+- Touch: FT6336 — SDA GPIO6, SCL GPIO15, reset GPIO7, INT GPIO5 (CANCEL tap; 5 s hold starts five-point calibration, NVS `touch`/`c35_desk`)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Firmware currently on device: `chatgpt-model-display/` **v 0.53**
+- Firmware currently on device: `chatgpt-model-display/` **v 0.62**
 - Display settings (LOCKED — title-strip noise fix 2026-09-07):
   - Controller: ST7796U, 480×320 landscape, SPI 26 MHz, `invert_color(true)`, RGB
   - MADCTL: `swap_xy(true)`, `mirror(true, true)` — desk 180 in hardware; do not flip only one mirror (glyphs)
   - Software 180 flush: ON via internal-RAM band blit + SPI transfer sync (v 0.22+)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → ChatGPT title at top of glass, MODEL left, version bottom-right
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
-- Last verified: 2026-09-07 — v0.53 reflash on `/dev/cu.usbmodem21201` (hash-verified); 0.4 s SET settle; model picker is Ctrl+Shift+M then Down from Astra; thinking always absolute; model CLK/DT wiring fault still open (see above)
+- Last verified: 2026-09-07 — v0.62 flash on `/dev/cu.usbmodem21201` (hash-verified); CANCEL restores last known; 5 s hold calibrates touch; thinking 2 detents per level; model CLK/DT wiring fault still open (see above)
 - Notes: edit+flash on Mac `~/Development/workspace-esp32`; push then pull Hetzner `/home/codex/workspace-esp32`

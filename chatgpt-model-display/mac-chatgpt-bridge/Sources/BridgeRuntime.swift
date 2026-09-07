@@ -43,14 +43,30 @@ final class BridgeRuntime {
         lastFailure = nil
         let focused = DeskFront.isForeground(preferred: options.bundleID)
         print("\(stamp()) \(focused ? "rx" : "queued") \(update.kind.rawValue) \(value)")
+        publishQueueStatus()
+        fflush(stdout)
+    }
+
+    private func cancelQueue() {
+        guard !pending.isEmpty else { return }
+        pending.removeAll()
+        retryAt = 0
+        lastFailure = nil
+        print("\(stamp()) cancelled queued dial state; panel restores last known")
+        publishQueueStatus()
         fflush(stdout)
     }
 
     private func drainSerial() {
         guard let session else { return }
         for raw in session.readLines() {
+            if raw == "CANCEL" {
+                cancelQueue()
+                continue
+            }
             if let update = SerialBridge.parseInbound(raw) { queue(update) }
         }
+        publishQueueStatus()
         session.flushWrites()
     }
 
@@ -79,6 +95,7 @@ final class BridgeRuntime {
                 lastFailure = nil
                 retryAt = 0
                 print("\(stamp()) applied \(kind.rawValue) \(value) via \(path)")
+                publishQueueStatus()
             case .interrupted:
                 print("\(stamp()) interrupted \(kind.rawValue) \(value); setting remains queued")
             case .failed(let message):
@@ -110,6 +127,11 @@ final class BridgeRuntime {
         }
     }
 
+    private func publishQueueStatus() {
+        let queued = !pending.isEmpty && !DeskFront.isForeground(preferred: options.bundleID)
+        session?.setPanelQueued(queued)
+    }
+
     func run() -> Never {
         print("watching ChatGPT foreground\(session.map { "; listening on \($0.port)" } ?? "") (Ctrl+C to stop)")
         fflush(stdout)
@@ -117,6 +139,7 @@ final class BridgeRuntime {
             drainSerial()
             noteFront()
             applyPending()
+            drainSerial()
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }
     }

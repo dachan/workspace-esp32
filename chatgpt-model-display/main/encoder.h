@@ -10,8 +10,11 @@ typedef enum {
 
 esp_err_t encoder_init(void);
 
-/* -1 / 0 / +1 since last poll for that encoder. */
+/* Signed step count since last poll (thinking may be more than ±1). */
 int encoder_delta(encoder_id_t id);
+
+/* 1 while thinking pulses are still accumulating — skip SPI paint. */
+int encoder_hold_paint(void);
 
 /* 1 on a fresh button press (active-low, debounced). */
 int encoder_button_pressed(encoder_id_t id);

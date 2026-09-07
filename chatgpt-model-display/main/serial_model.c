@@ -5,6 +5,8 @@
 #include <string.h>
 
 #include "catalog.h"
+#include "clock.h"
+#include "queue_status.h"
 #include "driver/usb_serial_jtag.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -44,6 +46,12 @@ static int handle_line(const char *line, model_fields_t *fields)
     }
 
     if (serial_sync_handle_line(line)) {
+        return 0;
+    }
+    if (clock_apply_line(line)) {
+        return 0;
+    }
+    if (queue_status_apply_line(line)) {
         return 0;
     }
 

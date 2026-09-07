@@ -11,7 +11,10 @@
  * Thinking: CLK41 DT40 SW39
  * Model:    CLK1  DT2  SW42
  *
- * Thinking: polled falling CLK, DT direction, two pulses per level, 160 ms gap.
+ * Thinking: polled falling CLK, DT direction. Two detents per level. Pulses
+ * are held until the knob pauses so a fast flick is one burst (Light↔Extra
+ * High) and a slow pair of detents is one level. Emitting each pulse
+ * immediately would paint the panel and miss the rest of the turn.
  *
  * Model: PCNT hardware quadrature. Polling could not decode this knob — the
  * same loop also runs a full 480x320 SPI flush, so DT was sampled long after
@@ -32,15 +35,15 @@ static int s_last_dir[ENCODER_COUNT];
 static int64_t s_last_step_us[ENCODER_COUNT];
 static int s_pulses[ENCODER_COUNT];
 static int s_sign[ENCODER_COUNT];
-static int64_t s_emit_us[ENCODER_COUNT];
 static int s_last_sw[ENCODER_COUNT];
 static int64_t s_last_sw_us[ENCODER_COUNT];
 static int s_sw_armed[ENCODER_COUNT];
 
-#define MIN_STEP_US 50000
-#define EMIT_US 160000
-#define PULSES_PER_STEP 2
+#define MIN_STEP_US 20000
 #define DIR_LOCK_US 100000
+#define THINKING_PULSES_PER_STEP 2
+/* Emit after the knob pauses so a flick is not split by a display flush. */
+#define THINKING_BURST_IDLE_US 80000
 
 /* Model (PCNT) — less sensitive: two detents + emit gap per model step. */
 #define MODEL_PCNT_LIMIT 1000
@@ -171,7 +174,6 @@ esp_err_t encoder_init(void)
         s_last_step_us[i] = 0;
         s_pulses[i] = 0;
         s_sign[i] = 0;
-        s_emit_us[i] = 0;
         s_last_sw[i] = gpio_get_level(s_sw[i]);
         s_sw_armed[i] = 1;
         s_last_sw_us[i] = 0;
@@ -262,13 +264,24 @@ int encoder_delta(encoder_id_t id)
         s_pulses[id]++;
     }
 
-    // Completed steps must drain even after the knob stops producing edges.
-    if (s_pulses[id] < PULSES_PER_STEP || now - s_emit_us[id] < EMIT_US) {
+    if (s_pulses[id] < THINKING_PULSES_PER_STEP
+        || now - s_last_step_us[id] < THINKING_BURST_IDLE_US) {
         return 0;
     }
-    s_pulses[id] -= PULSES_PER_STEP;
-    s_emit_us[id] = now;
-    return s_sign[id];
+    int steps = s_pulses[id] / THINKING_PULSES_PER_STEP;
+    s_pulses[id] %= THINKING_PULSES_PER_STEP;
+    int sign = s_sign[id];
+    s_last_dir[id] = 0;
+    return sign * steps;
+}
+
+int encoder_hold_paint(void)
+{
+    if (s_pulses[ENCODER_THINKING] == 0) {
+        return 0;
+    }
+    return (esp_timer_get_time() - s_last_step_us[ENCODER_THINKING])
+        < THINKING_BURST_IDLE_US;
 }
 
 int encoder_button_pressed(encoder_id_t id)

@@ -4,8 +4,15 @@
 
 #include "build_number.h"
 #include "catalog.h"
+#include "clock.h"
 #include "display.h"
 #include "font.h"
+#include "queue_status.h"
+
+static int s_cancel_x;
+static int s_cancel_y;
+static int s_cancel_w;
+static int s_cancel_h;
 
 static void draw_wrapped(int x, int y, int max_w, const char *text, uint16_t fg, uint16_t bg, int scale)
 {
@@ -92,9 +99,24 @@ esp_err_t ui_render(const model_fields_t *fields)
 
     display_fill(bg);
     display_fill_rect(8, 8, DISPLAY_WIDTH - 16, DISPLAY_HEIGHT - 16, card);
-    display_fill_rect(8, 8, DISPLAY_WIDTH - 16, 4, accent);
 
-    font_draw_text(20, 24, "ChatGPT", accent, card, 2);
+    const int pad = 20;
+    const int title_scale = 2;
+    const int date_scale = 1;
+    const int title_h = 7 * title_scale;
+    const int header_y = 20;
+    char time_text[16];
+    char date_text[16];
+    const int have_clock = clock_format(time_text, sizeof(time_text))
+        && clock_format_date(date_text, sizeof(date_text));
+    font_draw_text(pad, header_y, "ChatGPT", accent, card, title_scale);
+    if (have_clock) {
+        const int right = DISPLAY_WIDTH - pad;
+        const int tw = font_text_width(time_text, title_scale);
+        const int dw = font_text_width(date_text, date_scale);
+        font_draw_text(right - tw, header_y, time_text, accent, card, title_scale);
+        font_draw_text(right - dw, header_y + title_h + 4, date_text, muted, card, date_scale);
+    }
 
     font_draw_text(20, 64, "MODEL", label, card, 1);
     font_draw_text(20, 134, "THINKING", label, card, 1);
@@ -118,17 +140,45 @@ esp_err_t ui_render(const model_fields_t *fields)
         font_draw_text(20, bar_y + bar_h + 8, thinking, text, card, 1);
     }
 
-    /* Version bottom-right. */
+    /* Version bottom-right; large CANCEL tap target bottom-left while queued. */
     {
+        const int scale = 2;
+        const int pad = 16;
+        const int ipad_x = 20;
+        const int ipad_y = 14;
+        const int th = 7 * scale;
+        const int btn_h = th + ipad_y * 2;
+        const int by = DISPLAY_HEIGHT - pad - btn_h;
+        s_cancel_w = 0;
+        s_cancel_h = 0;
+        if (queue_status_visible()) {
+            const char *label = "CANCEL";
+            const int tw = font_text_width(label, scale);
+            s_cancel_x = 20;
+            s_cancel_y = by;
+            s_cancel_w = tw + ipad_x * 2;
+            s_cancel_h = btn_h;
+            display_fill_rect(s_cancel_x, s_cancel_y, s_cancel_w, s_cancel_h, accent);
+            font_draw_text(s_cancel_x + ipad_x, s_cancel_y + ipad_y, label, card, accent, scale);
+        }
         const char *build = FIRMWARE_BUILD_STRING;
-        const int scale = 1;
-        const int pad = 12;
-        const int bw = font_text_width(build, scale);
-        const int bh = 7 * scale;
-        const int bx = DISPLAY_WIDTH - pad - bw;
-        const int by = DISPLAY_HEIGHT - pad - bh;
-        font_draw_text(bx, by, build, muted, card, scale);
+        const int bw = font_text_width(build, 1);
+        font_draw_text(DISPLAY_WIDTH - 12 - bw, DISPLAY_HEIGHT - 12 - 7, build, muted, card, 1);
     }
 
-    return display_flush();
+    esp_err_t err = display_flush();
+    if (err == ESP_OK) {
+        queue_status_mark_drawn();
+    }
+    return err;
+}
+
+bool ui_cancel_hit(int x, int y)
+{
+    if (s_cancel_w <= 0 || s_cancel_h <= 0) {
+        return false;
+    }
+    const int slop = 16;
+    return x >= s_cancel_x - slop && x < s_cancel_x + s_cancel_w + slop
+        && y >= s_cancel_y - slop && y < s_cancel_y + s_cancel_h + slop;
 }

@@ -1,6 +1,7 @@
 idf_component_register(
-    SRCS "main.c" "display.c" "canvas.c" "font.c" "ui.c" "catalog.c"
-         "model_parse.c" "serial_model.c" "serial_sync.c" "model_nvs.c" "encoder.c"
+    SRCS "main.c" "display.c" "canvas.c" "font.c" "ui.c" "clock.c" "queue_status.c" "catalog.c"
+         "model_parse.c" "serial_model.c" "serial_sync.c" "model_nvs.c" "encoder.c" "touch.c"
+         "calibrate.c"
     INCLUDE_DIRS "." "${CMAKE_CURRENT_BINARY_DIR}"
 )
 

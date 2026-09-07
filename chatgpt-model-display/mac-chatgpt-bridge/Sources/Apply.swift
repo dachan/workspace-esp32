@@ -62,7 +62,7 @@ enum Switcher {
                     ? .interrupted
                     : .failed("could not move to \(name)")
             }
-            guard Keys.wait(0.25, pulse: pulse) else {
+            guard Keys.wait(0.05, pulse: pulse) else {
                 return .interrupted
             }
             guard DeskFront.isForeground(preferred: preferredBundleID) else {

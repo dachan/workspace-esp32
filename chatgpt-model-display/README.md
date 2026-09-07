@@ -27,6 +27,17 @@ Acknowledgement does **not** confirm the app's selected value: keyboard posting
 has no UI readback. Periodic SYNC also recovers a device reset without requiring
 the USB device path to disappear.
 
+Mac also sends `TIME <unix-seconds> <tz-offset-minutes>` on connect and every
+30 s so the panel can show a local clock. Firmware ticks minutes from that
+snapshot; it does not use Wi-Fi or SNTP.
+
+When ChatGPT is not focused and dial state is waiting to apply, the helper
+sends `QUEUED`; it sends `CLEAR` once the queue is empty or ChatGPT is focused.
+The panel shows a **CANCEL** button at the bottom-left; tap it (or click
+either encoder) to send `CANCEL`, drop the apply queue, and restore the
+panel/NVS to the last known model and thinking. A five-second press-and-hold
+anywhere on the glass starts a five-point touch calibration.
+
 Before the first `SYNC`, firmware uses the legacy `SET MODEL <name>` and
 `SET THINKING <level>` lines. The current helper accepts these from older firmware,
 but recovery/acknowledgements require both updated components. An old helper used
@@ -64,6 +75,10 @@ Canonical names and thinking aliases live in firmware `main/catalog.c` and Swift
 | Backlight | 17 |
 | SCK | 18 |
 | SD_CS (held high) | 4 |
+| CTP_SCL | 15 |
+| CTP_RST | 7 |
+| CTP_SDA | 6 |
+| CTP_INT | 5 |
 | Thinking ENC CLK | 41 |
 | Thinking ENC DT | 40 |
 | Thinking ENC SW | 39 |
@@ -79,12 +94,16 @@ USB: native USB Serial/JTAG (`/dev/cu.usbmodem*` on macOS). Flash and
 ## Desk control (encoders → ChatGPT)
 
 Firmware `v 0.35+` updates the panel immediately, then sends SET after a
-0.4 s settle window. Completed encoder steps drain after the 160 ms emit gap
-even when no further edge arrives. The Mac helper uses `NSWorkspace.frontmostApplication`
+0.4 s settle window. Thinking pulses are held until the knob pauses so
+two detents are one level and a quick turn can run Light↔Extra High. Model
+steps still use a 160 ms emit gap. The Mac helper uses `NSWorkspace.frontmostApplication`
 (no AX tree walk). While ChatGPT is focused it opens the model picker with
 Control-Shift-M and steps reasoning with Control-Shift-, / Control-Shift-.
 When ChatGPT is not focused, encoder changes stay on the ESP32 display/NVS
-and the bridge queues the latest values without activating ChatGPT.
+and the bridge queues the latest values without activating ChatGPT. A
+CANCEL button appears at the bottom-left; tap it to drop that apply queue
+and restore the last known model and thinking. A five-second hold on the
+glass starts touch calibration.
 
 ```bash
 chatgpt-bridge --watch --port "$ESP_PORT"
