@@ -306,3 +306,31 @@ esp_err_t ui_render(const model_fields_t *fields)
     }
     return err;
 }
+
+esp_err_t ui_render_screensaver(void)
+{
+    const uint16_t bg = display_rgb(12, 14, 22);
+    const uint16_t clock = display_rgb(160, 168, 182);
+
+    display_fill(bg);
+
+    char time_text[16];
+    char date_text[16];
+    if (clock_format(time_text, sizeof(time_text))
+        && clock_format_date(date_text, sizeof(date_text))) {
+        const int time_scale = 4;
+        const int date_scale = 2;
+        const int time_h = 7 * time_scale;
+        const int date_h = 7 * date_scale;
+        const int gap = 14;
+        const int block_h = time_h + gap + date_h;
+        const int time_w = font_text_width(time_text, time_scale);
+        const int date_w = font_text_width(date_text, date_scale);
+        const int time_y = (DISPLAY_HEIGHT - block_h) / 2;
+        const int date_y = time_y + time_h + gap;
+        font_draw_text((DISPLAY_WIDTH - time_w) / 2, time_y, time_text, clock, bg, time_scale);
+        font_draw_text((DISPLAY_WIDTH - date_w) / 2, date_y, date_text, clock, bg, date_scale);
+    }
+
+    return display_flush();
+}

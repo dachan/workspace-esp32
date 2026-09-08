@@ -19,6 +19,7 @@
 #include "ui.h"
 
 #define CALIBRATE_HOLD_MS 5000
+#define SCREENSAVER_IDLE_MS 60000
 
 static const char *TAG = "chatgpt_model";
 
@@ -145,9 +146,11 @@ void app_main(void)
     bool hold_calibrated = false;
     bool paint_pending = true;
     bool hold_rx = false;
+    bool screensaver_on = false;
     TickType_t local_changed_at = 0;
     TickType_t last_save_attempt = 0;
     TickType_t last_paint_attempt = 0;
+    TickType_t last_active = xTaskGetTickCount();
     bool save_failed = false;
     bool paint_failed = false;
 
@@ -172,7 +175,10 @@ void app_main(void)
             paint_pending = true;
         }
         bool local_changed = false;
+        bool input_activity = thinking_delta || model_delta || thinking_pressed || model_pressed
+            || touch.down || touch.released;
         bool settings_open = cursor_settings_is_open();
+        bool saver = screensaver_on;
         if (settings_open) {
             if (cursor_settings_handle(&touch, model_delta, thinking_delta,
                                        model_pressed, thinking_pressed)) {
@@ -189,12 +195,12 @@ void app_main(void)
             thinking_pressed = false;
             model_pressed = false;
         }
-        if (touch.released && touch.held_ms < 800 && !settings_open && ui_hit_sync(touch.x, touch.y)) {
+        if (!saver && touch.released && touch.held_ms < 800 && !settings_open && ui_hit_sync(touch.x, touch.y)) {
             serial_sync_push(&fields);
             ui_sync_pulse();
             paint_pending = true;
         }
-        if (touch.released && touch.held_ms < 800 && !settings_open && ui_hit_models(touch.x, touch.y)) {
+        if (!saver && touch.released && touch.held_ms < 800 && !settings_open && ui_hit_models(touch.x, touch.y)) {
             cursor_settings_open();
             paint_pending = true;
         }
@@ -229,7 +235,7 @@ void app_main(void)
             serial_sync_update(&fields, false);
         }
         serial_sync_poll();
-        if (front_title_received()) {
+        if (front_title_is_focused()) {
             bool cursor = front_title_is_cursor();
             if (!front_ready || cursor != was_cursor) {
                 if (front_ready) {
@@ -247,6 +253,19 @@ void app_main(void)
                 serial_sync_update(&fields, true);
             }
         }
+        now = xTaskGetTickCount();
+        if (front_title_is_focused() || input_activity) {
+            last_active = now;
+            if (screensaver_on) {
+                screensaver_on = false;
+                paint_pending = true;
+            }
+        } else if (!screensaver_on
+                   && (TickType_t)(now - last_active) >= pdMS_TO_TICKS(SCREENSAVER_IDLE_MS)) {
+            screensaver_on = true;
+            cursor_settings_close();
+            paint_pending = true;
+        }
         if (!same_fields(&before, &fields)) {
             save_pending = fields.has_model;
             paint_pending = true;
@@ -263,12 +282,16 @@ void app_main(void)
             save_failed = model_nvs_save(&fields) != ESP_OK;
             save_pending = save_failed;
         }
-        if (paint_pending && (cursor_settings_is_open() || !encoder_hold_paint())
+        if (paint_pending && (screensaver_on || cursor_settings_is_open() || !encoder_hold_paint())
             && (!paint_failed || (TickType_t)(now - last_paint_attempt) >= pdMS_TO_TICKS(500))) {
             last_paint_attempt = now;
-            paint_failed = (cursor_settings_is_open()
-                ? cursor_settings_render()
-                : ui_render(&fields)) != ESP_OK;
+            if (screensaver_on) {
+                paint_failed = ui_render_screensaver() != ESP_OK;
+            } else if (cursor_settings_is_open()) {
+                paint_failed = cursor_settings_render() != ESP_OK;
+            } else {
+                paint_failed = ui_render(&fields) != ESP_OK;
+            }
             paint_pending = paint_failed;
         }
         vTaskDelay(pdMS_TO_TICKS(5));

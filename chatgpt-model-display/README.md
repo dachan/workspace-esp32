@@ -39,9 +39,14 @@ the USB device path to disappear.
 
 Mac also sends `TIME <unix-seconds> <tz-offset-minutes>` on connect and every
 30 s so the panel can show a local clock. Firmware ticks minutes from that
-snapshot; it does not use Wi-Fi or SNTP. The helper also sends `FRONT Cursor`
-or `FRONT ChatGPT` when the focused desk app changes so the top-left brand
-lockup matches; it falls back to ChatGPT when neither is focused.
+snapshot; it does not use Wi-Fi or SNTP. The helper also sends `FRONT Cursor`,
+`FRONT ChatGPT`, or `FRONT None` when the focused desk app changes so the
+header brand lockup matches. `FRONT None` keeps the last app's catalog and
+logo; it does not fall back to ChatGPT. After each SYNC the helper resends
+FRONT so a firmware restart recovers focus. After 1 min without Cursor/ChatGPT
+focus and without encoder or touch, the panel shows a date/time screensaver.
+Focusing Cursor or ChatGPT, turning a knob, or tapping the glass wakes it;
+the waking tap does not press SYNC or MODELS.
 
 A five-second press-and-hold anywhere on the glass starts a five-point touch
 calibration. A short tap on **SYNC** (bottom left) asks the helper to apply
@@ -183,10 +188,10 @@ swift build -c release
 
 ## Code organization
 
-- `main/main.c`: input/state coordination and save/paint retries.
-- `main/ui.c`: drawing; `display.c`: SPI and DMA ownership; `canvas.c`/`font.c`: pixels/text.
-- `main/front_title.c`: Mac `FRONT Cursor` / `FRONT ChatGPT` header selection
-  and last-model restore when the focused app changes.
+- `main/main.c`: input/state coordination, 1 min clock screensaver, and save/paint retries.
+- `main/ui.c`: drawing including the idle screensaver; `display.c`: SPI and DMA ownership; `canvas.c`/`font.c`: pixels/text.
+- `main/front_title.c`: Mac `FRONT Cursor` / `FRONT ChatGPT` / `FRONT None`;
+  None keeps the last app and does not restore ChatGPT.
 - `main/logo.c`: header brand masks generated from `assets/` by
   `scripts/generate_logos.py`; re-run it (needs Pillow) after changing the
   artwork or its target height, and commit the result.

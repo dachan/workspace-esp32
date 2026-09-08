@@ -50,9 +50,11 @@ Ctrl+Shift-. up to target). Cursor apply: Command-/ (first Down is Auto),
 or Left, Up, Right directly into Reasoning after reopening (Right highlights
 the first supported level; Down to the target; Return selects, then Escape twice closes the menus). A
 ChatGPT-only model name (e.g. GPT-6 Astra) is skipped while
-Cursor is focused so effort can still apply. The helper sends
-`FRONT Cursor` or `FRONT ChatGPT` so the panel's header brand lockup matches the
-focused app (the Cursor lockup or the OpenAI wordmark, white on the dark card).
+Cursor is focused so effort can still apply. The helper sends `FRONT Cursor`, `FRONT ChatGPT`, or `FRONT None`. Cursor
+and ChatGPT select that app's catalog and header lockup. `FRONT None` keeps
+the last app's catalog and logo; after 1 min without focus or encoder/touch
+the panel shows a date/time screensaver. Focus, a knob, or a tap wakes it;
+a waking tap does not hit SYNC/MODELS.
 Firmware waits 0.4 s after the last rotary detent before sending SET; the
 bridge settles 1 s more, then applies only changed fields (both in one pass
 when both changed — a thinking-only change skips model selection).

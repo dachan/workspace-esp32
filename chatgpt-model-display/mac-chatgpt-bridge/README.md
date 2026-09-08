@@ -44,8 +44,9 @@ model and thinking state instead of holding it for later.
 5. If neither ChatGPT nor Cursor is focused: leave the ESP32 display/NVS as
    the source of truth and discard the change. Nothing is applied when one of
    those apps later becomes frontmost, and the helper never activates either
-   app. The helper also sends `FRONT Cursor` or `FRONT ChatGPT` so the panel
-   title matches the focused app.
+   app. The helper also sends `FRONT Cursor`, `FRONT ChatGPT`, or `FRONT None`
+   so the panel lockup matches the focused app and can idle to a clock
+   screensaver when neither is focused.
 
 Shortcut sequences stay bound to the process that was focused when they began.
 Losing focus, including switching between ChatGPT, Codex, and Cursor,

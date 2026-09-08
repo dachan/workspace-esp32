@@ -136,6 +136,7 @@ final class SerialSession {
                     // Repeated snapshots recover a reset even if the USB device did not reopen.
                     line = "SYNC"
                     nextSyncAt = ProcessInfo.processInfo.systemUptime + 2
+                    panelFrontSent = nil
                 } else if ProcessInfo.processInfo.systemUptime >= nextTimeAt {
                     let unix = Int64(Date().timeIntervalSince1970)
                     let tzMin = TimeZone.current.secondsFromGMT() / 60

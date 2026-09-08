@@ -53,10 +53,10 @@ enum DeskFront {
     }
 
     static func panelTitle(preferred: String? = nil) -> String {
-        guard let app = focusedApp(preferred: preferred), kind(of: app) == .cursor else {
-            return "ChatGPT"
+        guard let app = focusedApp(preferred: preferred) else {
+            return "None"
         }
-        return "Cursor"
+        return kind(of: app) == .cursor ? "Cursor" : "ChatGPT"
     }
 
     static func label(preferred: String? = nil) -> String {

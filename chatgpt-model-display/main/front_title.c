@@ -3,21 +3,26 @@
 #include <string.h>
 
 static bool s_is_cursor;
+static bool s_focused;
 static bool s_dirty;
-static bool s_received;
 
 bool front_title_apply_line(const char *line)
 {
-    bool is_cursor;
+    bool focused;
+    bool is_cursor = s_is_cursor;
     if (strcmp(line, "FRONT Cursor") == 0) {
+        focused = true;
         is_cursor = true;
     } else if (strcmp(line, "FRONT ChatGPT") == 0) {
+        focused = true;
         is_cursor = false;
+    } else if (strcmp(line, "FRONT None") == 0) {
+        focused = false;
     } else {
         return false;
     }
-    s_received = true;
-    if (s_is_cursor != is_cursor) {
+    s_focused = focused;
+    if (focused && s_is_cursor != is_cursor) {
         s_is_cursor = is_cursor;
         s_dirty = true;
     }
@@ -29,9 +34,9 @@ bool front_title_is_cursor(void)
     return s_is_cursor;
 }
 
-bool front_title_received(void)
+bool front_title_is_focused(void)
 {
-    return s_received;
+    return s_focused;
 }
 
 bool front_title_needs_paint(void)
