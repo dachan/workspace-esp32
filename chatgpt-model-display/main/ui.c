@@ -110,7 +110,6 @@ esp_err_t ui_render(const model_fields_t *fields)
 
     const int pad = 20;
     const int title_scale = 2;
-    const int date_scale = 1;
     const int title_h = 7 * title_scale;
     const int header_y = 20;
     char time_text[16];
@@ -123,10 +122,13 @@ esp_err_t ui_render(const model_fields_t *fields)
                        logo->alpha, text, card);
     if (have_clock) {
         const int right = DISPLAY_WIDTH - pad;
+        const int gap = 6 * title_scale;
         const int tw = font_text_width(time_text, title_scale);
-        const int dw = font_text_width(date_text, date_scale);
-        font_draw_text(right - tw, header_y, time_text, accent, card, title_scale);
-        font_draw_text(right - dw, header_y + title_h + 4, date_text, muted, card, date_scale);
+        const int dw = font_text_width(date_text, title_scale);
+        const int time_x = right - tw;
+        const int date_x = time_x - gap - dw;
+        font_draw_text(date_x, header_y, date_text, muted, card, title_scale);
+        font_draw_text(time_x, header_y, time_text, accent, card, title_scale);
     }
 
     const int model_label_y = 64;
@@ -160,17 +162,18 @@ esp_err_t ui_render(const model_fields_t *fields)
     /* SYNC sits left of the version string on the same baseline row. */
     {
         const char *label_sync = "SYNC";
-        const int scale = 1;
-        const int pad_x = 14;
-        const int pad_y = 10;
+        const uint16_t orange = display_rgb(255, 122, 47);
+        const int scale = 2;
+        const int pad_x = 22;
+        const int pad_y = 14;
         const int tw = font_text_width(label_sync, scale);
         const int th = 7 * scale;
         s_sync_w = tw + pad_x * 2;
         s_sync_h = th + pad_y * 2;
         s_sync_x = 20;
         s_sync_y = DISPLAY_HEIGHT - 12 - s_sync_h;
-        display_fill_rect(s_sync_x, s_sync_y, s_sync_w, s_sync_h, track);
-        font_draw_text(s_sync_x + pad_x, s_sync_y + pad_y, label_sync, text, track, scale);
+        display_fill_rect(s_sync_x, s_sync_y, s_sync_w, s_sync_h, orange);
+        font_draw_text(s_sync_x + pad_x, s_sync_y + pad_y, label_sync, text, orange, scale);
     }
 
     /* Version bottom-right. */
