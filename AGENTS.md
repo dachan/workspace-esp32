@@ -29,6 +29,10 @@ Hard lanes for this repo:
 - Keep Mac and server on the same branch/commit after every change:
   edit on Mac → commit/push → pull on Hetzner codex (and flash from Mac when
   hardware work is requested).
+- After a branch merges into `main`, delete it from local and remote
+  (`git branch -d <branch>` and `git push origin --delete <branch>`). Keep
+  `main` and any branch that still has unmerged commits. Do not leave merged
+  feature branches around.
 
 ## mac-chatgpt-bridge
 
