@@ -2,7 +2,7 @@
 import Foundation
 
 enum Switcher {
-    private static var interruptedPickers: Set<Int32> = []
+    private static var interruptedPickers: [Int32: Int] = [:]
 
     enum Result {
         case applied(path: String)
@@ -94,7 +94,7 @@ enum Switcher {
         if let stopped = primePrompt(focus: focus, preferred: preferred, pulse: pulse) {
             return stopped
         }
-        interruptedPickers.insert(focus.pid)
+        interruptedPickers[focus.pid] = 1
         guard Keys.controlShift(Keys.m, pulse: pulse) else {
             return pulse()
                 ? .interrupted
@@ -126,49 +126,11 @@ enum Switcher {
                 ? .interrupted
                 : .failed("could not confirm \(name)")
         }
-        interruptedPickers.remove(focus.pid)
+        interruptedPickers.removeValue(forKey: focus.pid)
         guard Keys.wait(0.15, pulse: pulse) else {
             return .interrupted
         }
         return .applied(path: "Ctrl+Shift+M Down \(index) \(name)")
-    }
-
-    /// Select the Cursor model, close the picker, then reopen it for effort.
-    static func cursorModelThenThinking(
-        _ modelRaw: String,
-        thinking thinkingRaw: String,
-        preferredBundleID: String?,
-        pulse: (() -> Bool)? = nil
-    ) -> Result {
-        guard let focus = FocusOperation(preferred: preferredBundleID) else {
-            return .failed("ChatGPT or Cursor is not focused")
-        }
-        let pulse = wrappedPulse(focus: focus, upstream: pulse)
-        guard let modelIndex = Catalog.cursorModelIndex(modelRaw),
-              let modelName = Catalog.cursorModelName(modelRaw) else {
-            return .failed("unknown model \(modelRaw)")
-        }
-        guard let levels = Catalog.cursorEfforts(for: modelRaw) else {
-            return .failed("unknown model \(modelRaw)")
-        }
-        if pulse() {
-            return .interrupted
-        }
-        if let stopped = cursorSelectModel(
-            index: modelIndex, name: modelName, focus: focus, preferred: preferredBundleID, pulse: pulse
-        ) {
-            return stopped
-        }
-        if levels.isEmpty { return .applied(path: "model \(modelName); effort unsupported, skipped") }
-        guard let (target, thinkingName) = Catalog.cursorEffort(thinkingRaw, model: modelRaw) else {
-            return .failed("unknown thinking \(thinkingRaw)")
-        }
-        guard Keys.wait(0.4, pulse: pulse) else {
-            return .interrupted
-        }
-        return cursorSelectEffort(
-            target: target, name: thinkingName, focus: focus, preferred: preferredBundleID, pulse: pulse
-        )
     }
 
     /// Command-/ focuses Search; first Down is Auto, then picker order.
@@ -204,6 +166,9 @@ enum Switcher {
             "chatgpt-bridge: reasoning absolute set via Ctrl+Shift+, then up to \(name)\n",
             stderr
         )
+        if let stopped = dismissInterruptedPicker(pid: focus.pid, pulse: pulse) {
+            return stopped
+        }
         if let stopped = primePrompt(focus: focus, preferred: preferred, pulse: pulse) {
             return stopped
         }
@@ -248,7 +213,7 @@ enum Switcher {
         guard Keys.key(Keys.return, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not confirm \(name)")
         }
-        interruptedPickers.remove(focus.pid)
+        interruptedPickers.removeValue(forKey: focus.pid)
         guard Keys.wait(0.15, pulse: pulse) else {
             return .interrupted
         }
@@ -284,6 +249,7 @@ enum Switcher {
         guard Keys.key(Keys.right, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not open Cursor Thinking menu")
         }
+        interruptedPickers[focus.pid] = 2
         guard Keys.wait(0.25, pulse: pulse) else {
             return .interrupted
         }
@@ -337,7 +303,7 @@ enum Switcher {
         if let stopped = primePrompt(focus: focus, preferred: preferred, pulse: pulse) {
             return stopped
         }
-        interruptedPickers.insert(focus.pid)
+        interruptedPickers[focus.pid] = 1
         guard Keys.command(Keys.slash, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not post Command-/")
         }
@@ -374,14 +340,10 @@ enum Switcher {
         guard Keys.wait(0.15, pulse: pulse) else {
             return .interrupted
         }
-        // Reasoning selection leaves two menu layers open.
-        if let stopped = repeatKey(
-            Keys.escape, times: 2, gap: 0.15, pulse: pulse,
-            fail: "could not close Cursor menus"
-        ) {
+        // Track each closed layer so superseding input cannot strand a submenu.
+        if let stopped = dismissInterruptedPicker(pid: focus.pid, pulse: pulse) {
             return stopped
         }
-        interruptedPickers.remove(focus.pid)
         guard Keys.wait(0.15, pulse: pulse) else {
             return .interrupted
         }
@@ -407,11 +369,12 @@ enum Switcher {
     }
 
     private static func dismissInterruptedPicker(pid: Int32, pulse: @escaping () -> Bool) -> Result? {
-        guard interruptedPickers.contains(pid) else { return nil }
-        guard Keys.key(Keys.escape, pulse: pulse), Keys.wait(0.1, pulse: pulse) else {
-            return .interrupted
+        while let remaining = interruptedPickers[pid], remaining > 0 {
+            guard Keys.key(Keys.escape, pulse: pulse) else { return .interrupted }
+            interruptedPickers[pid] = remaining - 1
+            guard Keys.wait(0.15, pulse: pulse) else { return .interrupted }
         }
-        interruptedPickers.remove(pid)
+        interruptedPickers.removeValue(forKey: pid)
         return nil
     }
 

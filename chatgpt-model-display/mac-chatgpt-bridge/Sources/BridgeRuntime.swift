@@ -14,7 +14,10 @@ func printFront(preferred: String?) {
 final class BridgeRuntime {
     private let options: Options
     private let session: SerialSession?
-    private var pending: [SettingKind: String] = [:]
+    // The complete latest target survives partial application; no detent queue.
+    private var desired: [SettingKind: String] = [:]
+    private var generation: UInt64 = 0
+    private var targetFocus: FocusOperation?
     private var receivedRevisions: [SettingKind: UInt64] = [:]
     private var lastFront: Bool?
     private var lastFrontPID: Int32?
@@ -23,7 +26,7 @@ final class BridgeRuntime {
     private var lastFailure: String?
     private var receivedModel: String?
     private var receivedThinking: String?
-    private var lastApplied: [DeskKind: [SettingKind: String]] = [:]
+    private var lastApplied: [Int32: [SettingKind: String]] = [:]
     private var forceApply = false
 
     init(options: Options) {
@@ -56,11 +59,7 @@ final class BridgeRuntime {
             fflush(stdout)
             return
         }
-        if update.kind == .model, let thinking = receivedThinking {
-            // Model selection can restore a different per-model effort in Cursor.
-            pending[.thinking] = thinking
-        }
-        pending[update.kind] = value
+        acceptTarget()
         // Batch paired knob turns: apply 1 s after the last received change.
         // PUSH (sync button) skips the 1 s batch window.
         settleAt = ProcessInfo.processInfo.systemUptime + (forceApply ? 0.4 : 1.0)
@@ -70,26 +69,40 @@ final class BridgeRuntime {
         fflush(stdout)
     }
 
-    private func discardPending(_ reason: String) {
-        guard !pending.isEmpty else { return }
-        let dropped = SettingKind.allCases.compactMap { kind in
-            pending[kind].map { "\(kind.rawValue) \($0)" }
+    private func acceptTarget() {
+        if targetFocus?.isCurrent != true {
+            discardPending("target app changed")
+            targetFocus = FocusOperation(preferred: options.bundleID)
         }
-        pending.removeAll()
+        desired = [:]
+        if let model = receivedModel { desired[.model] = model }
+        if let thinking = receivedThinking { desired[.thinking] = thinking }
+        generation &+= 1
+    }
+
+    private func discardPending(_ reason: String) {
+        if !desired.isEmpty {
+            print("\(stamp()) dropped target (\(reason))")
+            fflush(stdout)
+        }
+        desired.removeAll()
+        targetFocus = nil
+        generation &+= 1
         retryAt = 0
         lastFailure = nil
         forceApply = false
-        print("\(stamp()) dropped \(dropped.joined(separator: ", ")) (\(reason))")
-        fflush(stdout)
     }
 
     private func drainSerial() {
         guard let session else { return }
         for raw in session.readLines() {
             if raw == "PUSH" {
+                guard DeskFront.isForeground(preferred: options.bundleID) else {
+                    discardPending("SYNC received without focus")
+                    continue
+                }
+                acceptTarget()
                 forceApply = true
-                if let model = receivedModel { pending[.model] = model }
-                if let thinking = receivedThinking { pending[.thinking] = thinking }
                 settleAt = ProcessInfo.processInfo.systemUptime + 0.4
                 retryAt = 0
                 lastFailure = nil
@@ -104,103 +117,59 @@ final class BridgeRuntime {
     }
 
     private func applyPending() {
-        // Bound immediate retries while letting the latest model take priority.
-        for _ in 0..<8 {
-            guard DeskFront.isForeground(preferred: options.bundleID) else {
-                discardPending("ChatGPT/Cursor left the foreground")
-                return
-            }
-            let now = ProcessInfo.processInfo.systemUptime
-            guard now >= retryAt, now >= settleAt else { return }
-            guard let kind = SettingKind.allCases.first(where: { pending[$0] != nil }),
-                  let value = pending[kind] else {
-                forceApply = false
-                return
-            }
-            let pulse: () -> Bool = {
-                self.drainSerial()
-                return self.pending[kind] != value
-                    || (kind == .thinking && self.pending[.model] != nil)
-            }
-            guard let app = DeskFront.focusedApp(preferred: options.bundleID),
-                  let appKind = DeskFront.kind(of: app) else { return }
-            if appKind == .cursor,
-               let model = pending[.model],
-               Catalog.cursorModelIndex(model) == nil {
-                pending.removeValue(forKey: .model)
-                print("\(stamp()) skip MODEL \(model) (not in Cursor picker)")
-                fflush(stdout)
-                continue
-            }
-            // Re-apply only fields that changed since the last apply to this app.
-            // PUSH forces a replay even when the helper already posted these values.
-            if !forceApply {
-                var droppedUnchanged = false
-                for settled in SettingKind.allCases {
-                    if appKind == .cursor && settled == .thinking,
-                       let model = pending[.model], lastApplied[appKind]?[.model] != model { continue }
-                    guard let waiting = pending[settled],
-                          lastApplied[appKind]?[settled] == waiting else { continue }
-                    pending.removeValue(forKey: settled)
-                    print("\(stamp()) skip \(settled.rawValue) \(waiting) (unchanged)")
-                    droppedUnchanged = true
-                }
-                if droppedUnchanged {
-                    fflush(stdout)
-                    continue
-                }
+        guard !desired.isEmpty, let focus = targetFocus else { return }
+        guard focus.isCurrent else {
+            discardPending("target app left the foreground")
+            return
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now >= retryAt, now >= settleAt else { return }
+        let snapshot = desired
+        let revision = generation
+        let pid = focus.pid
+        if forceApply {
+            lastApplied.removeValue(forKey: pid)
+            forceApply = false
+        }
+        let pulse: () -> Bool = {
+            self.drainSerial()
+            return !focus.isCurrent || self.generation != revision
+        }
+
+        // Finish one field at a time, always model before its dependent effort.
+        // Invalidate before posting: even a failed/interrupted sequence may mutate UI.
+        applyFields: for kind in SettingKind.allCases {
+            guard let value = snapshot[kind] else { continue }
+            if focus.kind == .cursor, kind == .model,
+               Catalog.cursorModelIndex(value) == nil { continue }
+            if lastApplied[pid]?[kind] == value { continue }
+            if pulse() { break }
+            lastApplied[pid, default: [:]].removeValue(forKey: kind)
+            if kind == .model {
+                lastApplied[pid, default: [:]].removeValue(forKey: .thinking)
             }
             let result: Switcher.Result
-            if appKind == .cursor,
-               let model = pending[.model],
-               let thinking = pending[.thinking] {
-                let bothPulse: () -> Bool = {
-                    self.drainSerial()
-                    return self.pending[.model] != model || self.pending[.thinking] != thinking
-                }
-                result = Switcher.cursorModelThenThinking(
-                    model, thinking: thinking,
-                    preferredBundleID: options.bundleID, pulse: bothPulse
-                )
-                switch result {
-                case .applied(let path):
-                    if pending[.model] == model { pending.removeValue(forKey: .model) }
-                    if pending[.thinking] == thinking { pending.removeValue(forKey: .thinking) }
-                    lastApplied[appKind, default: [:]][.model] = model
-                    lastApplied[appKind, default: [:]][.thinking] = thinking
-                    lastFailure = nil
-                    retryAt = 0
-                    print("\(stamp()) applied MODEL \(model) THINKING \(thinking) via \(path)")
-                    fflush(stdout)
-                    continue
-                case .interrupted:
-                    print("\(stamp()) interrupted Cursor model/effort; retrying while focused")
-                    fflush(stdout)
-                    continue
-                case .failed(let message):
-                    if message != lastFailure {
-                        fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)
-                    }
-                    lastFailure = message
-                    retryAt = ProcessInfo.processInfo.systemUptime + 2
-                    return
-                }
-            }
             switch kind {
             case .model:
                 result = Switcher.model(value, preferredBundleID: options.bundleID, pulse: pulse)
             case .thinking:
-                result = Switcher.thinking(value, model: lastApplied[.cursor]?[.model] ?? receivedModel, preferredBundleID: options.bundleID, pulse: pulse)
+                result = Switcher.thinking(
+                    value, model: lastApplied[pid]?[.model],
+                    preferredBundleID: options.bundleID, pulse: pulse
+                )
             }
+            // A completed key sequence is usable only for the current target.
+            guard !pulse() else { break }
             switch result {
             case .applied(let path):
-                if pending[kind] == value { pending.removeValue(forKey: kind) }
-                lastApplied[appKind, default: [:]][kind] = value
+                lastApplied[pid, default: [:]][kind] = value
                 lastFailure = nil
                 retryAt = 0
-                print("\(stamp()) applied \(kind.rawValue) \(value) via \(path)")
+                print("\(stamp()) posted \(kind.rawValue) \(value) via \(path)")
+                if kind == .model, focus.kind == .cursor,
+                   !Keys.wait(0.4, pulse: pulse) { break applyFields }
             case .interrupted:
-                print("\(stamp()) interrupted \(kind.rawValue) \(value); retrying while focused")
+                return
             case .failed(let message):
                 if message != lastFailure {
                     fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)
@@ -209,8 +178,11 @@ final class BridgeRuntime {
                 retryAt = ProcessInfo.processInfo.systemUptime + 2
                 return
             }
-            fflush(stdout)
         }
+        if !focus.isCurrent, targetFocus === focus {
+            discardPending("target app left the foreground")
+        }
+        fflush(stdout)
     }
 
     private func noteFront() {
