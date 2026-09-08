@@ -1,6 +1,7 @@
-# chatgpt-model-display
+# desk-control
 
-ESP32-S3 firmware that shows the ChatGPT **model** and **thinking** level
+ESP32-S3 desk controller for **model** and **thinking** selection across
+ChatGPT, Cursor, and OpenCode
 on the desk-mounted 3.5" ST7796U panel. Rotary encoders change both locally
 (display + NVS). After **0.4 s** with no further changes the firmware sends
 the latest state to `mac-chatgpt-bridge/`. The Mac helper
@@ -154,6 +155,10 @@ chatgpt-bridge --watch --port "$ESP_PORT"
 Requires Accessibility for the launching app (key posting and prompt focus).
 
 ## Build / flash (Mac only)
+
+After a directory rename, use a fresh build directory: ESP-IDF/CMake caches
+absolute source paths. The Mac helper keeps its existing `mac-chatgpt-bridge`
+folder and `chatgpt-bridge` command for compatibility.
 
 Activate the local ESP-IDF environment and set `ESP_PORT` to the verified device.
 From this project directory:

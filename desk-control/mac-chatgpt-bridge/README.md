@@ -104,7 +104,7 @@ Cursor shortcuts, and focusing the prompt field, do.
 3. Confirm:
 
 ```sh
-cd chatgpt-model-display/mac-chatgpt-bridge
+cd desk-control/mac-chatgpt-bridge
 swift run chatgpt-bridge --check-ax
 swift run chatgpt-bridge --front
 ```
@@ -122,7 +122,7 @@ verified device path. `--bundle-id` accepts `com.openai.chat`,
 rates and setting names fail validation.
 
 ```sh
-cd chatgpt-model-display/mac-chatgpt-bridge
+cd desk-control/mac-chatgpt-bridge
 swift build -c release
 "$(swift build -c release --show-bin-path)/chatgpt-bridge" \
   --watch --port "$ESP_PORT"

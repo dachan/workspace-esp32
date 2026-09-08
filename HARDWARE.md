@@ -59,7 +59,7 @@ Last inventory pass: 2026-09-08 (v0.88 OpenCode wordmark app-flash)
   - Board pinout image: [`s3-n16r8.jpeg`](s3-n16r8.jpeg)
 - Touch: FT6336 — SDA GPIO6, SCL GPIO15, reset GPIO7, INT GPIO5 (5 s hold starts five-point calibration, NVS `touch`/`c35_desk`)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Firmware currently on device: `chatgpt-model-display/` **v 0.88** (OpenCode integration and supplied wordmark; existing clock screensaver and wake behavior)
+- Firmware currently on device: `desk-control/` **v 0.88** (OpenCode integration and supplied wordmark; existing clock screensaver and wake behavior)
 - Display settings (LOCKED — title-strip noise fix 2026-09-07):
   - Controller: ST7796U, 480×320 landscape, SPI 26 MHz, `invert_color(true)`, RGB
   - MADCTL: `swap_xy(true)`, `mirror(true, true)` — desk 180 in hardware; do not flip only one mirror (glyphs)

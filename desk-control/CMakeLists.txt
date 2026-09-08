@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(chatgpt-model-display)
+project(desk-control)
 
 # Archive the active build artifact only after binary generation succeeds.
 add_custom_command(
