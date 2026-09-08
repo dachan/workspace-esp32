@@ -210,8 +210,12 @@ esp_err_t ui_render(const model_fields_t *fields)
         && clock_format_date(date_text, sizeof(date_text));
     /* Brand lockup sits on the same baseline the title text used. */
     const logo_t *logo = front_title_is_cursor() ? &logo_cursor : &logo_openai;
-    display_blit_alpha(pad, header_y + title_h - logo->baseline, logo->width, logo->height,
-                       logo->alpha, text, card);
+    if (front_title_app() == DESK_OPENCODE) {
+        font_draw_text(pad, header_y, "OpenCode", text, card, title_scale);
+    } else {
+        display_blit_alpha(pad, header_y + title_h - logo->baseline, logo->width, logo->height,
+                           logo->alpha, text, card);
+    }
     if (have_clock) {
         const int right = DISPLAY_WIDTH - pad;
         const int gap = 6 * title_scale;

@@ -94,21 +94,21 @@ func usage() -> String {
     Usage: chatgpt-bridge [options]
 
     Apply ESP32 encoder SET MODEL / SET THINKING with keyboard
-    shortcuts, only while ChatGPT or Cursor is already the foreground app.
+    shortcuts, only while ChatGPT, Cursor, or OpenCode is already the foreground app.
     ChatGPT: Ctrl+Shift+M, Down to dial index; thinking Ctrl+Shift+, / .
     Cursor: Command-/ model first, then Command-/ again for Effort.
 
     Options:
-      --front             Print whether ChatGPT or Cursor is foreground and exit
+      --front             Print whether ChatGPT, Cursor, or OpenCode is foreground and exit
       --watch             Follow foreground + optional serial SET lines
       --listen            Read SET MODEL / SET THINKING from --port
                           (implied by --watch --port)
       --port PATH         USB serial device
       --baud N            Serial baud (default 115200)
       --list-ports        List likely USB serial devices
-      --set-model NAME    One-shot: select NAME if ChatGPT or Cursor is focused
-      --set-thinking LVL  One-shot: set reasoning if ChatGPT or Cursor is focused
-      --bundle-id ID      Force ChatGPT, Codex, or Cursor
+      --set-model NAME    One-shot: select NAME if ChatGPT, Cursor, or OpenCode is focused
+      --set-thinking LVL  One-shot: set reasoning if ChatGPT, Cursor, or OpenCode is focused
+      --bundle-id ID      Force ChatGPT, Codex, Cursor, or OpenCode
       --hid-info          Describe the keyboard control path
       --check-ax          Check Accessibility permission and exit
       --send-serial       Accepted for the old watch command; unused

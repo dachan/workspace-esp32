@@ -17,10 +17,12 @@ enum Switcher {
         pulse: (() -> Bool)? = nil
     ) -> Result {
         guard let focus = FocusOperation(preferred: preferredBundleID) else {
-            return .failed("ChatGPT or Cursor is not focused")
+            return .failed("ChatGPT, Cursor, or OpenCode is not focused")
         }
         let pulse = wrappedPulse(focus: focus, upstream: pulse)
         switch focus.kind {
+        case .openCode:
+            return OpenCodeApply.model(raw, focus: focus, pulse: pulse)
         case .chatGPT:
             guard let index = Catalog.chatgptModelIndex(raw), let name = Catalog.chatgptModelName(raw) else {
                 return .failed("unknown model \(raw)")
@@ -47,10 +49,12 @@ enum Switcher {
         pulse: (() -> Bool)? = nil
     ) -> Result {
         guard let focus = FocusOperation(preferred: preferredBundleID) else {
-            return .failed("ChatGPT or Cursor is not focused")
+            return .failed("ChatGPT, Cursor, or OpenCode is not focused")
         }
         let pulse = wrappedPulse(focus: focus, upstream: pulse)
         switch focus.kind {
+        case .openCode:
+            return OpenCodeApply.thinking(raw, focus: focus, pulse: pulse)
         case .chatGPT:
             guard let target = Catalog.chatgptThinkingIndex(raw), let name = Catalog.chatgptThinkingName(raw) else {
                 return .failed("unknown thinking \(raw)")
@@ -280,7 +284,7 @@ enum Switcher {
                     return pulse() ? .interrupted : .failed("could not post Command-L")
                 }
             }
-        case .chatGPT:
+        case .chatGPT, .openCode:
             if PromptFocus.ensure(pid: focus.pid, kind: focus.kind) == .missing {
                 return nil
             }

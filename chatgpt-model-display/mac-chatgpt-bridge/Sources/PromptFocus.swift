@@ -51,6 +51,8 @@ enum PromptFocus {
         let desc = string(el, kAXDescriptionAttribute as String).lowercased()
         let placeholder = string(el, "AXPlaceholderValue").lowercased()
         switch kind {
+        case .openCode:
+            return (role == "AXTextArea" || role == "AXTextField") && desc == "prompt" ? 100 : 0
         case .cursor:
             if classes.contains("aislash-editor-input") { return 100 }
             if desc.contains("follow-up") || placeholder.contains("follow-up") { return 80 }

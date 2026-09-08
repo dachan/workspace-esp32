@@ -227,3 +227,11 @@ Down moves by the target's zero-based index; Return selects, then Escape twice c
 reapply effort, even when the requested level is unchanged. Unsupported endpoints
 clamp to the model's range. The bridge needs a known model for effort-only
 commands; CLI callers supply `--set-model` together with `--set-thinking`.
+
+## OpenCode
+
+`FRONT OpenCode` selects an OpenCode text header and the existing GPT dial
+catalog. Its last model (`last_o`) and per-model effort (app ID 2 in `effort`)
+are stored separately from ChatGPT and Cursor. `FRONT None` retains that state.
+See the [OpenCode bridge mapping](mac-chatgpt-bridge/README.md#opencode) for
+model availability, effort mappings, and integration limits.

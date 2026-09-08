@@ -159,3 +159,27 @@ Down moves by the target's zero-based index; Return selects, then Escape twice c
 reapply effort, even when the requested level is unchanged. Unsupported endpoints
 clamp to the model's range. The bridge needs a known model for effort-only
 commands; CLI callers supply `--set-model` together with `--set-thinking`.
+
+## OpenCode
+
+The bridge recognizes the installed desktop app `ai.opencode.desktop` and sends
+`FRONT OpenCode`. The panel shows an OpenCode text header, uses the existing
+GPT dial catalog, and saves its selections separately (`last_o` and app ID 2
+in the existing effort blob). ChatGPT and Cursor keep their existing app IDs.
+
+Command-apostrophe opens OpenCode's model picker. The bridge selects a unique
+enabled Accessibility button by exact model name, so provider ordering does
+not affect selection. The model must be available in OpenCode's picker;
+missing or duplicate names fail without choosing another model.
+
+Effort uses the accessible **Choose model variant** menu to select an absolute
+value. Panel Light maps to Low, Medium to Medium, High to High, and Extra High
+to Xhigh. The cycling Command-Shift-D shortcut is intentionally not used because
+it cannot establish an absolute value without knowing the current selection.
+Other OpenCode models, None/Max variants, and agent cycling are not exposed by
+this initial GPT dial integration.
+
+Prompt focus, interruption cleanup, per-process apply caching, SYNC reapply,
+and dropping changes when the app is not foreground follow the existing bridge
+workflow. A new firmware build is required for the OpenCode header and saved
+state; rebuilding alone does not update the connected device or running helper.

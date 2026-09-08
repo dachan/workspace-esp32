@@ -7,6 +7,7 @@ import Foundation
 enum DeskKind {
     case chatGPT
     case cursor
+    case openCode
 }
 
 enum DeskFront {
@@ -15,12 +16,14 @@ enum DeskFront {
         "com.openai.codex",
     ]
     static let cursorID = "com.todesktop.230313mzl4w4u92"
-    static let bundleIDs: Set<String> = chatGPTIDs.union([cursorID])
+    static let openCodeID = "ai.opencode.desktop"
+    static let bundleIDs: Set<String> = chatGPTIDs.union([cursorID, openCodeID])
 
     static func kind(of app: NSRunningApplication) -> DeskKind? {
         guard let id = app.bundleIdentifier else { return nil }
         if chatGPTIDs.contains(id) { return .chatGPT }
         if id == cursorID { return .cursor }
+        if id == openCodeID { return .openCode }
         return nil
     }
 
@@ -29,6 +32,7 @@ enum DeskFront {
         case "com.openai.chat": return "ChatGPT"
         case "com.openai.codex": return "Codex"
         case cursorID: return "Cursor"
+        case openCodeID: return "OpenCode"
         default: return app.localizedName ?? "?"
         }
     }
@@ -56,6 +60,7 @@ enum DeskFront {
         guard let app = focusedApp(preferred: preferred) else {
             return "None"
         }
+        if kind(of: app) == .openCode { return "OpenCode" }
         return kind(of: app) == .cursor ? "Cursor" : "ChatGPT"
     }
 
@@ -65,7 +70,7 @@ enum DeskFront {
         if let app, isTarget(app, preferred: preferred) {
             return "\(displayName(for: app)) foreground"
         }
-        return "ChatGPT/Cursor background (\(name))"
+        return "ChatGPT/Cursor/OpenCode background (\(name))"
     }
 }
 

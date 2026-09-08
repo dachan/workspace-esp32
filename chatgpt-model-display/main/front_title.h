@@ -2,6 +2,9 @@
 
 #include <stdbool.h>
 
+typedef enum { DESK_CHATGPT, DESK_CURSOR, DESK_OPENCODE } desk_app_t;
+desk_app_t front_title_app(void);
+
 bool front_title_apply_line(const char *line);
 bool front_title_is_cursor(void);
 bool front_title_is_focused(void);

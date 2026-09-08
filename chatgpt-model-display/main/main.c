@@ -136,12 +136,12 @@ void app_main(void)
         }
         save_pending = !same_fields(&cached, &fields);
     } else {
-        model_nvs_restore_for(&fields, false);
+        model_nvs_restore_for(&fields, DESK_CHATGPT);
         save_pending = fields.has_model;
     }
     serial_sync_update(&fields, false);
 
-    bool was_cursor = false;
+    desk_app_t previous_app = DESK_CHATGPT;
     bool front_ready = false;
     bool hold_calibrated = false;
     bool paint_pending = true;
@@ -236,16 +236,17 @@ void app_main(void)
         }
         serial_sync_poll();
         if (front_title_is_focused()) {
-            bool cursor = front_title_is_cursor();
-            if (!front_ready || cursor != was_cursor) {
+            desk_app_t app = front_title_app();
+            bool cursor = app == DESK_CURSOR;
+            if (!front_ready || app != previous_app) {
                 if (front_ready) {
-                    model_nvs_remember_for(&fields, was_cursor);
+                    model_nvs_remember_for(&fields, previous_app);
                 }
-                model_nvs_restore_for(&fields, cursor);
+                model_nvs_restore_for(&fields, app);
                 clamp_cursor_model(&fields);
                 adapt_fields_for_front(&fields);
-                model_nvs_remember_for(&fields, cursor);
-                was_cursor = cursor;
+                model_nvs_remember_for(&fields, app);
+                previous_app = app;
                 front_ready = true;
                 if (!cursor) {
                     cursor_settings_close();

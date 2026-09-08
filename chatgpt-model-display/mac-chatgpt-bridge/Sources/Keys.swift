@@ -3,6 +3,7 @@ import CoreGraphics
 import Foundation
 
 enum Keys {
+    static let apostrophe: UInt16 = 0x27
     static let comma: UInt16 = 0x2B
     static let period: UInt16 = 0x2F
     static let m: UInt16 = 0x2E
@@ -18,7 +19,7 @@ enum Keys {
 
     static let hidInfo = """
     Keyboard path (Mac helper)
-      Foreground: NSWorkspace.frontmostApplication (ChatGPT, Codex, or Cursor).
+      Foreground: NSWorkspace.frontmostApplication (ChatGPT, Codex, Cursor, or OpenCode).
       The helper never activates those apps; keys fire only while one is focused.
       Before shortcuts it focuses the prompt: Cursor Command-L only if the
       Agents panel is not already open (Cmd+L toggles it closed otherwise),
@@ -36,6 +37,9 @@ enum Keys {
         Fast/Slow is not set from the dial.
         MODELS (Cursor only) opens the on-device enable list; Auto stays on.
         Tap SYNC on the panel to reapply the current model and thinking.
+      OpenCode
+        Command-apostrophe opens models; exact accessible names select choices.
+        The variant menu selects absolute effort (Light maps to Low, Extra High to Xhigh).
       Serial is drained during key delays so a newer SET supersedes in-flight apply.
     """
 
