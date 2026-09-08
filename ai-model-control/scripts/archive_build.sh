@@ -10,10 +10,10 @@ if [[ ! "$VER" =~ ^[0-9]+\.[0-9]+$ || ! -s "$BIN" ]]; then
 fi
 mkdir -p "$DIST"
 # Stage each replacement so an interrupted copy cannot truncate the last archive.
-cp "$BIN" "$DIST/desk-control-v${VER}.bin.tmp"
-mv -f "$DIST/desk-control-v${VER}.bin.tmp" "$DIST/desk-control-v${VER}.bin"
-cp "$BIN" "$DIST/desk-control-latest.bin.tmp"
-mv -f "$DIST/desk-control-latest.bin.tmp" "$DIST/desk-control-latest.bin"
+cp "$BIN" "$DIST/ai-model-control-v${VER}.bin.tmp"
+mv -f "$DIST/ai-model-control-v${VER}.bin.tmp" "$DIST/ai-model-control-v${VER}.bin"
+cp "$BIN" "$DIST/ai-model-control-latest.bin.tmp"
+mv -f "$DIST/ai-model-control-latest.bin.tmp" "$DIST/ai-model-control-latest.bin"
 printf '%s\n' "$VER" > "$DIST/CURRENT.tmp"
 mv -f "$DIST/CURRENT.tmp" "$DIST/CURRENT"
 echo "archived firmware v${VER}"

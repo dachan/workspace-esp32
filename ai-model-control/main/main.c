@@ -111,7 +111,7 @@ static bool same_fields(const model_fields_t *a, const model_fields_t *b)
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "desk-control starting");
+    ESP_LOGI(TAG, "ai-model-control starting");
     ESP_ERROR_CHECK(model_nvs_init());
     ESP_ERROR_CHECK(display_init());
     ESP_ERROR_CHECK(display_set_backlight(80));

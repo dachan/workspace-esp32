@@ -26,7 +26,7 @@ Hard lanes for this repo:
   workstation clone** and the connected serial device there. Do not flash from
   Hetzner.
 - Do not keep a separate standalone `mac-chatgpt-bridge` folder on the Mac;
-  use `desk-control/mac-chatgpt-bridge/` inside this repo.
+  use `ai-model-control/mac-chatgpt-bridge/` inside this repo.
 - Keep Mac and server on the same branch/commit after every change:
   edit on Hetzner codex → commit/push → pull on Mac (and flash from Mac when
   hardware work is requested).
@@ -37,7 +37,7 @@ Hard lanes for this repo:
 
 ## mac-chatgpt-bridge
 
-`desk-control/mac-chatgpt-bridge/` is a macOS CLI. Foreground is
+`ai-model-control/mac-chatgpt-bridge/` is a macOS CLI. Foreground is
 `NSWorkspace.frontmostApplication` (`com.openai.chat` / `com.openai.codex`
 or Cursor `com.todesktop.230313mzl4w4u92`). It never activates those apps.
 Before posting shortcuts it focuses the prompt: Cursor Command-L only if
@@ -60,7 +60,7 @@ Firmware waits 0.4 s after the last rotary detent before sending SET; the
 bridge settles 1 s more, then applies only changed fields (both in one pass
 when both changed — a thinking-only change skips model selection).
 The helper only runs on the Mac.
-On-device UI lives in `desk-control/` (3.5" ST7796 480x320). Edit
+On-device UI lives in `ai-model-control/` (3.5" ST7796 480x320). Edit
 on Hetzner codex, push, pull the Mac, then flash on the Mac. Firmware keeps the last
 model/thinking in NVS for boot, the last model per app, and the last thinking
 level per app+model. Empty NVS (first flash) defaults ChatGPT to GPT-5.6 Luna
@@ -72,13 +72,13 @@ Cursor Grok 4.6, Composer 2.5, Claude Opus 5, GPT-5.6 Sol, Claude Fable 5,
 GPT-5.6 Terra, GPT-5.6 Luna). The helper uses `ENABLED` so Command-/ Down
 counts match that list.
 
-### desk-control locked view mapping
+### ai-model-control locked view mapping
 
 Desk pose (photo reference): glass left of breadboard, pins toward the ESP32,
 USB toward the bottom of the frame. UI must read upright in that pose
 (ChatGPT title at top of glass).
 
-Locked ST7796 settings in `desk-control/main/display.c`:
+Locked ST7796 settings in `ai-model-control/main/display.c`:
 
 - `invert_color(true)`, RGB, SPI 26 MHz
 - `swap_xy(true)`, `mirror(true, true)` plus the internal-RAM soft-180 band
@@ -283,7 +283,7 @@ do not reorder it to match visual placement on the board.
 
 Right highlights the first supported effort; use its zero-based menu index for
 Down presses, then Return once, then Escape twice to close the menus. Per-model
-ranges live in `desk-control/main/catalog.c` (keep Swift `Catalog.swift`
+ranges live in `ai-model-control/main/catalog.c` (keep Swift `Catalog.swift`
 aligned). Auto, Composer 2.5, and several Claude/Gemini/GPT/Kimi rows have no
 effort support. Cursor Grok 4.6 is Low–Extra High; Claude Opus 5 / Fable 5 add
 Max; GPT-5.6 Sol/Terra/Luna add None and Max. Gemini 3.6 Flash starts at

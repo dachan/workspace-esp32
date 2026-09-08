@@ -11,9 +11,9 @@ a portable virtual pet.
 - `rainbow-wave/` — standalone eight-pixel WS2812B firmware.
 - `super-tamagotchi/` — portable ESP32-S3 virtual-pet firmware, including the
   native creature simulator and the display, touch, and audio drivers.
-- `desk-control/` — ESP32-S3 desk panel (ST7796) for model/thinking control across
+- `ai-model-control/` — ESP32-S3 desk panel (ST7796) for model/thinking control across
   ChatGPT, Cursor, and OpenCode, plus
-  `desk-control/mac-chatgpt-bridge/` macOS CLI that applies encoder `SET` lines over USB
+  `ai-model-control/mac-chatgpt-bridge/` macOS CLI that applies encoder `SET` lines over USB
   serial while a supported app is focused (`--watch --send-serial`).
 
 ## Wiring
@@ -37,7 +37,7 @@ Super Tamagotchi firmware --SPI/I2C--> display and touch
 | Shared drivers | [hardware-test/README.md](hardware-test/README.md) |
 | Standalone LED demo | [rainbow-wave/README.md](rainbow-wave/README.md) |
 | Super Tamagotchi | [README](super-tamagotchi/README.md) · [WIRING](super-tamagotchi/WIRING.md) |
-| Desk control macOS bridge | [desk-control/mac-chatgpt-bridge/README.md](desk-control/mac-chatgpt-bridge/README.md) |
+| Desk control macOS bridge | [ai-model-control/mac-chatgpt-bridge/README.md](ai-model-control/mac-chatgpt-bridge/README.md) |
 
 Set `IDF_PATH` to a local ESP-IDF installation before using the flash scripts.
 

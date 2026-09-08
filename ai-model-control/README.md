@@ -1,4 +1,4 @@
-# desk-control
+# ai-model-control
 
 ESP32-S3 desk controller for **model** and **thinking** selection across
 ChatGPT, Cursor, and OpenCode

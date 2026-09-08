@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(desk-control)
+project(ai-model-control)
 
 # Archive the active build artifact only after binary generation succeeds.
 add_custom_command(
