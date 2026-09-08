@@ -15,6 +15,8 @@ static const char *TAG = "model_nvs";
 static const char *NS = "cgpt";
 static const char *KEY_MODEL = "model";
 static const char *KEY_THINK = "think";
+static const char *KEY_LAST_G = "last_g";
+static const char *KEY_LAST_C = "last_c";
 static const char *KEY_EFFORT = "effort";
 
 #define EFFORT_BLOB_VER 1
@@ -35,6 +37,7 @@ typedef struct __attribute__((packed)) {
 } effort_blob_t;
 
 static effort_blob_t s_effort;
+static char s_last_model[2][EFFORT_MODEL_MAX];
 
 static void copy_trunc(char *dst, size_t dst_sz, const char *src)
 {
@@ -72,7 +75,26 @@ static void seed_if_empty(const model_fields_t *fields, bool cursor)
     if (find_slot(cursor, fields->model) >= 0) {
         return;
     }
-    model_nvs_remember_effort_for(fields, cursor);
+    model_nvs_remember_for(fields, cursor);
+}
+
+static void load_last_model(nvs_handle_t h, const char *key, char *out, size_t out_sz)
+{
+    size_t len = out_sz;
+    if (nvs_get_str(h, key, out, &len) != ESP_OK) {
+        out[0] = '\0';
+    }
+}
+
+static void seed_last_model(const model_fields_t *fields, bool cursor)
+{
+    char *slot = s_last_model[cursor ? 1 : 0];
+    if (slot[0] || !fields->has_model) {
+        return;
+    }
+    if (catalog_model_index_in(cursor, fields->model) >= 0) {
+        copy_trunc(slot, EFFORT_MODEL_MAX, fields->model);
+    }
 }
 
 esp_err_t model_nvs_init(void)
@@ -89,6 +111,7 @@ int model_nvs_load(model_fields_t *out)
 {
     memset(out, 0, sizeof(*out));
     memset(&s_effort, 0, sizeof(s_effort));
+    memset(s_last_model, 0, sizeof(s_last_model));
     s_effort.version = EFFORT_BLOB_VER;
 
     nvs_handle_t h;
@@ -117,13 +140,19 @@ int model_nvs_load(model_fields_t *out)
         s_effort = blob;
         s_effort.version = EFFORT_BLOB_VER;
     }
+    load_last_model(h, KEY_LAST_G, s_last_model[0], sizeof(s_last_model[0]));
+    load_last_model(h, KEY_LAST_C, s_last_model[1], sizeof(s_last_model[1]));
 
     nvs_close(h);
     if (out->has_model) {
         seed_if_empty(out, false);
         seed_if_empty(out, true);
-        ESP_LOGI(TAG, "loaded cache model='%s' thinking='%s' efforts=%u",
-                 out->model, out->has_thinking ? out->thinking : "-", s_effort.count);
+        seed_last_model(out, false);
+        seed_last_model(out, true);
+        ESP_LOGI(TAG, "loaded cache model='%s' thinking='%s' efforts=%u last_g='%s' last_c='%s'",
+                 out->model, out->has_thinking ? out->thinking : "-", s_effort.count,
+                 s_last_model[0][0] ? s_last_model[0] : "-",
+                 s_last_model[1][0] ? s_last_model[1] : "-");
     }
     return out->has_model;
 }
@@ -133,7 +162,7 @@ esp_err_t model_nvs_save(const model_fields_t *fields)
     if (!fields || !fields->has_model || fields->model[0] == '\0') {
         return ESP_ERR_INVALID_ARG;
     }
-    model_nvs_remember_effort(fields);
+    model_nvs_remember(fields);
 
     nvs_handle_t h;
     esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
@@ -154,6 +183,20 @@ esp_err_t model_nvs_save(const model_fields_t *fields)
         }
     }
     if (err == ESP_OK) {
+        err = s_last_model[0][0] ? nvs_set_str(h, KEY_LAST_G, s_last_model[0])
+                                 : nvs_erase_key(h, KEY_LAST_G);
+        if (err == ESP_ERR_NVS_NOT_FOUND) {
+            err = ESP_OK;
+        }
+    }
+    if (err == ESP_OK) {
+        err = s_last_model[1][0] ? nvs_set_str(h, KEY_LAST_C, s_last_model[1])
+                                 : nvs_erase_key(h, KEY_LAST_C);
+        if (err == ESP_ERR_NVS_NOT_FOUND) {
+            err = ESP_OK;
+        }
+    }
+    if (err == ESP_OK) {
         s_effort.version = EFFORT_BLOB_VER;
         err = nvs_set_blob(h, KEY_EFFORT, &s_effort, sizeof(s_effort));
     }
@@ -170,15 +213,16 @@ esp_err_t model_nvs_save(const model_fields_t *fields)
     return err;
 }
 
-void model_nvs_remember_effort_for(const model_fields_t *fields, bool cursor)
+void model_nvs_remember_for(const model_fields_t *fields, bool cursor)
 {
-    if (!fields || !fields->has_model || !fields->has_thinking) {
-        return;
-    }
-    if (fields->model[0] == '\0' || fields->thinking[0] == '\0') {
+    if (!fields || !fields->has_model || fields->model[0] == '\0') {
         return;
     }
     if (catalog_model_index_in(cursor, fields->model) < 0) {
+        return;
+    }
+    copy_trunc(s_last_model[cursor ? 1 : 0], EFFORT_MODEL_MAX, fields->model);
+    if (!fields->has_thinking || fields->thinking[0] == '\0') {
         return;
     }
     if (catalog_thinking_count_in(cursor, fields->model) == 0) {
@@ -198,16 +242,45 @@ void model_nvs_remember_effort_for(const model_fields_t *fields, bool cursor)
                fields->thinking);
 }
 
-void model_nvs_remember_effort(const model_fields_t *fields)
+void model_nvs_remember(const model_fields_t *fields)
 {
-    model_nvs_remember_effort_for(fields, front_title_is_cursor());
+    model_nvs_remember_for(fields, front_title_is_cursor());
 }
 
-void model_nvs_restore_effort_for(model_fields_t *fields, bool cursor)
+void model_nvs_restore_for(model_fields_t *fields, bool cursor)
+{
+    if (!fields) {
+        return;
+    }
+    const char *saved = s_last_model[cursor ? 1 : 0];
+    if (saved[0] && catalog_model_index_in(cursor, saved) >= 0) {
+        snprintf(fields->model, sizeof(fields->model), "%s", saved);
+        fields->has_model = 1;
+    } else if (!fields->has_model || catalog_model_index_in(cursor, fields->model) < 0) {
+        snprintf(fields->model, sizeof(fields->model), "%s", catalog_model_at_in(cursor, 0));
+        fields->has_model = 1;
+    }
+    if (catalog_thinking_count_in(cursor, fields->model) == 0) {
+        return;
+    }
+    int slot = find_slot(cursor, fields->model);
+    if (slot >= 0 && s_effort.slots[slot].thinking[0]) {
+        snprintf(fields->thinking, sizeof(fields->thinking), "%s", s_effort.slots[slot].thinking);
+        fields->has_thinking = 1;
+        return;
+    }
+    if (!fields->has_thinking) {
+        snprintf(fields->thinking, sizeof(fields->thinking), "%s", "Medium");
+        fields->has_thinking = 1;
+    }
+}
+
+void model_nvs_restore_effort(model_fields_t *fields)
 {
     if (!fields || !fields->has_model) {
         return;
     }
+    bool cursor = front_title_is_cursor();
     if (catalog_thinking_count_in(cursor, fields->model) == 0) {
         return;
     }
@@ -217,9 +290,4 @@ void model_nvs_restore_effort_for(model_fields_t *fields, bool cursor)
     }
     snprintf(fields->thinking, sizeof(fields->thinking), "%s", s_effort.slots[slot].thinking);
     fields->has_thinking = 1;
-}
-
-void model_nvs_restore_effort(model_fields_t *fields)
-{
-    model_nvs_restore_effort_for(fields, front_title_is_cursor());
 }

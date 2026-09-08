@@ -50,6 +50,18 @@ static void draw_wrapped(int x, int y, int max_w, const char *text, uint16_t fg,
 }
 
 
+static int s_sync_x;
+static int s_sync_y;
+static int s_sync_w;
+static int s_sync_h;
+
+bool ui_hit_sync(int x, int y)
+{
+    const int pad = 6;
+    return s_sync_w > 0 && x >= s_sync_x - pad && x < s_sync_x + s_sync_w + pad
+        && y >= s_sync_y - pad && y < s_sync_y + s_sync_h + pad;
+}
+
 static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_level,
                               uint16_t track, uint16_t fill)
 {
@@ -143,6 +155,22 @@ esp_err_t ui_render(const model_fields_t *fields)
         const int level = fields->has_thinking ? catalog_thinking_level(fields->model, thinking) : 0;
         draw_thinking_bar(bar_x, bar_y, bar_w, bar_h, level, catalog_thinking_count(fields->model), track, bar_fill);
         font_draw_text(20, bar_y + bar_h + value_gap, thinking, text, card, 1);
+    }
+
+    /* SYNC sits left of the version string on the same baseline row. */
+    {
+        const char *label_sync = "SYNC";
+        const int scale = 1;
+        const int pad_x = 14;
+        const int pad_y = 10;
+        const int tw = font_text_width(label_sync, scale);
+        const int th = 7 * scale;
+        s_sync_w = tw + pad_x * 2;
+        s_sync_h = th + pad_y * 2;
+        s_sync_x = 20;
+        s_sync_y = DISPLAY_HEIGHT - 12 - s_sync_h;
+        display_fill_rect(s_sync_x, s_sync_y, s_sync_w, s_sync_h, track);
+        font_draw_text(s_sync_x + pad_x, s_sync_y + pad_y, label_sync, text, track, scale);
     }
 
     /* Version bottom-right. */

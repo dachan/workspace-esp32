@@ -19,7 +19,8 @@ it for later.
 4. If ChatGPT or Cursor is focused, apply using that app's shortcuts.
    Applies start 1 s after the last
    received change so both knobs land in one pass, and a field equal to
-   the last value applied to that app is skipped. Serial is drained during
+   the last value applied to that app is skipped unless the panel sent
+   `PUSH` (SYNC tap). Serial is drained during
    delays; a newer SET aborts and re-targets.
    - ChatGPT / Codex model: Control-Shift-M (picker opens on Astra), Down
      to the ESP dial index, Return.

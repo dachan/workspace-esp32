@@ -52,8 +52,10 @@ when both changed — a thinking-only change skips model selection).
 The helper only runs on the Mac.
 On-device UI lives in `chatgpt-model-display/` (3.5\" ST7796 480x320). Edit
 and flash on the Mac; pull Hetzner codex after push. Firmware keeps the last
-model/thinking in NVS for boot, and the last thinking level per app+model so
-the dial restores it when switching models.
+model/thinking in NVS for boot, the last model per app, and the last thinking
+level per app+model. Switching ChatGPT ↔ Cursor restores that app's last
+model and effort. A SYNC tap sends PUSH plus new STATE revisions so the
+helper reapplies even if it already posted those values.
 
 ### chatgpt-model-display locked view mapping
 
@@ -167,7 +169,9 @@ GPT-6 Astra through GPT-5.5 on ChatGPT, Auto through GPT-5.6 Luna on Cursor
 If neither ChatGPT nor Cursor is focused, the bridge must not activate them.
 Encoder changes remain on the ESP32 display/NVS and the bridge drops them;
 there is no queue, no CANCEL button, and no deferred apply when one of those
-apps returns to the foreground. Focus lost mid-apply drops the change as well;
+apps returns to the foreground. Tap SYNC on the glass to push the current
+panel model and thinking to the focused app. Focus lost mid-apply drops the
+change as well;
 only a failed or superseded attempt retries, and only while that app stays
 focused. ChatGPT applies via Control-Shift-M
 (Down from Astra) and absolute Ctrl+Shift+, / Ctrl+Shift-.; Cursor applies

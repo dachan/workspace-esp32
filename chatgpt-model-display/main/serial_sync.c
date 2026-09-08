@@ -20,6 +20,7 @@ typedef struct {
 
 static sync_field_t s_fields[] = {{.kind = "MODEL"}, {.kind = "THINKING"}};
 static bool s_acknowledged_protocol;
+static bool s_push;
 
 static void update_field(sync_field_t *field, const char *value, bool local_change)
 {
@@ -39,6 +40,23 @@ void serial_sync_update(const model_fields_t *fields, bool local_change)
 {
     update_field(&s_fields[0], fields->has_model ? fields->model : "", local_change);
     update_field(&s_fields[1], fields->has_thinking ? fields->thinking : "", local_change);
+}
+
+void serial_sync_push(const model_fields_t *fields)
+{
+    serial_sync_update(fields, false);
+    TickType_t now = xTaskGetTickCount();
+    for (size_t i = 0; i < 2; i++) {
+        sync_field_t *field = &s_fields[i];
+        if (!field->value[0]) {
+            continue;
+        }
+        field->revision = ((uint64_t)esp_random() << 32) | esp_random();
+        field->pending = true;
+        field->started_at = now;
+        field->wait_ticks = 0;
+    }
+    s_push = s_acknowledged_protocol;
 }
 
 bool serial_sync_handle_line(const char *line)
@@ -72,6 +90,12 @@ bool serial_sync_handle_line(const char *line)
 
 void serial_sync_poll(void)
 {
+    if (s_push) {
+        if (!serial_model_write_line("PUSH")) {
+            return;
+        }
+        s_push = false;
+    }
     for (size_t i = 0; i < 2; i++) {
         sync_field_t *field = &s_fields[i];
         TickType_t now = xTaskGetTickCount();

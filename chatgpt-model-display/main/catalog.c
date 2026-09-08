@@ -44,11 +44,6 @@ static const char *const *models_table(bool cursor, int *count)
     return chatgpt_models;
 }
 
-static const char *const *active_models(int *count)
-{
-    return models_table(front_title_is_cursor(), count);
-}
-
 static const char *const *thinking_table(bool cursor, const char *model, int *count)
 {
     if (cursor) {
@@ -76,15 +71,25 @@ static const char *const *active_thinking(const char *model, int *count)
 
 int catalog_model_count(void)
 {
+    return catalog_model_count_in(front_title_is_cursor());
+}
+
+int catalog_model_count_in(bool cursor)
+{
     int count;
-    active_models(&count);
+    models_table(cursor, &count);
     return count;
 }
 
 const char *catalog_model_at(int index)
 {
+    return catalog_model_at_in(front_title_is_cursor(), index);
+}
+
+const char *catalog_model_at_in(bool cursor, int index)
+{
     int count;
-    const char *const *names = active_models(&count);
+    const char *const *names = models_table(cursor, &count);
     if (index < 0 || index >= count) {
         return names[0];
     }

@@ -29,6 +29,7 @@ enum Keys {
         Effort: Command-/, Left, Up, Right directly into Reasoning,
         then Down to the level and Return once, then Escape twice to close the menus. Chat/agent input must be focused.
         Fast/Slow is not set from the dial.
+        Tap SYNC on the panel to reapply the current model and thinking.
       Serial is drained during key delays so a newer SET supersedes in-flight apply.
     """
 

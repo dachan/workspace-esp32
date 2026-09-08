@@ -24,6 +24,7 @@ final class BridgeRuntime {
     private var receivedModel: String?
     private var receivedThinking: String?
     private var lastApplied: [DeskKind: [SettingKind: String]] = [:]
+    private var forceApply = false
 
     init(options: Options) {
         self.options = options
@@ -49,6 +50,7 @@ final class BridgeRuntime {
         }
         // Changes are never deferred: without focus the dial state lives on the panel only.
         guard DeskFront.isForeground(preferred: options.bundleID) else {
+            forceApply = false
             discardPending("ChatGPT/Cursor is not focused")
             print("\(stamp()) ignored \(update.kind.rawValue) \(value) (ChatGPT/Cursor is not focused)")
             fflush(stdout)
@@ -60,7 +62,8 @@ final class BridgeRuntime {
         }
         pending[update.kind] = value
         // Batch paired knob turns: apply 1 s after the last received change.
-        settleAt = ProcessInfo.processInfo.systemUptime + 1.0
+        // PUSH (sync button) skips the 1 s batch window.
+        settleAt = ProcessInfo.processInfo.systemUptime + (forceApply ? 0.4 : 1.0)
         retryAt = 0
         lastFailure = nil
         print("\(stamp()) rx \(update.kind.rawValue) \(value)")
@@ -75,6 +78,7 @@ final class BridgeRuntime {
         pending.removeAll()
         retryAt = 0
         lastFailure = nil
+        forceApply = false
         print("\(stamp()) dropped \(dropped.joined(separator: ", ")) (\(reason))")
         fflush(stdout)
     }
@@ -82,6 +86,17 @@ final class BridgeRuntime {
     private func drainSerial() {
         guard let session else { return }
         for raw in session.readLines() {
+            if raw == "PUSH" {
+                forceApply = true
+                if let model = receivedModel { pending[.model] = model }
+                if let thinking = receivedThinking { pending[.thinking] = thinking }
+                settleAt = ProcessInfo.processInfo.systemUptime + 0.4
+                retryAt = 0
+                lastFailure = nil
+                print("\(stamp()) rx PUSH")
+                fflush(stdout)
+                continue
+            }
             if let update = SerialBridge.parseInbound(raw) { receive(update) }
         }
         session.setPanelFront(DeskFront.panelTitle(preferred: options.bundleID))
@@ -96,9 +111,12 @@ final class BridgeRuntime {
                 return
             }
             let now = ProcessInfo.processInfo.systemUptime
-            guard now >= retryAt, now >= settleAt,
-                  let kind = SettingKind.allCases.first(where: { pending[$0] != nil }),
-                  let value = pending[kind] else { return }
+            guard now >= retryAt, now >= settleAt else { return }
+            guard let kind = SettingKind.allCases.first(where: { pending[$0] != nil }),
+                  let value = pending[kind] else {
+                forceApply = false
+                return
+            }
             let pulse: () -> Bool = {
                 self.drainSerial()
                 return self.pending[kind] != value
@@ -115,19 +133,22 @@ final class BridgeRuntime {
                 continue
             }
             // Re-apply only fields that changed since the last apply to this app.
-            var droppedUnchanged = false
-            for settled in SettingKind.allCases {
-                if appKind == .cursor && settled == .thinking,
-                   let model = pending[.model], lastApplied[appKind]?[.model] != model { continue }
-                guard let waiting = pending[settled],
-                      lastApplied[appKind]?[settled] == waiting else { continue }
-                pending.removeValue(forKey: settled)
-                print("\(stamp()) skip \(settled.rawValue) \(waiting) (unchanged)")
-                droppedUnchanged = true
-            }
-            if droppedUnchanged {
-                fflush(stdout)
-                continue
+            // PUSH forces a replay even when the helper already posted these values.
+            if !forceApply {
+                var droppedUnchanged = false
+                for settled in SettingKind.allCases {
+                    if appKind == .cursor && settled == .thinking,
+                       let model = pending[.model], lastApplied[appKind]?[.model] != model { continue }
+                    guard let waiting = pending[settled],
+                          lastApplied[appKind]?[settled] == waiting else { continue }
+                    pending.removeValue(forKey: settled)
+                    print("\(stamp()) skip \(settled.rawValue) \(waiting) (unchanged)")
+                    droppedUnchanged = true
+                }
+                if droppedUnchanged {
+                    fflush(stdout)
+                    continue
+                }
             }
             let result: Switcher.Result
             if appKind == .cursor,

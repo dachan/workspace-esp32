@@ -19,7 +19,14 @@ ESP → Mac: STATE <16-hex revision> MODEL <name>
 ESP → Mac: STATE <16-hex revision> THINKING <level>
 Mac → ESP: ACK <16-hex revision> MODEL
 Mac → ESP: ACK <16-hex revision> THINKING
+ESP → Mac: PUSH
+ESP → Mac: STATE <16-hex revision> MODEL <name>
+ESP → Mac: STATE <16-hex revision> THINKING <level>
 ```
+
+`PUSH` is sent when the panel's SYNC button is tapped. It precedes new
+MODEL/THINKING revisions so the helper reapplies them even if it already
+posted those values to the focused app.
 
 Each changed field gets a new revision, including after firmware restart.
 Unacknowledged state retries every 0.5 s; a full USB transmit buffer retries after
@@ -36,7 +43,8 @@ or `FRONT ChatGPT` when the focused desk app changes so the top-left brand
 lockup matches; it falls back to ChatGPT when neither is focused.
 
 A five-second press-and-hold anywhere on the glass starts a five-point touch
-calibration.
+calibration. A short tap on **SYNC** (bottom left) asks the helper to apply
+the current panel model and thinking to the focused app.
 
 Before the first `SYNC`, firmware uses the legacy `SET MODEL <name>` and
 `SET THINKING <level>` lines. The current helper accepts these from older firmware,
@@ -54,10 +62,12 @@ are discarded through the next newline. Transmissions include a leading newline
 to recover framing after a disconnect mid-transfer.
 
 Changed values are saved once per input pass to NVS (`cgpt`/`model`,`think`
-for the last displayed pair, plus `cgpt`/`effort` for each app's last thinking
-level per model) and reloaded on boot. Changing models restores that model's
-saved effort for the focused app; a first visit keeps the current level and
-clamps it. Unchanged values do not trigger persistence or display work.
+for the last displayed pair, `cgpt`/`last_g` and `last_c` for each app's last
+model, plus `cgpt`/`effort` for each app's last thinking level per model)
+and reloaded on boot. Changing models restores that model's saved effort for
+the focused app; switching ChatGPT ↔ Cursor restores that app's last model
+and effort. A first visit to a model keeps the current level and clamps it.
+Unchanged values do not trigger persistence or display work.
 
 Dial models follow the focused app. ChatGPT: GPT-6 Astra, GPT-5.6 Sol,
 GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5; thinking Light, Medium, High,
@@ -110,7 +120,9 @@ is Auto), then reopens it for Effort with Left, Up, Right, then Down-only to
 the level; Return selects, then Escape twice closes the menus. The bridge
 settles 1 s after the last received change, applies model and effort in one
 pass, and skips any field that matches what it last applied to that app — an
-effort-only change skips model selection. When neither is
+effort-only change skips model selection. A SYNC tap on the glass sends `PUSH`
+so the helper reapplies the current panel values anyway. Switching ChatGPT ↔
+Cursor restores that app's last model and effort on the panel. When neither is
 focused, encoder changes stay on the ESP32 display/NVS and the bridge discards
 them without activating either app; turning the knob again while ChatGPT or
 Cursor is focused is what applies a setting. Focus lost mid-apply discards the
@@ -159,14 +171,16 @@ swift build -c release
 
 - `main/main.c`: input/state coordination and save/paint retries.
 - `main/ui.c`: drawing; `display.c`: SPI and DMA ownership; `canvas.c`/`font.c`: pixels/text.
-- `main/front_title.c`: Mac `FRONT Cursor` / `FRONT ChatGPT` header selection.
+- `main/front_title.c`: Mac `FRONT Cursor` / `FRONT ChatGPT` header selection
+  and last-model restore when the focused app changes.
 - `main/logo.c`: header brand masks generated from `assets/` by
   `scripts/generate_logos.py`; re-run it (needs Pillow) after changing the
   artwork or its target height, and commit the result.
 - `main/encoder.c`: existing GPIO/PCNT decoding and rate-limited step emission.
 - `main/serial_model.c`: bounded framing and legacy display commands.
 - `main/serial_sync.c`: state revisions, settling, snapshots, and ACK retries.
-- `main/model_nvs.c`: persistence of the current pair and per-app per-model effort;
+- `main/model_nvs.c`: persistence of the current pair, last model per app, and
+  per-app per-model effort;
   `model_parse.c`: legacy combined-name parsing.
 
 Display rotation, the internal-RAM 180-degree band blit, and encoder pin/direction

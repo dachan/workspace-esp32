@@ -4,6 +4,7 @@
 
 static bool s_is_cursor;
 static bool s_dirty;
+static bool s_received;
 
 bool front_title_apply_line(const char *line)
 {
@@ -15,6 +16,7 @@ bool front_title_apply_line(const char *line)
     } else {
         return false;
     }
+    s_received = true;
     if (s_is_cursor != is_cursor) {
         s_is_cursor = is_cursor;
         s_dirty = true;
@@ -25,6 +27,11 @@ bool front_title_apply_line(const char *line)
 bool front_title_is_cursor(void)
 {
     return s_is_cursor;
+}
+
+bool front_title_received(void)
+{
+    return s_received;
 }
 
 bool front_title_needs_paint(void)

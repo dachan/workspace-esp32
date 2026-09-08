@@ -3,7 +3,9 @@
 #include <stdbool.h>
 
 int catalog_model_count(void);
+int catalog_model_count_in(bool cursor);
 const char *catalog_model_at(int index);
+const char *catalog_model_at_in(bool cursor, int index);
 int catalog_model_index(const char *name);
 int catalog_model_index_in(bool cursor, const char *name);
 bool catalog_model_known(const char *name);

@@ -60,7 +60,7 @@ static bool apply_model_delta(model_fields_t *fields, int delta)
     if (fields->has_model && strcmp(fields->model, name) == 0) {
         return false;
     }
-    model_nvs_remember_effort(fields);
+    model_nvs_remember(fields);
     snprintf(fields->model, sizeof(fields->model), "%s", name);
     fields->has_model = 1;
     model_nvs_restore_effort(fields);
@@ -116,6 +116,7 @@ void app_main(void)
     serial_sync_update(&fields, false);
 
     bool was_cursor = false;
+    bool front_ready = false;
     bool hold_calibrated = false;
     bool paint_pending = true;
     bool hold_rx = false;
@@ -144,6 +145,9 @@ void app_main(void)
             touch_clear_state();
             paint_pending = true;
         }
+        if (touch.released && touch.held_ms < 800 && ui_hit_sync(touch.x, touch.y)) {
+            serial_sync_push(&fields);
+        }
         bool local_changed = apply_model_delta(&fields, model_delta);
         if (local_changed) adapt_fields_for_front(&fields);
         local_changed |= apply_thinking_delta(&fields, thinking_delta);
@@ -156,7 +160,7 @@ void app_main(void)
         }
         if (local_changed) {
             adapt_fields_for_front(&fields);
-            model_nvs_remember_effort(&fields);
+            model_nvs_remember(&fields);
             hold_rx = true;
             local_changed_at = now;
             serial_sync_update(&fields, true);
@@ -171,17 +175,23 @@ void app_main(void)
         if (serial_model_poll(&incoming) && !hold_rx) {
             fields = incoming;
             adapt_fields_for_front(&fields);
-            model_nvs_remember_effort(&fields);
+            model_nvs_remember(&fields);
             serial_sync_update(&fields, false);
         }
         serial_sync_poll();
-        if (front_title_is_cursor() != was_cursor) {
-            model_nvs_remember_effort_for(&fields, was_cursor);
-            model_nvs_restore_effort_for(&fields, front_title_is_cursor());
-            adapt_fields_for_front(&fields);
-            model_nvs_remember_effort(&fields);
-            was_cursor = front_title_is_cursor();
-            serial_sync_update(&fields, true);
+        if (front_title_received()) {
+            bool cursor = front_title_is_cursor();
+            if (!front_ready || cursor != was_cursor) {
+                if (front_ready) {
+                    model_nvs_remember_for(&fields, was_cursor);
+                }
+                model_nvs_restore_for(&fields, cursor);
+                adapt_fields_for_front(&fields);
+                model_nvs_remember_for(&fields, cursor);
+                was_cursor = cursor;
+                front_ready = true;
+                serial_sync_update(&fields, true);
+            }
         }
         if (!same_fields(&before, &fields)) {
             save_pending = fields.has_model;

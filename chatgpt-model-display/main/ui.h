@@ -4,3 +4,4 @@
 #include "model_parse.h"
 
 esp_err_t ui_render(const model_fields_t *fields);
+bool ui_hit_sync(int x, int y);
