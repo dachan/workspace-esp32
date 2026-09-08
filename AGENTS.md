@@ -12,22 +12,23 @@ Read the relevant project README and `super-tamagotchi/WIRING.md` before
 changing firmware or connecting hardware.
 
 
-## Agent workflow (Mac first, then server)
+## Agent workflow (Hetzner edit, Mac flash)
 
 Hard lanes for this repo:
 
-- **Edit locally on the Mac** at `~/Development/workspace-esp32` (commit and
-  push from the Mac). Do not treat Hetzner `/home/david` as a place to edit
-  this codebase (`david` is for prod serving of other apps).
-- After Mac changes land on GitHub, **pull on Hetzner codex**
-  (`/home/codex/workspace-esp32`) so the server clone stays in sync. Prefer
-  connecting as `codex` for any server-side browse/write of this tree.
-- When the user asks to **flash**, use the **Mac workstation clone** and the
-  connected serial device there. Do not flash from Hetzner.
+- **Edit on Hetzner as `codex`** at `/home/codex/workspace-esp32` (commit and
+  push from the server). Do not treat Hetzner `/home/david` as a place to edit
+  this codebase (`david` is for prod serving of other apps). Prefer connecting
+  as `codex` for any server-side browse/write of this tree.
+- After server changes land on GitHub, **pull on the Mac**
+  (`~/Development/workspace-esp32`) so the workstation clone stays in sync.
+- When the user asks to **flash** or run the Mac bridge helper, use the **Mac
+  workstation clone** and the connected serial device there. Do not flash from
+  Hetzner.
 - Do not keep a separate standalone `mac-chatgpt-bridge` folder on the Mac;
   use `chatgpt-model-display/mac-chatgpt-bridge/` inside this repo.
 - Keep Mac and server on the same branch/commit after every change:
-  edit on Mac → commit/push → pull on Hetzner codex (and flash from Mac when
+  edit on Hetzner codex → commit/push → pull on Mac (and flash from Mac when
   hardware work is requested).
 - After a branch merges into `main`, delete it from local and remote
   (`git branch -d <branch>` and `git push origin --delete <branch>`). Keep
@@ -59,8 +60,8 @@ Firmware waits 0.4 s after the last rotary detent before sending SET; the
 bridge settles 1 s more, then applies only changed fields (both in one pass
 when both changed — a thinking-only change skips model selection).
 The helper only runs on the Mac.
-On-device UI lives in `chatgpt-model-display/` (3.5\" ST7796 480x320). Edit
-and flash on the Mac; pull Hetzner codex after push. Firmware keeps the last
+On-device UI lives in `chatgpt-model-display/` (3.5" ST7796 480x320). Edit
+on Hetzner codex, push, pull the Mac, then flash on the Mac. Firmware keeps the last
 model/thinking in NVS for boot, the last model per app, and the last thinking
 level per app+model. Empty NVS (first flash) defaults ChatGPT to GPT-5.6 Luna
 Extra High and Cursor to Cursor Grok 4.6 Extra High. Switching ChatGPT ↔ Cursor
