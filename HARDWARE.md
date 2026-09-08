@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-07 (chatgpt-model-display v0.82 flash)
+Last inventory pass: 2026-09-07 (v0.82 reflash and latest-target Mac bridge rollout)
 
 ## radar-transmitter
 
@@ -66,5 +66,5 @@ Last inventory pass: 2026-09-07 (chatgpt-model-display v0.82 flash)
   - Software 180 flush: ON via internal-RAM band blit + SPI transfer sync (v 0.22+)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → OpenAI/Cursor brand lockup at top of glass, MODEL left, version bottom-right
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
-- Last verified: 2026-09-07 — v0.82 `app-flash` on `/dev/cu.usbmodem21201` (hash-verified); bridge reconnected; model CLK/DT wiring fault still open (see above)
+- Last verified: 2026-09-07 — v0.82 application-only reflash on `/dev/cu.usbmodem21201` (hash-verified), preserving NVS. Mac bridge from commit `820e3d7` restarted with Accessibility granted; serial state receipt, focus-loss target discard, and current-target keyboard posting observed in its log. Physical screen agreement and slow-dial behavior remain unverified; model CLK/DT wiring fault still open (see above).
 - Notes: edit+flash on Mac `~/Development/workspace-esp32`; push then pull Hetzner `/home/codex/workspace-esp32`
