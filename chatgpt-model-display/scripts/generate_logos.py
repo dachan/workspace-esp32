@@ -5,7 +5,7 @@ Each logo becomes an 8-bit coverage mask that display_blit_alpha() blends from
 the card colour toward white. Coverage is luminance x alpha so the Cursor cube
 keeps its three shaded faces instead of flattening into a silhouette.
 
-Requires Pillow. The output is committed, so this only needs to be re-run when
+Requires Pillow; SVG sources also require CairoSVG. The output is committed, so this only needs to be re-run when
 the artwork or the target heights change:
 
     python3 scripts/generate_logos.py
@@ -13,6 +13,7 @@ the artwork or the target heights change:
 
 from __future__ import annotations
 
+import io
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,7 +32,7 @@ class Logo:
     name: str
     source: str
     # Fraction of the cropped width holding a glyph that sits on the baseline
-    # without a descender or an oversized mark, used to align both logos to the
+    # without a descender or an oversized mark, used to align all logos to the
     # panel's text baseline.
     baseline_cols: tuple[float, float]
 
@@ -44,12 +45,20 @@ LOGO_HEIGHT = 24
 LOGOS = (
     Logo("cursor", "cursor-lockup-white.png", (0.30, 1.0)),
     Logo("openai", "openai-wordmark-white.png", (0.0, 0.17)),
+    Logo("opencode", "opencode-wordmark-dark.svg", (0.0, 0.10)),
 )
 
 
 def build(logo: Logo) -> tuple[Image.Image, int]:
     source = ROOT / "assets" / logo.source
-    image = Image.open(source).convert("RGBA")
+    if source.suffix.lower() == ".svg":
+        try:
+            import cairosvg
+        except ImportError:
+            sys.exit("CairoSVG is required for SVG artwork: python3 -m pip install CairoSVG")
+        image = Image.open(io.BytesIO(cairosvg.svg2png(url=str(source)))).convert("RGBA")
+    else:
+        image = Image.open(source).convert("RGBA")
     image = image.crop(image.getchannel("A").getbbox())
 
     luma = image.convert("L").load()

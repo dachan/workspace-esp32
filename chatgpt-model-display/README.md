@@ -230,7 +230,7 @@ commands; CLI callers supply `--set-model` together with `--set-thinking`.
 
 ## OpenCode
 
-`FRONT OpenCode` selects an OpenCode text header and the existing GPT dial
+`FRONT OpenCode` selects an OpenCode wordmark header and the existing GPT dial
 catalog. Its last model (`last_o`) and per-model effort (app ID 2 in `effort`)
 are stored separately from ChatGPT and Cursor. `FRONT None` retains that state.
 See the [OpenCode bridge mapping](mac-chatgpt-bridge/README.md#opencode) for

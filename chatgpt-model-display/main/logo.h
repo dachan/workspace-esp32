@@ -4,7 +4,7 @@
 
 /* Header brand artwork, generated into logo.c by scripts/generate_logos.py.
  * alpha is a row-major coverage mask with no row padding; baseline is the row
- * offset of the lettering's baseline so both logos align to the panel text. */
+ * offset of the lettering's baseline so all logos align to the panel text. */
 typedef struct {
     uint16_t width;
     uint16_t height;
@@ -14,3 +14,4 @@ typedef struct {
 
 extern const logo_t logo_cursor;
 extern const logo_t logo_openai;
+extern const logo_t logo_opencode;

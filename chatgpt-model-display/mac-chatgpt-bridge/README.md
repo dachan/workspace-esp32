@@ -163,7 +163,7 @@ commands; CLI callers supply `--set-model` together with `--set-thinking`.
 ## OpenCode
 
 The bridge recognizes the installed desktop app `ai.opencode.desktop` and sends
-`FRONT OpenCode`. The panel shows an OpenCode text header, uses the existing
+`FRONT OpenCode`. The panel shows an OpenCode wordmark header, uses the existing
 GPT dial catalog, and saves its selections separately (`last_o` and app ID 2
 in the existing effort blob). ChatGPT and Cursor keep their existing app IDs.
 
