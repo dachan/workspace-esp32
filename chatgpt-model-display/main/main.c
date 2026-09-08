@@ -147,6 +147,8 @@ void app_main(void)
         }
         if (touch.released && touch.held_ms < 800 && ui_hit_sync(touch.x, touch.y)) {
             serial_sync_push(&fields);
+            ui_sync_pulse();
+            paint_pending = true;
         }
         bool local_changed = apply_model_delta(&fields, model_delta);
         if (local_changed) adapt_fields_for_front(&fields);
@@ -198,6 +200,9 @@ void app_main(void)
             paint_pending = true;
         }
         if (clock_needs_paint() || front_title_needs_paint()) {
+            paint_pending = true;
+        }
+        if (ui_sync_tick()) {
             paint_pending = true;
         }
         now = xTaskGetTickCount();
