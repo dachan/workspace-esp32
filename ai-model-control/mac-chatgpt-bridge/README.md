@@ -87,6 +87,26 @@ Bind ChatGPT's three shortcuts if they are Unassigned. Cursor uses Command-/
 to open the model list (first Down is Auto). Firmware waits 0.4 s after the
 last encoder detent before sending a SET line.
 
+## Input guard
+
+Model and thinking changes share a temporary input filter for the focused app's
+process, including the waits between menu steps. Keyboard, pointer, click, and
+scroll events to that app are discarded while the bridge's tagged keys pass
+through. Discarded input is not replayed. Other apps and system shortcuts are
+not locked; leaving the target app interrupts the apply.
+
+The bridge waits for held keys and mouse buttons to be released before starting.
+Escape cancels the transaction. The filter is removed on every exit; an independent
+five-second watchdog disables it even if an Accessibility call stalls. Focus loss,
+Escape, or filter failure/timeout during an apply drops that target; use the dial
+or SYNC to try again. A newer dial state can supersede the current sequence.
+When creating the filter fails, the bridge posts no keys and reports a permission
+error (check Accessibility and Input Monitoring for the launching app).
+
+With a supported app focused, `chatgpt-bridge --check-input-guard` checks whether
+the filter can be enabled and immediately releases it without posting keys.
+This confirms availability, not physical input suppression or the app's selection.
+
 ## Requirements
 
 - macOS 13+

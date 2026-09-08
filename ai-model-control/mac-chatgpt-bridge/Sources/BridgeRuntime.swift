@@ -145,55 +145,61 @@ final class BridgeRuntime {
             return !focus.isCurrent || self.generation != revision
         }
 
+        let needsApply = snapshot.contains { kind, value in
+            if focus.kind == .cursor, kind == .model, Catalog.cursorPickerIndex(value) == nil { return false }
+            return lastApplied[pid]?[kind] != value
+        }
+        guard needsApply else { return }
+
         var guardInterrupted = false
         let guardedResult = InputGuard.protect(focus: focus) { inputGuard in
-        defer { guardInterrupted = !inputGuard.isValid }
-        let serialPulse = pulse
-        let pulse = { !inputGuard.isValid || serialPulse() }
-        // Finish one field at a time, always model before its dependent effort.
-        // Invalidate before posting: even a failed/interrupted sequence may mutate UI.
-        applyFields: for kind in SettingKind.allCases {
-            guard let value = snapshot[kind] else { continue }
-            if focus.kind == .cursor, kind == .model,
-               Catalog.cursorPickerIndex(value) == nil { continue }
-            if lastApplied[pid]?[kind] == value { continue }
-            if pulse() { break }
-            lastApplied[pid, default: [:]].removeValue(forKey: kind)
-            if kind == .model {
-                lastApplied[pid, default: [:]].removeValue(forKey: .thinking)
-            }
-            let result: Switcher.Result
-            switch kind {
-            case .model:
-                result = Switcher.model(value, preferredBundleID: options.bundleID, pulse: pulse)
-            case .thinking:
-                result = Switcher.thinking(
-                    value, model: lastApplied[pid]?[.model],
-                    preferredBundleID: options.bundleID, pulse: pulse
-                )
-            }
-            // A completed key sequence is usable only for the current target.
-            guard !pulse() else { break }
-            switch result {
-            case .applied(let path):
-                lastApplied[pid, default: [:]][kind] = value
-                lastFailure = nil
-                retryAt = 0
-                print("\(stamp()) posted \(kind.rawValue) \(value) via \(path)")
-                if kind == .model, focus.kind == .cursor,
-                   !Keys.wait(0.4, pulse: pulse) { break applyFields }
-            case .interrupted:
-                return .interrupted
-            case .failed(let message):
-                if message != lastFailure {
-                    fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)
+            defer { guardInterrupted = !inputGuard.isValid }
+            let serialPulse = pulse
+            let pulse = { !inputGuard.isValid || serialPulse() }
+            // Finish one field at a time, always model before its dependent effort.
+            // Invalidate before posting: even a failed/interrupted sequence may mutate UI.
+            applyFields: for kind in SettingKind.allCases {
+                guard let value = snapshot[kind] else { continue }
+                if focus.kind == .cursor, kind == .model,
+                   Catalog.cursorPickerIndex(value) == nil { continue }
+                if lastApplied[pid]?[kind] == value { continue }
+                if pulse() { break }
+                lastApplied[pid, default: [:]].removeValue(forKey: kind)
+                if kind == .model {
+                    lastApplied[pid, default: [:]].removeValue(forKey: .thinking)
                 }
-                lastFailure = message
-                retryAt = ProcessInfo.processInfo.systemUptime + 2
-                return .failed(message)
+                let result: Switcher.Result
+                switch kind {
+                case .model:
+                    result = Switcher.model(value, preferredBundleID: options.bundleID, pulse: pulse)
+                case .thinking:
+                    result = Switcher.thinking(
+                        value, model: lastApplied[pid]?[.model],
+                        preferredBundleID: options.bundleID, pulse: pulse
+                    )
+                }
+                // A completed key sequence is usable only for the current target.
+                guard !pulse() else { break }
+                switch result {
+                case .applied(let path):
+                    lastApplied[pid, default: [:]][kind] = value
+                    lastFailure = nil
+                    retryAt = 0
+                    print("\(stamp()) posted \(kind.rawValue) \(value) via \(path)")
+                    if kind == .model, focus.kind == .cursor,
+                       !Keys.wait(0.4, pulse: pulse) { break applyFields }
+                case .interrupted:
+                    return .interrupted
+                case .failed(let message):
+                    if message != lastFailure {
+                        fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)
+                    }
+                    lastFailure = message
+                    retryAt = ProcessInfo.processInfo.systemUptime + 2
+                    return .failed(message)
+                }
             }
-        }
-        return inputGuard.isValid ? .applied(path: "guarded transaction") : .interrupted
+            return inputGuard.isValid ? .applied(path: "guarded transaction") : .interrupted
         }
         if case .failed(let message) = guardedResult {
             if message != lastFailure { fputs("chatgpt-bridge: \(message)\n", stderr) }

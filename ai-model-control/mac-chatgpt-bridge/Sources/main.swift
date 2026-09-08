@@ -28,6 +28,17 @@ func run() -> Int32 {
         print(trusted ? "accessibility: granted" : "accessibility: missing")
         return trusted ? 0 : 2
     }
+    if options.checkInputGuard {
+        guard AXTrust.require(prompt: true),
+              let focus = FocusOperation(preferred: options.bundleID) else {
+            fputs("chatgpt-bridge: focus a supported app to check its input guard\n", stderr)
+            return 2
+        }
+        let result = InputGuard.protect(focus: focus) { _ in
+            .applied(path: "input guard available for \(focus.displayName); no keys posted")
+        }
+        return report(result)
+    }
     if options.front {
         printFront(preferred: options.bundleID)
         return DeskFront.isForeground(preferred: options.bundleID) ? 0 : 1
@@ -64,7 +75,7 @@ func report(_ result: Switcher.Result) -> Int32 {
         print("applied via \(path)")
         return 0
     case .interrupted:
-        fputs("chatgpt-bridge: operation interrupted by a focus change\n", stderr)
+        fputs("chatgpt-bridge: operation interrupted by focus loss, Escape, or input guard timeout\n", stderr)
     case .failed(let message):
         fputs("chatgpt-bridge: \(message)\n", stderr)
     }

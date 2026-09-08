@@ -184,6 +184,11 @@ panel updates immediately and SET waits 0.4 s after the last detent.
 
 ## Bridge watch
 
+The Mac helper temporarily filters user input to the focused app during each
+model/thinking apply. Escape cancels; focus loss or a five-second timeout releases
+the filter and drops the target. See [input guard](mac-chatgpt-bridge/README.md#input-guard)
+for permissions, held-input handling, and the availability check.
+
 ```sh
 cd mac-chatgpt-bridge
 swift build -c release

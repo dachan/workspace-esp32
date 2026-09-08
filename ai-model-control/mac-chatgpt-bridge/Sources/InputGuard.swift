@@ -33,6 +33,7 @@ final class InputGuard {
         else { return .failed("input guard waiting for held keys or mouse buttons to release") }
         let guardInput = InputGuard(focus: focus)
         guard guardInput.start() else {
+            guardInput.stop()
             return .failed("input guard unavailable; check Accessibility and Input Monitoring permissions")
         }
         current = guardInput

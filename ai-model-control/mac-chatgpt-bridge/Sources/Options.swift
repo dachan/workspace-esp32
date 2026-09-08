@@ -6,6 +6,7 @@ struct Options {
     var listPorts = false
     var hidInfo = false
     var checkAX = false
+    var checkInputGuard = false
     var front = false
     var watch = false
     var listen = false
@@ -33,6 +34,8 @@ func parseOptions(_ args: [String]) -> Options? {
             options.listPorts = true
         case "--hid-info":
             options.hidInfo = true
+        case "--check-input-guard":
+            options.checkInputGuard = true
         case "--check-ax":
             options.checkAX = true
         case "--front":
@@ -111,6 +114,7 @@ func usage() -> String {
       --bundle-id ID      Force ChatGPT, Codex, Cursor, or OpenCode
       --hid-info          Describe the keyboard control path
       --check-ax          Check Accessibility permission and exit
+      --check-input-guard Check input filter availability for the focused app; no keys posted
       --send-serial       Accepted for the old watch command; unused
       -h, --help
     """

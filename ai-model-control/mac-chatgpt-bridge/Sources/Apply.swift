@@ -20,28 +20,28 @@ enum Switcher {
             return .failed("ChatGPT, Cursor, or OpenCode is not focused")
         }
         return InputGuard.protect(focus: focus) { inputGuard in
-        let upstream = wrappedPulse(focus: focus, upstream: pulse)
-        let pulse = { !inputGuard.isValid || upstream() }
-        switch focus.kind {
-        case .openCode:
-            return OpenCodeApply.model(raw, focus: focus, pulse: pulse)
-        case .chatGPT:
-            guard let index = Catalog.chatgptModelIndex(raw), let name = Catalog.chatgptModelName(raw) else {
-                return .failed("unknown model \(raw)")
+            let upstream = wrappedPulse(focus: focus, upstream: pulse)
+            let pulse = { !inputGuard.isValid || upstream() }
+            switch focus.kind {
+            case .openCode:
+                return OpenCodeApply.model(raw, focus: focus, pulse: pulse)
+            case .chatGPT:
+                guard let index = Catalog.chatgptModelIndex(raw), let name = Catalog.chatgptModelName(raw) else {
+                    return .failed("unknown model \(raw)")
+                }
+                if pulse() {
+                    return .interrupted
+                }
+                return chatGPTModel(index: index, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
+            case .cursor:
+                guard let index = Catalog.cursorPickerIndex(raw), let name = Catalog.cursorModelName(raw) else {
+                    return .failed("unknown model \(raw)")
+                }
+                if pulse() {
+                    return .interrupted
+                }
+                return cursorModel(index: index, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
             }
-            if pulse() {
-                return .interrupted
-            }
-            return chatGPTModel(index: index, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
-        case .cursor:
-            guard let index = Catalog.cursorPickerIndex(raw), let name = Catalog.cursorModelName(raw) else {
-                return .failed("unknown model \(raw)")
-            }
-            if pulse() {
-                return .interrupted
-            }
-            return cursorModel(index: index, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
-        }
         }
     }
 
@@ -55,34 +55,34 @@ enum Switcher {
             return .failed("ChatGPT, Cursor, or OpenCode is not focused")
         }
         return InputGuard.protect(focus: focus) { inputGuard in
-        let upstream = wrappedPulse(focus: focus, upstream: pulse)
-        let pulse = { !inputGuard.isValid || upstream() }
-        switch focus.kind {
-        case .openCode:
-            return OpenCodeApply.thinking(raw, focus: focus, pulse: pulse)
-        case .chatGPT:
-            guard let target = Catalog.chatgptThinkingIndex(raw), let name = Catalog.chatgptThinkingName(raw) else {
-                return .failed("unknown thinking \(raw)")
+            let upstream = wrappedPulse(focus: focus, upstream: pulse)
+            let pulse = { !inputGuard.isValid || upstream() }
+            switch focus.kind {
+            case .openCode:
+                return OpenCodeApply.thinking(raw, focus: focus, pulse: pulse)
+            case .chatGPT:
+                guard let target = Catalog.chatgptThinkingIndex(raw), let name = Catalog.chatgptThinkingName(raw) else {
+                    return .failed("unknown thinking \(raw)")
+                }
+                if pulse() {
+                    return .interrupted
+                }
+                return chatGPTThinking(target: target, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
+            case .cursor:
+                guard let model, let levels = Catalog.cursorEfforts(for: model) else {
+                    return .failed("Cursor effort needs a known model; select a model with the dial first")
+                }
+                if levels.isEmpty { return .applied(path: "effort unsupported for \(model); skipped") }
+                guard let effort = Catalog.cursorEffort(raw, model: model) else {
+                    return .failed("unknown thinking \(raw)")
+                }
+                let (target, name) = effort
+                if pulse() { return .interrupted }
+                // Effort-only: open the popover and navigate directly to Reasoning.
+                return cursorSelectEffort(
+                    target: target, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse
+                )
             }
-            if pulse() {
-                return .interrupted
-            }
-            return chatGPTThinking(target: target, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
-        case .cursor:
-            guard let model, let levels = Catalog.cursorEfforts(for: model) else {
-                return .failed("Cursor effort needs a known model; select a model with the dial first")
-            }
-            if levels.isEmpty { return .applied(path: "effort unsupported for \(model); skipped") }
-            guard let effort = Catalog.cursorEffort(raw, model: model) else {
-                return .failed("unknown thinking \(raw)")
-            }
-            let (target, name) = effort
-            if pulse() { return .interrupted }
-            // Effort-only: open the popover and navigate directly to Reasoning.
-            return cursorSelectEffort(
-                target: target, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse
-            )
-        }
         }
     }
 

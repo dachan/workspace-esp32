@@ -37,6 +37,14 @@ Hard lanes for this repo:
 
 ## AI model control bridge
 
+`InputGuard.swift` protects each complete model/effort apply with a process-scoped
+active event tap. Keep bridge keys tagged in `Keys.swift`; user input is discarded,
+never queued. Do not post keys if the filter cannot start. Wait for held keys/buttons
+before acquisition, preserve serial supersession, and release on every exit. Escape,
+focus loss, disabled taps, and the independent five-second watchdog cancel the target.
+The `--check-input-guard` diagnostic acquires/releases without posting keys. A build
+or availability check does not verify physical input suppression.
+
 `ai-model-control/mac-chatgpt-bridge/` is a macOS CLI. Foreground is
 `NSWorkspace.frontmostApplication` (`com.openai.chat` / `com.openai.codex`
 or Cursor `com.todesktop.230313mzl4w4u92` or OpenCode `ai.opencode.desktop`). It never activates those apps.
