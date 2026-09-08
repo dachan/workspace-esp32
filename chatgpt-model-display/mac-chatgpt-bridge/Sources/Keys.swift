@@ -6,6 +6,7 @@ enum Keys {
     static let comma: UInt16 = 0x2B
     static let period: UInt16 = 0x2F
     static let m: UInt16 = 0x2E
+    static let l: UInt16 = 0x25
     static let slash: UInt16 = 0x2C
     static let escape: UInt16 = 0x35
     static let `return`: UInt16 = 0x24
@@ -19,6 +20,9 @@ enum Keys {
     Keyboard path (Mac helper)
       Foreground: NSWorkspace.frontmostApplication (ChatGPT, Codex, or Cursor).
       The helper never activates those apps; keys fire only while one is focused.
+      Before shortcuts it focuses the prompt: Cursor Command-L only if the
+      Agents panel is not already open (Cmd+L toggles it closed otherwise),
+      otherwise AX-focus aislash-editor-input; ChatGPT via the message box.
       ChatGPT / Codex
         Model: Control-Shift-M (picker opens on Astra), Down to dial index, Return.
         Reasoning: absolute Light clamp then Control-Shift-. up to target.

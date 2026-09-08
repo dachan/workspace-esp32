@@ -91,6 +91,9 @@ enum Switcher {
         if let stopped = dismissInterruptedPicker(pid: focus.pid, pulse: pulse) {
             return stopped
         }
+        if let stopped = primePrompt(focus: focus, preferred: preferred, pulse: pulse) {
+            return stopped
+        }
         interruptedPickers.insert(focus.pid)
         guard Keys.controlShift(Keys.m, pulse: pulse) else {
             return pulse()
@@ -201,6 +204,9 @@ enum Switcher {
             "chatgpt-bridge: reasoning absolute set via Ctrl+Shift+, then up to \(name)\n",
             stderr
         )
+        if let stopped = primePrompt(focus: focus, preferred: preferred, pulse: pulse) {
+            return stopped
+        }
         guard bump(delta: -(Catalog.thinking.count - 1), pulse: pulse) else {
             return pulse()
                 ? .interrupted
@@ -294,12 +300,41 @@ enum Switcher {
         }
     }
 
+    private static func primePrompt(
+        focus: FocusOperation,
+        preferred: String?,
+        pulse: @escaping () -> Bool
+    ) -> Result? {
+        switch focus.kind {
+        case .cursor:
+            // Cmd+L is Toggle Sidepanel. Sending it while Agents is already
+            // open closes the right panel. Only use it to open a missing panel.
+            if PromptFocus.ensure(pid: focus.pid, kind: .cursor) == .missing {
+                guard Keys.command(Keys.l, pulse: pulse) else {
+                    return pulse() ? .interrupted : .failed("could not post Command-L")
+                }
+            }
+        case .chatGPT:
+            if PromptFocus.ensure(pid: focus.pid, kind: focus.kind) == .missing {
+                return nil
+            }
+        }
+        guard Keys.wait(0.2, pulse: pulse) else { return .interrupted }
+        guard DeskFront.isForeground(preferred: preferred) else {
+            return .failed("\(focus.displayName) is not focused")
+        }
+        return nil
+    }
+
     private static func openCursorPopover(
         focus: FocusOperation,
         preferred: String?,
         pulse: @escaping () -> Bool
     ) -> Result? {
         if let stopped = dismissInterruptedPicker(pid: focus.pid, pulse: pulse) {
+            return stopped
+        }
+        if let stopped = primePrompt(focus: focus, preferred: preferred, pulse: pulse) {
             return stopped
         }
         interruptedPickers.insert(focus.pid)

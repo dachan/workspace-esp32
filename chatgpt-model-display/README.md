@@ -113,7 +113,9 @@ Firmware `v 0.35+` updates the panel immediately, then sends SET after a
 0.4 s settle window. Thinking pulses are held until the knob pauses so
 two detents are one level and a quick turn can run Light↔Extra High. Model
 steps still use a 160 ms emit gap. The Mac helper uses `NSWorkspace.frontmostApplication`
-(no AX tree walk). While ChatGPT is focused it opens the model picker with
+and focuses the prompt first: Cursor Command-L only if Agents is not already
+open (it toggles the panel otherwise), otherwise AX-focus the composer;
+ChatGPT by Accessibility element identity. While ChatGPT is focused it opens the model picker with
 Control-Shift-M and steps reasoning with Control-Shift-, / Control-Shift-.
 While Cursor is focused it opens the model list with Command-/ (first Down
 is Auto), then reopens it for Effort with Left, Up, Right, then Down-only to
@@ -132,7 +134,7 @@ change too. A five-second hold on the glass starts touch calibration.
 chatgpt-bridge --watch --port "$ESP_PORT"
 ```
 
-Requires Accessibility for the launching app (key posting only).
+Requires Accessibility for the launching app (key posting and prompt focus).
 
 ## Build / flash (Mac only)
 

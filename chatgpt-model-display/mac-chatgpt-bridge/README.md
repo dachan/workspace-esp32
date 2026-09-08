@@ -1,14 +1,14 @@
 # mac-chatgpt-bridge
 
-macOS helper for the desk encoders. It does **not** walk the Accessibility
-tree. Foreground is one `NSWorkspace.frontmostApplication` read. While
-ChatGPT or Cursor is focused it posts that app's keyboard shortcuts;
-otherwise it drops the ESP32's model and thinking state instead of holding
-it for later.
+macOS helper for the desk encoders. Foreground is one
+`NSWorkspace.frontmostApplication` read. It never activates ChatGPT or Cursor.
+While one of those apps is focused it focuses the prompt via Accessibility,
+then posts that app's keyboard shortcuts; otherwise it drops the ESP32's
+model and thinking state instead of holding it for later.
 
 ## What it does
 
-1. Optional Accessibility check (needed only to post keys).
+1. Optional Accessibility check (needed to post keys and to focus the prompt).
 2. Treats a desk target as foreground when the frontmost app is
    `com.openai.chat`, `com.openai.codex`, or Cursor
    (`com.todesktop.230313mzl4w4u92`). `--bundle-id` can force one of those.
@@ -16,7 +16,10 @@ it for later.
    `STATE` updates and legacy `SET MODEL` / `SET THINKING` lines. ACKs validated
    updates on receipt; duplicate revisions are acknowledged without reapplying.
    An ACK means received, not applied.
-4. If ChatGPT or Cursor is focused, apply using that app's shortcuts.
+4. If ChatGPT or Cursor is focused, focus the prompt first — Cursor via
+   Command-L only when the Agents panel is missing (Cmd+L toggles it closed
+   if it is already open), otherwise AX-focus `aislash-editor-input`;
+   ChatGPT/Codex by message-box identity — then apply using that app's shortcuts.
    Applies start 1 s after the last
    received change so both knobs land in one pass, and a field equal to
    the last value applied to that app is skipped unless the panel sent
@@ -79,11 +82,12 @@ last encoder detent before sending a SET line.
 - Swift toolchain (`xcode-select --install` or Xcode)
 - ChatGPT and/or Cursor (keys fire only while one is already focused)
 - Accessibility granted to the app that **launches** the CLI, for key posting
+  and focusing the prompt field
 
 ## Accessibility grant
 
 Foreground detection does not need Accessibility. Posting the ChatGPT and
-Cursor shortcuts does.
+Cursor shortcuts, and focusing the prompt field, do.
 
 1. System Settings → Privacy & Security → Accessibility
 2. Enable the terminal (or Cursor) you will run the CLI from

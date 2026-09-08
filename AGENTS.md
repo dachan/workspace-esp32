@@ -34,8 +34,11 @@ Hard lanes for this repo:
 
 `chatgpt-model-display/mac-chatgpt-bridge/` is a macOS CLI. Foreground is
 `NSWorkspace.frontmostApplication` (`com.openai.chat` / `com.openai.codex`
-or Cursor `com.todesktop.230313mzl4w4u92`). It never activates those apps
-and never walks the AX tree. Encoder `SET MODEL` / `SET THINKING` lines are
+or Cursor `com.todesktop.230313mzl4w4u92`). It never activates those apps.
+Before posting shortcuts it focuses the prompt: Cursor Command-L only if
+Agents is not already open (Cmd+L is Toggle Sidepanel and would close it),
+otherwise AX-focus `aislash-editor-input`; ChatGPT/Codex by message-box
+identity — never by screen coordinates. Encoder `SET MODEL` / `SET THINKING` lines are
 applied with that app's keyboard shortcuts only while it is already focused;
 otherwise they are dropped and never applied later. ChatGPT apply: Control-Shift-M, Down to the ESP
 dial index, Return; then absolute reasoning (Ctrl+Shift+, clamp to Light,
@@ -158,7 +161,7 @@ Run the Mac bridge with serial listen + watch:
 chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
 ```
 
-Requires Accessibility for the launching app (key posting). Foreground
+Requires Accessibility for the launching app (key posting and prompt focus). Foreground
 detection does not. Thinking uses a polled falling-CLK decode and holds
 pulses until the knob pauses (two detents = one level; a quick turn can
 run Light↔Extra High). The model knob uses PCNT hardware quadrature (a

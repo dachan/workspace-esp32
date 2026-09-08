@@ -65,7 +65,7 @@ bool ui_hit_sync(int x, int y)
 static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_level,
                               uint16_t track, uint16_t fill)
 {
-    /* Segmented meter (ChatGPT-style): discrete pills with gaps. */
+    /* Segmented meter: discrete pills with gaps. */
     if (max_level < 1) {
         max_level = 1;
     }
@@ -83,7 +83,6 @@ static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_lev
     if (seg_w < 2) {
         seg_w = 2;
     }
-    /* Re-center leftover pixels into the last segment. */
     int used = seg_w * segs + total_gap;
     int leftover = w - used;
 
@@ -104,6 +103,8 @@ esp_err_t ui_render(const model_fields_t *fields)
     const uint16_t label = display_rgb(140, 150, 170);
     const uint16_t text = display_rgb(240, 244, 250);
     const uint16_t muted = display_rgb(110, 118, 135);
+    const uint16_t clock = display_rgb(160, 168, 182);
+    const uint16_t track = display_rgb(40, 46, 62);
 
     display_fill(bg);
     display_fill_rect(8, 8, DISPLAY_WIDTH - 16, DISPLAY_HEIGHT - 16, card);
@@ -127,36 +128,38 @@ esp_err_t ui_render(const model_fields_t *fields)
         const int dw = font_text_width(date_text, title_scale);
         const int time_x = right - tw;
         const int date_x = time_x - gap - dw;
-        font_draw_text(date_x, header_y, date_text, muted, card, title_scale);
-        font_draw_text(time_x, header_y, time_text, accent, card, title_scale);
+        font_draw_text(date_x, header_y, date_text, clock, card, title_scale);
+        font_draw_text(time_x, header_y, time_text, clock, card, title_scale);
     }
 
     const int model_label_y = 64;
     const int model_value_y = 82;
-    /* Thinking reuses the MODEL label-to-value gap so both rows read alike. */
-    const int value_gap = model_value_y - (model_label_y + 7);
+    /* Match MODEL: label scale 1, value scale 2 with the same label-to-value gap. */
+    const int row_gap = model_value_y - model_label_y;
+    const int model_value_h = 7 * 2;
+    const int thinking_label_y = model_value_y + model_value_h + 32;
+    const int thinking_value_y = thinking_label_y + row_gap;
+    const int thinking_value_h = 7 * 2;
+    const int bar_y = thinking_value_y + thinking_value_h + 10;
+    const int bar_h = 10;
+    const int value_w = DISPLAY_WIDTH - 48;
 
     font_draw_text(20, model_label_y, "MODEL", label, card, 1);
-    font_draw_text(20, 134, "THINKING", label, card, 1);
-
-    const int bar_x = 20;
-    const int bar_y = 158;
-    const int bar_w = DISPLAY_WIDTH - 48;
-    const int bar_h = 10;
-    const uint16_t track = display_rgb(40, 46, 62);
-    const uint16_t bar_fill = accent;
+    font_draw_text(20, thinking_label_y, "THINKING", label, card, 1);
 
     if (!fields->has_model) {
         font_draw_text(20, model_value_y, "Waiting for bridge...", muted, card, 2);
-        draw_thinking_bar(bar_x, bar_y, bar_w, bar_h, 0, catalog_thinking_count(fields->model), track, bar_fill);
-        font_draw_text(20, bar_y + bar_h + value_gap, "-", muted, card, 1);
+        font_draw_text(20, thinking_value_y, "-", muted, card, 2);
+        draw_thinking_bar(20, bar_y, value_w, bar_h, 0, 1, track, accent);
     } else {
-        draw_wrapped(20, model_value_y, DISPLAY_WIDTH - 48, fields->model, text, card, 2);
+        draw_wrapped(20, model_value_y, value_w, fields->model, text, card, 2);
         const char *thinking = catalog_thinking_count(fields->model) == 0
             ? "Unsupported" : (fields->has_thinking ? fields->thinking : "-");
-        const int level = fields->has_thinking ? catalog_thinking_level(fields->model, thinking) : 0;
-        draw_thinking_bar(bar_x, bar_y, bar_w, bar_h, level, catalog_thinking_count(fields->model), track, bar_fill);
-        font_draw_text(20, bar_y + bar_h + value_gap, thinking, text, card, 1);
+        const int levels = catalog_thinking_count(fields->model);
+        const int level = (levels > 0 && fields->has_thinking)
+            ? catalog_thinking_level(fields->model, thinking) : 0;
+        draw_wrapped(20, thinking_value_y, value_w, thinking, text, card, 2);
+        draw_thinking_bar(20, bar_y, value_w, bar_h, level, levels > 0 ? levels : 1, track, accent);
     }
 
     /* SYNC sits left of the version string on the same baseline row. */
