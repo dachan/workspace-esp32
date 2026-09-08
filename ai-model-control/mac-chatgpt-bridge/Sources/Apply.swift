@@ -19,7 +19,9 @@ enum Switcher {
         guard let focus = FocusOperation(preferred: preferredBundleID) else {
             return .failed("ChatGPT, Cursor, or OpenCode is not focused")
         }
-        let pulse = wrappedPulse(focus: focus, upstream: pulse)
+        return InputGuard.protect(focus: focus) { inputGuard in
+        let upstream = wrappedPulse(focus: focus, upstream: pulse)
+        let pulse = { !inputGuard.isValid || upstream() }
         switch focus.kind {
         case .openCode:
             return OpenCodeApply.model(raw, focus: focus, pulse: pulse)
@@ -40,6 +42,7 @@ enum Switcher {
             }
             return cursorModel(index: index, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
         }
+        }
     }
 
     static func thinking(
@@ -51,7 +54,9 @@ enum Switcher {
         guard let focus = FocusOperation(preferred: preferredBundleID) else {
             return .failed("ChatGPT, Cursor, or OpenCode is not focused")
         }
-        let pulse = wrappedPulse(focus: focus, upstream: pulse)
+        return InputGuard.protect(focus: focus) { inputGuard in
+        let upstream = wrappedPulse(focus: focus, upstream: pulse)
+        let pulse = { !inputGuard.isValid || upstream() }
         switch focus.kind {
         case .openCode:
             return OpenCodeApply.thinking(raw, focus: focus, pulse: pulse)
@@ -77,6 +82,7 @@ enum Switcher {
             return cursorSelectEffort(
                 target: target, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse
             )
+        }
         }
     }
 

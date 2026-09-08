@@ -145,6 +145,11 @@ final class BridgeRuntime {
             return !focus.isCurrent || self.generation != revision
         }
 
+        var guardInterrupted = false
+        let guardedResult = InputGuard.protect(focus: focus) { inputGuard in
+        defer { guardInterrupted = !inputGuard.isValid }
+        let serialPulse = pulse
+        let pulse = { !inputGuard.isValid || serialPulse() }
         // Finish one field at a time, always model before its dependent effort.
         // Invalidate before posting: even a failed/interrupted sequence may mutate UI.
         applyFields: for kind in SettingKind.allCases {
@@ -178,15 +183,25 @@ final class BridgeRuntime {
                 if kind == .model, focus.kind == .cursor,
                    !Keys.wait(0.4, pulse: pulse) { break applyFields }
             case .interrupted:
-                return
+                return .interrupted
             case .failed(let message):
                 if message != lastFailure {
                     fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)
                 }
                 lastFailure = message
                 retryAt = ProcessInfo.processInfo.systemUptime + 2
-                return
+                return .failed(message)
             }
+        }
+        return inputGuard.isValid ? .applied(path: "guarded transaction") : .interrupted
+        }
+        if case .failed(let message) = guardedResult {
+            if message != lastFailure { fputs("chatgpt-bridge: \(message)\n", stderr) }
+            lastFailure = message
+            retryAt = ProcessInfo.processInfo.systemUptime + 2
+        }
+        if guardInterrupted {
+            discardPending("input guard or apply interrupted")
         }
         if !focus.isCurrent, targetFocus === focus {
             discardPending("target app left the foreground")

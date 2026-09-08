@@ -103,6 +103,7 @@ enum Keys {
             return false
         }
         event.flags = flags
+        event.setIntegerValueField(.eventSourceUserData, value: InputGuard.eventTag)
         event.post(tap: .cghidEventTap)
         return true
     }

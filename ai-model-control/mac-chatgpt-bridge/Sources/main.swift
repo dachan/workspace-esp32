@@ -34,14 +34,20 @@ func run() -> Int32 {
     }
     if options.setModel != nil || options.setThinking != nil {
         guard AXTrust.require(prompt: true) else { return 2 }
-        if let name = options.setModel {
-            let status = report(Switcher.model(name, preferredBundleID: options.bundleID))
-            if status != 0 { return status }
+        guard let focus = FocusOperation(preferred: options.bundleID) else { return 1 }
+        let result = InputGuard.protect(focus: focus) { inputGuard in
+            if let name = options.setModel {
+                let result = Switcher.model(name, preferredBundleID: options.bundleID)
+                if case .applied = result {} else { return result }
+            }
+            guard inputGuard.isValid else { return .interrupted }
+            if let level = options.setThinking {
+                return Switcher.thinking(level, model: options.setModel, preferredBundleID: options.bundleID)
+            }
+            return .applied(path: "guarded model selection")
         }
-        if let level = options.setThinking {
-            let status = report(Switcher.thinking(level, model: options.setModel, preferredBundleID: options.bundleID))
-            if status != 0 { return status }
-        }
+        let status = report(result)
+        if status != 0 { return status }
         if !options.watch && !options.listen { return 0 }
     }
     if options.watch || options.listen {
