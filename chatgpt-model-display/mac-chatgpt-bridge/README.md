@@ -77,8 +77,9 @@ Dial models follow the focused app.
 ChatGPT: GPT-6 Astra, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5.
 Reasoning: Light, Medium, High, Extra High.
 
-Cursor: Auto, Cursor Grok 4.6, Composer 2.5, Claude Opus 5, GPT-5.6 Sol,
-Claude Fable 5, GPT-5.6 Terra, GPT-5.6 Luna. Effort depends on the model (see below).
+Cursor: Auto, then the enabled MODELS list (defaults: Cursor Grok 4.6,
+Composer 2.5, Claude Opus 5, GPT-5.6 Sol, Claude Fable 5, GPT-5.6 Terra,
+GPT-5.6 Luna). Effort depends on the model (see below).
 
 Bind ChatGPT's three shortcuts if they are Unassigned. Cursor uses Command-/
 to open the model list (first Down is Auto). Firmware waits 0.4 s after the
@@ -141,10 +142,16 @@ the previous helper and relaunch it from the same Accessibility-authorized app.
 
 ### Cursor effort ranges
 
-- Auto, Composer 2.5: unsupported (effort knob ignored).
-- Cursor Grok 4.6: Low, Medium, High, Extra High.
-- Claude Opus 5, Claude Fable 5: Low, Medium, High, Extra High, Max.
-- GPT-5.6 Sol, Terra, Luna: None, Low, Medium, High, Extra High, Max.
+- Unsupported (knob ignored): Auto, Composer 2.5, Claude Opus 4.5, Claude Haiku 4.5, Claude Sonnet 4.5, Claude Sonnet 4, Gemini 3.1 Pro, Gemini 3 Flash, Gemini 3.5 Flash, GPT-5 Mini, Gemini 2.5 Flash, Kimi K2.7 Code.
+- Low, Medium, High: Cursor Grok 4.5, Gemini 3.8 Flash, Gemini 3.7 Flash, GPT-5.1.
+- Minimal, Low, Medium, High: Gemini 3.6 Flash.
+- Low, Medium, High, Extra High: Cursor Grok 4.6, Codex 5.3, GPT-5.2.
+- Low, Medium, High, Extra High, Max: Claude Opus 5 / 4.8 / 4.7, Claude Fable 5 / 5.1, Claude Sonnet 5.
+- Low, Medium, High, Max: Claude Sonnet 4.6, Claude Opus 4.6.
+- None, Low, Medium, High, Extra High, Max: GPT-5.6 Sol, Terra, Luna.
+- None, Low, Medium, High, Extra High: GPT-5.5, GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano.
+- Low, High, Max: Kimi K3.
+- High, Max: GLM 5.2.
 
 Command-/ → Left → Up → Right highlights the first supported effort.
 Down moves by the target's zero-based index; Return selects, then Escape twice closes the menus. Model changes

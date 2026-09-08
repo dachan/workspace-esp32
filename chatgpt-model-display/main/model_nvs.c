@@ -18,9 +18,10 @@ static const char *KEY_THINK = "think";
 static const char *KEY_LAST_G = "last_g";
 static const char *KEY_LAST_C = "last_c";
 static const char *KEY_EFFORT = "effort";
+static const char *KEY_CURSOR_EN = "c_en";
 
 #define EFFORT_BLOB_VER 1
-#define EFFORT_SLOT_MAX 16
+#define EFFORT_SLOT_MAX 80
 #define EFFORT_MODEL_MAX 32
 #define EFFORT_THINK_MAX 16
 
@@ -142,6 +143,13 @@ int model_nvs_load(model_fields_t *out)
     load_last_model(h, KEY_LAST_G, s_last_model[0], sizeof(s_last_model[0]));
     load_last_model(h, KEY_LAST_C, s_last_model[1], sizeof(s_last_model[1]));
 
+    uint64_t enabled = 0;
+    len = sizeof(enabled);
+    err = nvs_get_blob(h, KEY_CURSOR_EN, &enabled, &len);
+    if (err == ESP_OK && len == sizeof(enabled)) {
+        catalog_cursor_set_enabled_mask(enabled);
+    }
+
     nvs_close(h);
     seed_factory_for(false);
     seed_factory_for(true);
@@ -198,6 +206,10 @@ esp_err_t model_nvs_save(const model_fields_t *fields)
         if (err == ESP_ERR_NVS_NOT_FOUND) {
             err = ESP_OK;
         }
+    }
+    if (err == ESP_OK) {
+        uint64_t enabled = catalog_cursor_enabled_mask();
+        err = nvs_set_blob(h, KEY_CURSOR_EN, &enabled, sizeof(enabled));
     }
     if (err == ESP_OK) {
         s_effort.version = EFFORT_BLOB_VER;

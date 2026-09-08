@@ -9,16 +9,54 @@ enum Catalog {
         "GPT-5.5",
     ]
 
-    static let cursorModels = [
-        "Auto",
-        "Cursor Grok 4.6",
-        "Composer 2.5",
-        "Claude Opus 5",
-        "GPT-5.6 Sol",
-        "Claude Fable 5",
-        "GPT-5.6 Terra",
-        "GPT-5.6 Luna",
+    private struct CursorModel {
+        let name: String
+        let efforts: [String]
+    }
+
+    // Auto, then Cursor Settings toggle order. Keep these aligned with firmware catalog.c.
+    // Empty efforts means the effort knob is ignored (Unsupported).
+    private static let cursorCatalog: [CursorModel] = [
+        .init(name: "Auto", efforts: []),
+        .init(name: "Cursor Grok 4.6", efforts: ["Low", "Medium", "High", "Extra High"]),
+        .init(name: "Composer 2.5", efforts: []),
+        .init(name: "Claude Opus 5", efforts: ["Low", "Medium", "High", "Extra High", "Max"]),
+        .init(name: "GPT-5.6 Sol", efforts: ["None", "Low", "Medium", "High", "Extra High", "Max"]),
+        .init(name: "Claude Fable 5", efforts: ["Low", "Medium", "High", "Extra High", "Max"]),
+        .init(name: "GPT-5.6 Terra", efforts: ["None", "Low", "Medium", "High", "Extra High", "Max"]),
+        .init(name: "GPT-5.6 Luna", efforts: ["None", "Low", "Medium", "High", "Extra High", "Max"]),
+        .init(name: "Claude Opus 4.8", efforts: ["Low", "Medium", "High", "Extra High", "Max"]),
+        .init(name: "GPT-5.5", efforts: ["None", "Low", "Medium", "High", "Extra High"]),
+        .init(name: "Claude Fable 5.1", efforts: ["Low", "Medium", "High", "Extra High", "Max"]),
+        .init(name: "Cursor Grok 4.5", efforts: ["Low", "Medium", "High"]),
+        .init(name: "Gemini 3.8 Flash", efforts: ["Low", "Medium", "High"]),
+        .init(name: "Gemini 3.7 Flash", efforts: ["Low", "Medium", "High"]),
+        .init(name: "Claude Sonnet 5", efforts: ["Low", "Medium", "High", "Extra High", "Max"]),
+        .init(name: "Claude Sonnet 4.6", efforts: ["Low", "Medium", "High", "Max"]),
+        .init(name: "Codex 5.3", efforts: ["Low", "Medium", "High", "Extra High"]),
+        .init(name: "Claude Opus 4.7", efforts: ["Low", "Medium", "High", "Extra High", "Max"]),
+        .init(name: "GPT-5.4", efforts: ["None", "Low", "Medium", "High", "Extra High"]),
+        .init(name: "Claude Opus 4.6", efforts: ["Low", "Medium", "High", "Max"]),
+        .init(name: "Claude Opus 4.5", efforts: []),
+        .init(name: "GPT-5.2", efforts: ["Low", "Medium", "High", "Extra High"]),
+        .init(name: "Gemini 3.6 Flash", efforts: ["Minimal", "Low", "Medium", "High"]),
+        .init(name: "Gemini 3.1 Pro", efforts: []),
+        .init(name: "GPT-5.4 Mini", efforts: ["None", "Low", "Medium", "High", "Extra High"]),
+        .init(name: "GPT-5.4 Nano", efforts: ["None", "Low", "Medium", "High", "Extra High"]),
+        .init(name: "Claude Haiku 4.5", efforts: []),
+        .init(name: "Claude Sonnet 4.5", efforts: []),
+        .init(name: "GPT-5.1", efforts: ["Low", "Medium", "High"]),
+        .init(name: "Gemini 3 Flash", efforts: []),
+        .init(name: "Gemini 3.5 Flash", efforts: []),
+        .init(name: "Claude Sonnet 4", efforts: []),
+        .init(name: "GPT-5 Mini", efforts: []),
+        .init(name: "Gemini 2.5 Flash", efforts: []),
+        .init(name: "Kimi K3", efforts: ["Low", "High", "Max"]),
+        .init(name: "Kimi K2.7 Code", efforts: []),
+        .init(name: "GLM 5.2", efforts: ["High", "Max"]),
     ]
+
+    static var cursorModels: [String] { cursorCatalog.map(\.name) }
 
     static let thinking = [
         "Light",
@@ -34,17 +72,13 @@ enum Catalog {
         "Extra High",
         "Max",
         "None",
+        "Minimal",
     ]
 
     /// Nil means the model is unknown; an empty list means effort is unsupported.
     static func cursorEfforts(for model: String) -> [String]? {
         guard let index = cursorModelIndex(model) else { return nil }
-        switch index {
-        case 0, 2: return []
-        case 1: return Array(cursorThinking.prefix(4))
-        case 3, 5: return Array(cursorThinking.prefix(5))
-        default: return ["None"] + cursorThinking.prefix(5)
-        }
+        return cursorCatalog[index].efforts
     }
 
     static func cursorEffort(_ raw: String, model: String) -> (index: Int, name: String)? {
@@ -52,7 +86,7 @@ enum Catalog {
               let canonical = cursorThinkingName(raw) else { return nil }
         let name: String
         if levels.contains(canonical) { name = canonical }
-        else if canonical == "None" { name = levels[0] }
+        else if canonical == "None" || canonical == "Minimal" { name = levels[0] }
         else { name = levels[levels.count - 1] }
         return levels.firstIndex(of: name).map { ($0, name) }
     }
@@ -68,6 +102,30 @@ enum Catalog {
             "auto": 0, "grok": 1, "composer": 2, "opus": 3,
             "sol": 4, "fable": 5, "terra": 6, "luna": 7,
         ])
+    }
+
+    /// Auto plus the seven Cursor Settings toggles that ship enabled.
+    static var cursorEnabledMask: UInt64 = 0xFF
+
+    static func setCursorEnabledMask(_ mask: UInt64) {
+        cursorEnabledMask = mask | 1
+    }
+
+    static func cursorNameEnabled(_ raw: String) -> Bool {
+        guard let full = cursorModelIndex(raw) else { return false }
+        if full == 0 { return true }
+        guard full < 64 else { return false }
+        return cursorEnabledMask & (1 << full) != 0
+    }
+
+    /// Command-/ Down index among Auto + models enabled on the panel.
+    static func cursorPickerIndex(_ raw: String) -> Int? {
+        guard let full = cursorModelIndex(raw), cursorNameEnabled(raw) else { return nil }
+        var n = 0
+        for i in 0..<full {
+            if i == 0 || (i < 64 && cursorEnabledMask & (1 << i) != 0) { n += 1 }
+        }
+        return n
     }
 
     static func modelIndex(_ raw: String) -> Int? {

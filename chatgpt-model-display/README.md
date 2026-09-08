@@ -15,6 +15,7 @@ responds with its latest model and thinking after any active 0.4 s settle window
 
 ```text
 Mac → ESP: SYNC
+ESP → Mac: ENABLED <16-hex Cursor enable mask>
 ESP → Mac: STATE <16-hex revision> MODEL <name>
 ESP → Mac: STATE <16-hex revision> THINKING <level>
 Mac → ESP: ACK <16-hex revision> MODEL
@@ -44,7 +45,10 @@ lockup matches; it falls back to ChatGPT when neither is focused.
 
 A five-second press-and-hold anywhere on the glass starts a five-point touch
 calibration. A short tap on **SYNC** (bottom left) asks the helper to apply
-the current panel model and thinking to the focused app.
+the current panel model and thinking to the focused app. In Cursor mode a
+**MODELS** control next to SYNC opens a saved enable list (Auto stays on;
+defaults match Cursor's shipped-on set). Encoder scroll, encoder click, or a
+row tap toggles a model; **DONE** closes.
 
 Before the first `SYNC`, firmware uses the legacy `SET MODEL <name>` and
 `SET THINKING <level>` lines. The current helper accepts these from older firmware,
@@ -63,7 +67,8 @@ to recover framing after a disconnect mid-transfer.
 
 Changed values are saved once per input pass to NVS (`cgpt`/`model`,`think`
 for the last displayed pair, `cgpt`/`last_g` and `last_c` for each app's last
-model, plus `cgpt`/`effort` for each app's last thinking level per model)
+model, `cgpt`/`c_en` for the Cursor enable mask, plus `cgpt`/`effort` for each
+app's last thinking level per model)
 and reloaded on boot. Empty NVS (first flash) starts ChatGPT on GPT-5.6 Luna
 Extra High and Cursor on Cursor Grok 4.6 Extra High. Changing models restores
 that model's saved effort for the focused app; switching ChatGPT ↔ Cursor
@@ -73,11 +78,12 @@ display work.
 
 Dial models follow the focused app. ChatGPT: GPT-6 Astra, GPT-5.6 Sol,
 GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5; thinking Light, Medium, High,
-Extra High. Cursor: Auto, Cursor Grok 4.6, Composer 2.5, Claude Opus 5,
-GPT-5.6 Sol, Claude Fable 5, GPT-5.6 Terra, GPT-5.6 Luna;
-effort depends on the model (see Cursor effort ranges below).
-Canonical names live in firmware `main/catalog.c` and Swift
-`Sources/Catalog.swift`; keep these small tables aligned when adding entries.
+Extra High. Cursor: Auto, then the enabled MODELS list (defaults: Cursor Grok 4.6,
+Composer 2.5, Claude Opus 5, GPT-5.6 Sol, Claude Fable 5, GPT-5.6 Terra,
+GPT-5.6 Luna). Effort depends on the model (see Cursor effort ranges below).
+Command-/ apply uses this enabled index; keep the same models on in Cursor
+Settings. Canonical names live in firmware `main/catalog.c` and Swift
+`Sources/Catalog.swift`; keep these tables aligned when adding entries.
 
 ## Hardware
 
@@ -187,9 +193,10 @@ swift build -c release
 - `main/encoder.c`: existing GPIO/PCNT decoding and rate-limited step emission.
 - `main/serial_model.c`: bounded framing and legacy display commands.
 - `main/serial_sync.c`: state revisions, settling, snapshots, and ACK retries.
-- `main/model_nvs.c`: persistence of the current pair, last model per app, and
-  per-app per-model effort;
+- `main/model_nvs.c`: persistence of the current pair, last model per app, the
+  Cursor enable mask, and per-app per-model effort;
   `model_parse.c`: legacy combined-name parsing.
+- `main/cursor_settings.c`: Cursor MODELS enable list.
 
 Display rotation, the internal-RAM 180-degree band blit, and encoder pin/direction
 configuration are unchanged. A DMA completion timeout retains buffer ownership;
@@ -199,10 +206,16 @@ physical edges; the pending-step fix does not replace the existing decoder.
 
 ### Cursor effort ranges
 
-- Auto, Composer 2.5: unsupported (effort knob ignored).
-- Cursor Grok 4.6: Low, Medium, High, Extra High.
-- Claude Opus 5, Claude Fable 5: Low, Medium, High, Extra High, Max.
-- GPT-5.6 Sol, Terra, Luna: None, Low, Medium, High, Extra High, Max.
+- Unsupported (knob ignored): Auto, Composer 2.5, Claude Opus 4.5, Claude Haiku 4.5, Claude Sonnet 4.5, Claude Sonnet 4, Gemini 3.1 Pro, Gemini 3 Flash, Gemini 3.5 Flash, GPT-5 Mini, Gemini 2.5 Flash, Kimi K2.7 Code.
+- Low, Medium, High: Cursor Grok 4.5, Gemini 3.8 Flash, Gemini 3.7 Flash, GPT-5.1.
+- Minimal, Low, Medium, High: Gemini 3.6 Flash.
+- Low, Medium, High, Extra High: Cursor Grok 4.6, Codex 5.3, GPT-5.2.
+- Low, Medium, High, Extra High, Max: Claude Opus 5 / 4.8 / 4.7, Claude Fable 5 / 5.1, Claude Sonnet 5.
+- Low, Medium, High, Max: Claude Sonnet 4.6, Claude Opus 4.6.
+- None, Low, Medium, High, Extra High, Max: GPT-5.6 Sol, Terra, Luna.
+- None, Low, Medium, High, Extra High: GPT-5.5, GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano.
+- Low, High, Max: Kimi K3.
+- High, Max: GLM 5.2.
 
 Command-/ → Left → Up → Right highlights the first supported effort.
 Down moves by the target's zero-based index; Return selects, then Escape twice closes the menus. Model changes

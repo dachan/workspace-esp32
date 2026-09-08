@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-07 (v0.82 reflash and latest-target Mac bridge rollout)
+Last inventory pass: 2026-09-07 (v0.85 MODELS menu app-flash)
 
 ## radar-transmitter
 
@@ -59,12 +59,12 @@ Last inventory pass: 2026-09-07 (v0.82 reflash and latest-target Mac bridge roll
   - Board pinout image: [`s3-n16r8.jpeg`](s3-n16r8.jpeg)
 - Touch: FT6336 — SDA GPIO6, SCL GPIO15, reset GPIO7, INT GPIO5 (5 s hold starts five-point calibration, NVS `touch`/`c35_desk`)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Firmware currently on device: `chatgpt-model-display/` **v 0.82** (SYNC icon spins 3 s; 8px icon↔label gap; white SYNC/segments)
+- Firmware currently on device: `chatgpt-model-display/` **v 0.85** (Cursor MODELS enable list next to SYNC; defaults match Cursor Settings “on” set)
 - Display settings (LOCKED — title-strip noise fix 2026-09-07):
   - Controller: ST7796U, 480×320 landscape, SPI 26 MHz, `invert_color(true)`, RGB
   - MADCTL: `swap_xy(true)`, `mirror(true, true)` — desk 180 in hardware; do not flip only one mirror (glyphs)
   - Software 180 flush: ON via internal-RAM band blit + SPI transfer sync (v 0.22+)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → OpenAI/Cursor brand lockup at top of glass, MODEL left, version bottom-right
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
-- Last verified: 2026-09-07 — v0.82 application-only reflash on `/dev/cu.usbmodem21201` (hash-verified), preserving NVS. Mac bridge from commit `820e3d7` restarted with Accessibility granted; serial state receipt, focus-loss target discard, and current-target keyboard posting observed in its log. Physical screen agreement and slow-dial behavior remain unverified; model CLK/DT wiring fault still open (see above).
+- Last verified: 2026-09-07 — v0.85 application-only reflash on `/dev/cu.usbmodem21201` (hash-verified), preserving NVS. Mac helper rebuilt for `ENABLED` mask apply. Physical MODELS UI and slow-dial behavior remain unverified; model CLK/DT wiring fault still open (see above).
 - Notes: edit+flash on Mac `~/Development/workspace-esp32`; push then pull Hetzner `/home/codex/workspace-esp32`

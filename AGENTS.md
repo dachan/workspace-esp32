@@ -64,6 +64,10 @@ level per app+model. Empty NVS (first flash) defaults ChatGPT to GPT-5.6 Luna
 Extra High and Cursor to Cursor Grok 4.6 Extra High. Switching ChatGPT ↔ Cursor
 restores that app's last model and effort. A SYNC tap sends PUSH plus new STATE
 revisions so the helper reapplies even if it already posted those values.
+In Cursor mode, MODELS opens a saved enable list (Auto always on; default is
+Cursor Grok 4.6, Composer 2.5, Claude Opus 5, GPT-5.6 Sol, Claude Fable 5,
+GPT-5.6 Terra, GPT-5.6 Luna). The helper uses `ENABLED` so Command-/ Down
+counts match that list.
 
 ### chatgpt-model-display locked view mapping
 
@@ -172,8 +176,8 @@ pulses until the knob pauses (two detents = one level; a quick turn can
 run Light↔Extra High). The model knob uses PCNT hardware quadrature (a
 polled decode misreads it, because the display flush delays the poll past
 the CLK/DT phase difference and the dial parks on one end). Model clamps
-GPT-6 Astra through GPT-5.5 on ChatGPT, Auto through GPT-5.6 Luna on Cursor
-(no wrap); thinking clamps Light ↔ Extra High or Low ↔ Max.
+GPT-6 Astra through GPT-5.5 on ChatGPT, Auto then the enabled Cursor MODELS list
+(no wrap); thinking clamps Light ↔ Extra High or that Cursor model's effort range.
 If neither ChatGPT nor Cursor is focused, the bridge must not activate them.
 Encoder changes remain on the ESP32 display/NVS and the bridge drops them;
 there is no queue, no CANCEL button, and no deferred apply when one of those
@@ -275,10 +279,13 @@ do not reorder it to match visual placement on the board.
 ### Cursor effort capabilities
 
 Right highlights the first supported effort; use its zero-based menu index for
-Down presses, then Return once, then Escape twice to close the menus. Auto and Composer 2.5 have no effort support.
-Cursor Grok 4.6 supports Low, Medium, High, Extra High. Claude Opus 5 and
-Claude Fable 5 add Max. GPT-5.6 Sol, Terra, and Luna support None, Low, Medium,
-High, Extra High, Max. Model changes must reapply effort because Cursor can
-restore its own per-model value. Unsupported endpoints clamp to the supported
-range. Firmware shows Unsupported and ignores effort rotation for models without
-reasoning; None is a selectable GPT effort, not a synonym for unsupported.
+Down presses, then Return once, then Escape twice to close the menus. Per-model
+ranges live in `chatgpt-model-display/main/catalog.c` (keep Swift `Catalog.swift`
+aligned). Auto, Composer 2.5, and several Claude/Gemini/GPT/Kimi rows have no
+effort support. Cursor Grok 4.6 is Low–Extra High; Claude Opus 5 / Fable 5 add
+Max; GPT-5.6 Sol/Terra/Luna add None and Max. Gemini 3.6 Flash starts at
+Minimal. Model changes must reapply effort because Cursor can restore its own
+per-model value. Unsupported endpoints clamp to the supported range. Firmware
+shows Unsupported and ignores effort rotation for models without reasoning;
+None is a selectable GPT effort, not a synonym for unsupported. Command-/
+apply uses catalog index; Cursor's picker skips models toggled off in Settings.

@@ -110,6 +110,15 @@ final class BridgeRuntime {
                 fflush(stdout)
                 continue
             }
+            if raw.hasPrefix("ENABLED ") {
+                let hex = raw.dropFirst("ENABLED ".count).trimmingCharacters(in: .whitespaces)
+                if let mask = UInt64(hex, radix: 16) {
+                    Catalog.setCursorEnabledMask(mask)
+                    print("\(stamp()) rx ENABLED \(String(format: "%016llx", Catalog.cursorEnabledMask))")
+                    fflush(stdout)
+                }
+                continue
+            }
             if let update = SerialBridge.parseInbound(raw) { receive(update) }
         }
         session.setPanelFront(DeskFront.panelTitle(preferred: options.bundleID))
@@ -141,7 +150,7 @@ final class BridgeRuntime {
         applyFields: for kind in SettingKind.allCases {
             guard let value = snapshot[kind] else { continue }
             if focus.kind == .cursor, kind == .model,
-               Catalog.cursorModelIndex(value) == nil { continue }
+               Catalog.cursorPickerIndex(value) == nil { continue }
             if lastApplied[pid]?[kind] == value { continue }
             if pulse() { break }
             lastApplied[pid, default: [:]].removeValue(forKey: kind)

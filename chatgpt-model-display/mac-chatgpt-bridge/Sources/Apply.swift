@@ -30,7 +30,7 @@ enum Switcher {
             }
             return chatGPTModel(index: index, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
         case .cursor:
-            guard let index = Catalog.cursorModelIndex(raw), let name = Catalog.cursorModelName(raw) else {
+            guard let index = Catalog.cursorPickerIndex(raw), let name = Catalog.cursorModelName(raw) else {
                 return .failed("unknown model \(raw)")
             }
             if pulse() {
@@ -133,7 +133,7 @@ enum Switcher {
         return .applied(path: "Ctrl+Shift+M Down \(index) \(name)")
     }
 
-    /// Command-/ focuses Search; first Down is Auto, then picker order.
+    /// Command-/ focuses Search; first Down is Auto, then enabled catalog order.
     private static func cursorModel(
         index: Int,
         name: String,

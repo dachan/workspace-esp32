@@ -6,7 +6,8 @@
 #include <stdbool.h>
 
 // NVS namespace "cgpt": "model"/"think" are the last displayed pair;
-// "last_g"/"last_c" are each app's last model; "effort" is per-app per-model thinking.
+// "last_g"/"last_c" are each app's last model; "effort" is per-app per-model thinking;
+// "c_en" is the Cursor dial enable mask.
 esp_err_t model_nvs_init(void);
 int model_nvs_load(model_fields_t *out);
 esp_err_t model_nvs_save(const model_fields_t *fields);

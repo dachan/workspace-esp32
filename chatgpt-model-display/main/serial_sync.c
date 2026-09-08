@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "catalog.h"
 #include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -21,6 +22,12 @@ typedef struct {
 static sync_field_t s_fields[] = {{.kind = "MODEL"}, {.kind = "THINKING"}};
 static bool s_acknowledged_protocol;
 static bool s_push;
+static bool s_send_enabled;
+
+void serial_sync_note_enabled(void)
+{
+    s_send_enabled = true;
+}
 
 static void update_field(sync_field_t *field, const char *value, bool local_change)
 {
@@ -63,6 +70,7 @@ bool serial_sync_handle_line(const char *line)
 {
     if (strcmp(line, "SYNC") == 0) {
         s_acknowledged_protocol = true;
+        s_send_enabled = true;
         for (size_t i = 0; i < 2; i++) {
             sync_field_t *field = &s_fields[i];
             if (field->value[0] && !field->pending) {
@@ -95,6 +103,13 @@ void serial_sync_poll(void)
             return;
         }
         s_push = false;
+    }
+    if (s_send_enabled) {
+        char line[40];
+        snprintf(line, sizeof(line), "ENABLED %016" PRIx64, catalog_cursor_enabled_mask());
+        if (serial_model_write_line(line)) {
+            s_send_enabled = false;
+        }
     }
     for (size_t i = 0; i < 2; i++) {
         sync_field_t *field = &s_fields[i];

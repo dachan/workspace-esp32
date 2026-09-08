@@ -5,6 +5,7 @@
 #include "calibrate.h"
 #include "catalog.h"
 #include "clock.h"
+#include "cursor_settings.h"
 #include "display.h"
 #include "encoder.h"
 #include "esp_log.h"
@@ -63,6 +64,25 @@ static bool apply_model_delta(model_fields_t *fields, int delta)
     }
     model_nvs_remember(fields);
     snprintf(fields->model, sizeof(fields->model), "%s", name);
+    fields->has_model = 1;
+    model_nvs_restore_effort(fields);
+    if (!fields->has_thinking && catalog_thinking_count(fields->model) > 0) {
+        snprintf(fields->thinking, sizeof(fields->thinking), "%s",
+                 catalog_default_thinking(fields->model));
+        fields->has_thinking = 1;
+    }
+    return true;
+}
+
+static bool clamp_cursor_model(model_fields_t *fields)
+{
+    if (!front_title_is_cursor() || !fields->has_model) {
+        return false;
+    }
+    if (catalog_model_index(fields->model) >= 0) {
+        return false;
+    }
+    snprintf(fields->model, sizeof(fields->model), "%s", catalog_default_model());
     fields->has_model = 1;
     model_nvs_restore_effort(fields);
     if (!fields->has_thinking && catalog_thinking_count(fields->model) > 0) {
@@ -146,16 +166,39 @@ void app_main(void)
         }
         if (touch.down && touch.held_ms >= CALIBRATE_HOLD_MS && !hold_calibrated) {
             hold_calibrated = true;
+            cursor_settings_close();
             calibrate_run();
             touch_clear_state();
             paint_pending = true;
         }
-        if (touch.released && touch.held_ms < 800 && ui_hit_sync(touch.x, touch.y)) {
+        bool local_changed = false;
+        bool settings_open = cursor_settings_is_open();
+        if (settings_open) {
+            if (cursor_settings_handle(&touch, model_delta, thinking_delta,
+                                       model_pressed, thinking_pressed)) {
+                paint_pending = true;
+            }
+            if (cursor_settings_take_mask_changed()) {
+                local_changed = clamp_cursor_model(&fields);
+                serial_sync_note_enabled();
+                save_pending = true;
+                paint_pending = true;
+            }
+            thinking_delta = 0;
+            model_delta = 0;
+            thinking_pressed = false;
+            model_pressed = false;
+        }
+        if (touch.released && touch.held_ms < 800 && !settings_open && ui_hit_sync(touch.x, touch.y)) {
             serial_sync_push(&fields);
             ui_sync_pulse();
             paint_pending = true;
         }
-        bool local_changed = apply_model_delta(&fields, model_delta);
+        if (touch.released && touch.held_ms < 800 && !settings_open && ui_hit_models(touch.x, touch.y)) {
+            cursor_settings_open();
+            paint_pending = true;
+        }
+        local_changed |= apply_model_delta(&fields, model_delta);
         if (local_changed) adapt_fields_for_front(&fields);
         local_changed |= apply_thinking_delta(&fields, thinking_delta);
         if (thinking_pressed) {
@@ -193,10 +236,14 @@ void app_main(void)
                     model_nvs_remember_for(&fields, was_cursor);
                 }
                 model_nvs_restore_for(&fields, cursor);
+                clamp_cursor_model(&fields);
                 adapt_fields_for_front(&fields);
                 model_nvs_remember_for(&fields, cursor);
                 was_cursor = cursor;
                 front_ready = true;
+                if (!cursor) {
+                    cursor_settings_close();
+                }
                 serial_sync_update(&fields, true);
             }
         }
@@ -216,10 +263,12 @@ void app_main(void)
             save_failed = model_nvs_save(&fields) != ESP_OK;
             save_pending = save_failed;
         }
-        if (paint_pending && !encoder_hold_paint()
+        if (paint_pending && (cursor_settings_is_open() || !encoder_hold_paint())
             && (!paint_failed || (TickType_t)(now - last_paint_attempt) >= pdMS_TO_TICKS(500))) {
             last_paint_attempt = now;
-            paint_failed = ui_render(&fields) != ESP_OK;
+            paint_failed = (cursor_settings_is_open()
+                ? cursor_settings_render()
+                : ui_render(&fields)) != ESP_OK;
             paint_pending = paint_failed;
         }
         vTaskDelay(pdMS_TO_TICKS(5));
