@@ -121,8 +121,12 @@ While Cursor is focused it opens the model list with Command-/ (first Down
 is Auto), then reopens it for Effort with Left, Up, Right, then Down-only to
 the level; Return selects, then Escape twice closes the menus. The bridge
 settles 1 s after the last received change, applies model and effort in one
-pass, and skips any field that matches what it last applied to that app — an
-effort-only change skips model selection. A SYNC tap on the glass sends `PUSH`
+pass using a single latest-target worker. New generations supersede older
+operations. Fields are marked unknown before posting keys, so partial or
+interrupted operations cannot suppress the final correction when a dial returns
+to an earlier value. Model changes always invalidate effort; otherwise an
+effort-only change skips model selection. Completed values are cached per Mac
+process, and focus loss discards the target. Keyboard posting is not UI readback. A SYNC tap on the glass sends `PUSH`
 so the helper reapplies the current panel values anyway. Switching ChatGPT ↔
 Cursor restores that app's last model and effort on the panel. When neither is
 focused, encoder changes stay on the ESP32 display/NVS and the bridge discards

@@ -21,10 +21,15 @@ model and thinking state instead of holding it for later.
    if it is already open), otherwise AX-focus `aislash-editor-input`;
    ChatGPT/Codex by message-box identity — then apply using that app's shortcuts.
    Applies start 1 s after the last
-   received change so both knobs land in one pass, and a field equal to
-   the last value applied to that app is skipped unless the panel sent
-   `PUSH` (SYNC tap). Serial is drained during
-   delays; a newer SET aborts and re-targets.
+   received change. One worker retains the latest complete model/effort target,
+   with a generation that changes on every accepted update or `PUSH` (SYNC tap).
+   Serial is drained during delays; a newer generation aborts and re-targets,
+   including when the dial returns to an earlier value. Model is applied before
+   effort, and model changes invalidate the cached effort for both apps.
+   Each field is marked unknown before posting keys, so an interrupted or failed
+   sequence cannot cause a later correction to be skipped. Completed fields are
+   cached per process only while their generation is current. `PUSH` forces both
+   fields to be posted again.
    - ChatGPT / Codex model: Control-Shift-M (picker opens on Astra), Down
      to the ESP dial index, Return.
    - ChatGPT / Codex reasoning: absolute Light clamp (Ctrl+Shift+,) then
@@ -46,10 +51,13 @@ Shortcut sequences stay bound to the process that was focused when they began.
 Losing focus, including switching between ChatGPT, Codex, and Cursor,
 interrupts the sequence and discards the setting. A superseded sequence, or one
 that failed while the app stayed focused, is retried for as long as that app
-remains frontmost. An interrupted model picker is dismissed with Escape before
-retrying in that process (an extra 0.1 seconds). ChatGPT thinking retries start
-from the absolute Light clamp. “Applied” means the key sequence was posted; the
-helper does not read back the app's selected value.
+remains frontmost. Interrupted pickers are dismissed before retrying in that process, tracking
+both Cursor menu layers and each Escape already posted. ChatGPT thinking retries
+start from the absolute Light clamp. Logs say “posted” when the current generation's
+key sequence completes; the helper does not read back the app's selected value.
+Debounce reduces intermediate work, while generation checks and invalidation make
+slow turns converge on the final target as long as the same app stays focused.
+This is keyboard-posting completion, not verified on-screen synchronization.
 
 Serial open, configuration, read, and write failures are logged and the configured
 port is retried every two seconds, including when missing at startup. The helper
