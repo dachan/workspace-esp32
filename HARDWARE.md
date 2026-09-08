@@ -67,4 +67,4 @@ Last inventory pass: 2026-09-08 (v0.88 OpenCode wordmark app-flash)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → OpenAI/Cursor brand lockup at top of glass, MODEL left, version bottom-right
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
 - Last verified: 2026-09-08 — v0.88 application-only reflash on `/dev/cu.usbmodem21201` (hash-verified), preserving NVS. Board identity matched the recorded ESP32-S3. Live serial returned ENABLED and revisioned MODEL/THINKING state. Rebuilt Mac helper restarted and connected; foreground was loginwindow. Physical OpenCode wordmark and app-control behavior remain unverified; model CLK/DT wiring fault still open (see above).
-- Notes: edit+flash on Mac `~/Development/workspace-esp32`; push then pull Hetzner `/home/codex/workspace-esp32`
+- Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
