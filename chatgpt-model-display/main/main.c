@@ -23,12 +23,16 @@ static const char *TAG = "chatgpt_model";
 
 static bool apply_thinking_delta(model_fields_t *fields, int delta)
 {
+    if (!fields->has_model) {
+        snprintf(fields->model, sizeof(fields->model), "%s", catalog_default_model());
+        fields->has_model = 1;
+    }
     if (!delta || catalog_thinking_count(fields->model) == 0) {
         return false;
     }
     int level = catalog_thinking_level(fields->model, fields->thinking);
     if (!level) {
-        level = 2;
+        level = catalog_thinking_level(fields->model, catalog_default_thinking(fields->model));
     }
     level += delta;
     if (level < 1) level = 1;
@@ -39,10 +43,6 @@ static bool apply_thinking_delta(model_fields_t *fields, int delta)
     }
     snprintf(fields->thinking, sizeof(fields->thinking), "%s", name);
     fields->has_thinking = 1;
-    if (!fields->has_model) {
-        snprintf(fields->model, sizeof(fields->model), "%s", catalog_model_at(0));
-        fields->has_model = 1;
-    }
     return true;
 }
 
@@ -52,6 +52,7 @@ static bool apply_model_delta(model_fields_t *fields, int delta)
         return false;
     }
     int index = catalog_model_index(fields->model);
+    if (index < 0) index = catalog_model_index(catalog_default_model());
     if (index < 0) index = 0;
     index += delta;
     if (index < 0) index = 0;
@@ -64,8 +65,9 @@ static bool apply_model_delta(model_fields_t *fields, int delta)
     snprintf(fields->model, sizeof(fields->model), "%s", name);
     fields->has_model = 1;
     model_nvs_restore_effort(fields);
-    if (!fields->has_thinking) {
-        snprintf(fields->thinking, sizeof(fields->thinking), "%s", "Medium");
+    if (!fields->has_thinking && catalog_thinking_count(fields->model) > 0) {
+        snprintf(fields->thinking, sizeof(fields->thinking), "%s",
+                 catalog_default_thinking(fields->model));
         fields->has_thinking = 1;
     }
     return true;
@@ -112,6 +114,9 @@ void app_main(void)
                      catalog_thinking_name(fields.model, catalog_thinking_level(fields.model, cached.thinking)));
         }
         save_pending = !same_fields(&cached, &fields);
+    } else {
+        model_nvs_restore_for(&fields, false);
+        save_pending = fields.has_model;
     }
     serial_sync_update(&fields, false);
 
@@ -154,7 +159,7 @@ void app_main(void)
         if (local_changed) adapt_fields_for_front(&fields);
         local_changed |= apply_thinking_delta(&fields, thinking_delta);
         if (thinking_pressed) {
-            // Empty panel: the default Medium minus one selects Light.
+            // Empty panel: Extra High minus one selects High.
             local_changed |= apply_thinking_delta(&fields, fields.has_thinking ? 1 : -1);
         }
         if (model_pressed) {

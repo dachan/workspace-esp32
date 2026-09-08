@@ -118,6 +118,19 @@ bool catalog_model_known(const char *name)
     return table_count(cursor_models, n, name) >= 0;
 }
 
+const char *catalog_default_model(void)
+{
+    return catalog_default_model_in(front_title_is_cursor());
+}
+
+const char *catalog_default_model_in(bool cursor)
+{
+    int count;
+    const char *const *names = models_table(cursor, &count);
+    const char *want = cursor ? "Cursor Grok 4.6" : "GPT-5.6 Luna";
+    return table_count(names, count, want) >= 0 ? want : names[0];
+}
+
 int catalog_thinking_count(const char *model)
 {
     return catalog_thinking_count_in(front_title_is_cursor(), model);
@@ -172,6 +185,23 @@ const char *catalog_thinking_name(const char *model, int level)
         return names[count > 1 ? 1 : 0];
     }
     return names[level - 1];
+}
+
+const char *catalog_default_thinking(const char *model)
+{
+    return catalog_default_thinking_in(front_title_is_cursor(), model);
+}
+
+const char *catalog_default_thinking_in(bool cursor, const char *model)
+{
+    int count;
+    const char *const *names = thinking_table(cursor, model, &count);
+    if (count == 0) return "Unsupported";
+    int index = table_count(names, count, "Extra High");
+    if (index >= 0) {
+        return names[index];
+    }
+    return names[count - 1];
 }
 
 bool catalog_thinking_known(const char *name)

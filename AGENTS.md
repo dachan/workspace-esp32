@@ -60,9 +60,10 @@ The helper only runs on the Mac.
 On-device UI lives in `chatgpt-model-display/` (3.5\" ST7796 480x320). Edit
 and flash on the Mac; pull Hetzner codex after push. Firmware keeps the last
 model/thinking in NVS for boot, the last model per app, and the last thinking
-level per app+model. Switching ChatGPT ↔ Cursor restores that app's last
-model and effort. A SYNC tap sends PUSH plus new STATE revisions so the
-helper reapplies even if it already posted those values.
+level per app+model. Empty NVS (first flash) defaults ChatGPT to GPT-5.6 Luna
+Extra High and Cursor to Cursor Grok 4.6 Extra High. Switching ChatGPT ↔ Cursor
+restores that app's last model and effort. A SYNC tap sends PUSH plus new STATE
+revisions so the helper reapplies even if it already posted those values.
 
 ### chatgpt-model-display locked view mapping
 

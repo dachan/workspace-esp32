@@ -64,10 +64,12 @@ to recover framing after a disconnect mid-transfer.
 Changed values are saved once per input pass to NVS (`cgpt`/`model`,`think`
 for the last displayed pair, `cgpt`/`last_g` and `last_c` for each app's last
 model, plus `cgpt`/`effort` for each app's last thinking level per model)
-and reloaded on boot. Changing models restores that model's saved effort for
-the focused app; switching ChatGPT ↔ Cursor restores that app's last model
-and effort. A first visit to a model keeps the current level and clamps it.
-Unchanged values do not trigger persistence or display work.
+and reloaded on boot. Empty NVS (first flash) starts ChatGPT on GPT-5.6 Luna
+Extra High and Cursor on Cursor Grok 4.6 Extra High. Changing models restores
+that model's saved effort for the focused app; switching ChatGPT ↔ Cursor
+restores that app's last model and effort. A first visit to a model keeps the
+current level and clamps it. Unchanged values do not trigger persistence or
+display work.
 
 Dial models follow the focused app. ChatGPT: GPT-6 Astra, GPT-5.6 Sol,
 GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5; thinking Light, Medium, High,
