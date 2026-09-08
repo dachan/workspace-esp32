@@ -35,11 +35,11 @@ Hard lanes for this repo:
   `main` and any branch that still has unmerged commits. Do not leave merged
   feature branches around.
 
-## mac-chatgpt-bridge
+## AI model control bridge
 
 `ai-model-control/mac-chatgpt-bridge/` is a macOS CLI. Foreground is
 `NSWorkspace.frontmostApplication` (`com.openai.chat` / `com.openai.codex`
-or Cursor `com.todesktop.230313mzl4w4u92`). It never activates those apps.
+or Cursor `com.todesktop.230313mzl4w4u92` or OpenCode `ai.opencode.desktop`). It never activates those apps.
 Before posting shortcuts it focuses the prompt: Cursor Command-L only if
 Agents is not already open (Cmd+L is Toggle Sidepanel and would close it),
 otherwise AX-focus `aislash-editor-input`; ChatGPT/Codex by message-box
@@ -51,7 +51,7 @@ Ctrl+Shift-. up to target). Cursor apply: Command-/ (first Down is Auto),
 or Left, Up, Right directly into Reasoning after reopening (Right highlights
 the first supported level; Down to the target; Return selects, then Escape twice closes the menus). A
 ChatGPT-only model name (e.g. GPT-6 Astra) is skipped while
-Cursor is focused so effort can still apply. The helper sends `FRONT Cursor`, `FRONT ChatGPT`, or `FRONT None`. Cursor
+Cursor is focused so effort can still apply. The helper sends `FRONT Cursor`, `FRONT ChatGPT`, `FRONT OpenCode`, or `FRONT None`. Cursor
 and ChatGPT select that app's catalog and header lockup. `FRONT None` keeps
 the last app's catalog and logo; after 1 min without focus or encoder/touch
 the panel shows a date/time screensaver. Focus, a knob, or a tap wakes it;
@@ -76,7 +76,7 @@ counts match that list.
 
 Desk pose (photo reference): glass left of breadboard, pins toward the ESP32,
 USB toward the bottom of the frame. UI must read upright in that pose
-(ChatGPT title at top of glass).
+(focused app title at top of glass).
 
 Locked ST7796 settings in `ai-model-control/main/display.c`:
 
@@ -156,12 +156,12 @@ OFF. Receiver SLEEP and POWER OFF are both tap-to-wake deep-sleep modes. Keep
 the touch reset high and backlight low during either mode; POWER OFF also holds
 the LCD reset low because the receiver has no accessible EN switch.
 
-## Desk control (encoders → ChatGPT / Cursor)
+## AI model control (encoders → ChatGPT / Cursor / OpenCode)
 
 Firmware `v 0.35+` updates the panel/NVS immediately, then sends
 `SET MODEL <name>` / `SET THINKING <level>` 0.4 s after the last detent.
-The Mac helper applies those with keyboard shortcuts only while ChatGPT or
-Cursor is already the foreground app. ChatGPT: Control-Shift-M, Down to the
+The Mac helper applies those with app-specific controls only while ChatGPT,
+Cursor, or OpenCode is already the foreground app. ChatGPT: Control-Shift-M, Down to the
 dial index, Return; absolute Light clamp then Control-Shift-. for thinking.
 Cursor: Command-/ (first Down is Auto); effort is Left, Up, Right, then Down to the level.
 A ChatGPT-only model name is skipped while Cursor is focused. The
@@ -181,7 +181,7 @@ polled decode misreads it, because the display flush delays the poll past
 the CLK/DT phase difference and the dial parks on one end). Model clamps
 GPT-6 Astra through GPT-5.5 on ChatGPT, Auto then the enabled Cursor MODELS list
 (no wrap); thinking clamps Light ↔ Extra High or that Cursor model's effort range.
-If neither ChatGPT nor Cursor is focused, the bridge must not activate them.
+If none of ChatGPT, Cursor, or OpenCode is focused, the bridge must not activate them.
 Encoder changes remain on the ESP32 display/NVS and the bridge drops them;
 there is no queue, no CANCEL button, and no deferred apply when one of those
 apps returns to the foreground. Tap SYNC on the glass to push the current

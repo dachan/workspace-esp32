@@ -1,12 +1,12 @@
 # ai-model-control
 
-ESP32-S3 desk controller for **model** and **thinking** selection across
+ESP32-S3 AI model control panel for **model** and **thinking** selection across
 ChatGPT, Cursor, and OpenCode
 on the desk-mounted 3.5" ST7796U panel. Rotary encoders change both locally
 (display + NVS). After **0.4 s** with no further changes the firmware sends
 the latest state to `mac-chatgpt-bridge/`. The Mac helper
-applies those only while ChatGPT or Cursor is already the foreground app.
-Changes are never deferred: state that arrives while neither app is focused
+applies those only while ChatGPT, Cursor, or OpenCode is already the foreground app.
+Changes are never deferred: state that arrives while no supported app is focused
 is dropped by the helper and stays on the panel and in NVS only.
 
 ## Protocol (USB serial, 115200)
@@ -41,12 +41,12 @@ the USB device path to disappear.
 Mac also sends `TIME <unix-seconds> <tz-offset-minutes>` on connect and every
 30 s so the panel can show a local clock. Firmware ticks minutes from that
 snapshot; it does not use Wi-Fi or SNTP. The helper also sends `FRONT Cursor`,
-`FRONT ChatGPT`, or `FRONT None` when the focused desk app changes so the
+`FRONT ChatGPT`, `FRONT OpenCode`, or `FRONT None` when the focused app changes so the
 header brand lockup matches. `FRONT None` keeps the last app's catalog and
 logo; it does not fall back to ChatGPT. After each SYNC the helper resends
-FRONT so a firmware restart recovers focus. After 1 min without Cursor/ChatGPT
+FRONT so a firmware restart recovers focus. After 1 min without Cursor, ChatGPT, or OpenCode
 focus and without encoder or touch, the panel shows a date/time screensaver.
-Focusing Cursor or ChatGPT, turning a knob, or tapping the glass wakes it;
+Focusing Cursor, ChatGPT, or OpenCode, turning a knob, or tapping the glass wakes it;
 the waking tap does not press SYNC or MODELS.
 
 A five-second press-and-hold anywhere on the glass starts a five-point touch

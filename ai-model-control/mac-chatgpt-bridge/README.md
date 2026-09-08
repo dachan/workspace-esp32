@@ -1,7 +1,7 @@
-# mac-chatgpt-bridge
+# AI model control bridge (`mac-chatgpt-bridge`)
 
-macOS helper for the desk encoders. Foreground is one
-`NSWorkspace.frontmostApplication` read. It never activates ChatGPT or Cursor.
+macOS helper for the AI model control panel's encoders. Foreground is one
+`NSWorkspace.frontmostApplication` read. It never activates ChatGPT, Cursor, or OpenCode.
 While one of those apps is focused it focuses the prompt via Accessibility,
 then posts that app's keyboard shortcuts; otherwise it drops the ESP32's
 model and thinking state instead of holding it for later.
@@ -9,14 +9,15 @@ model and thinking state instead of holding it for later.
 ## What it does
 
 1. Optional Accessibility check (needed to post keys and to focus the prompt).
-2. Treats a desk target as foreground when the frontmost app is
-   `com.openai.chat`, `com.openai.codex`, or Cursor
-   (`com.todesktop.230313mzl4w4u92`). `--bundle-id` can force one of those.
+2. Treats a supported AI app as foreground when the frontmost app is
+   ChatGPT/Codex (`com.openai.chat`, `com.openai.codex`), Cursor
+   (`com.todesktop.230313mzl4w4u92`), or OpenCode (`ai.opencode.desktop`).
+   `--bundle-id` can force one of those.
 3. Requests current state on connection and every two seconds. Accepts revisioned
    `STATE` updates and legacy `SET MODEL` / `SET THINKING` lines. ACKs validated
    updates on receipt; duplicate revisions are acknowledged without reapplying.
    An ACK means received, not applied.
-4. If ChatGPT or Cursor is focused, focus the prompt first — Cursor via
+4. If ChatGPT, Cursor, or OpenCode is focused, focus the prompt first — Cursor via
    Command-L only when the Agents panel is missing (Cmd+L toggles it closed
    if it is already open), otherwise AX-focus `aislash-editor-input`;
    ChatGPT/Codex by message-box identity — then apply using that app's shortcuts.
@@ -41,15 +42,15 @@ model and thinking state instead of holding it for later.
    - Cursor effort: Command-/ (reopened after selecting a model when
      both changed), then Left, Up, Right directly into Reasoning, Down to
      the level, and Return once, then Escape twice to close the menus. An effort-only change skips model selection.
-5. If neither ChatGPT nor Cursor is focused: leave the ESP32 display/NVS as
+5. If none of ChatGPT, Cursor, or OpenCode is focused: leave the ESP32 display/NVS as
    the source of truth and discard the change. Nothing is applied when one of
    those apps later becomes frontmost, and the helper never activates either
-   app. The helper also sends `FRONT Cursor`, `FRONT ChatGPT`, or `FRONT None`
+   app. The helper also sends `FRONT Cursor`, `FRONT ChatGPT`, `FRONT OpenCode`, or `FRONT None`
    so the panel lockup matches the focused app and can idle to a clock
-   screensaver when neither is focused.
+   screensaver when none is focused.
 
 Shortcut sequences stay bound to the process that was focused when they began.
-Losing focus, including switching between ChatGPT, Codex, and Cursor,
+Losing focus, including switching between ChatGPT, Codex, Cursor, and OpenCode,
 interrupts the sequence and discards the setting. A superseded sequence, or one
 that failed while the app stayed focused, is retried for as long as that app
 remains frontmost. Interrupted pickers are dismissed before retrying in that process, tracking
@@ -65,7 +66,7 @@ port is retried every two seconds, including when missing at startup. The helper
 claims exclusive access to prevent another helper or monitor opening the port.
 Current firmware retransmits until ACK and answers SYNC with its state, so a
 bridge restart or device reset recovers the panel state without another knob
-movement; whether it is applied still depends on ChatGPT or Cursor being
+movement; whether it is applied still depends on ChatGPT, Cursor, or OpenCode being
 focused at that moment. Older firmware still works, but cannot replay missing
 changes. If the device path changes, restart with the new `--port`.
 
@@ -90,7 +91,7 @@ last encoder detent before sending a SET line.
 
 - macOS 13+
 - Swift toolchain (`xcode-select --install` or Xcode)
-- ChatGPT and/or Cursor (keys fire only while one is already focused)
+- ChatGPT, Cursor, and/or OpenCode (keys fire only while one is already focused)
 - Accessibility granted to the app that **launches** the CLI, for key posting
   and focusing the prompt field
 
@@ -109,7 +110,7 @@ swift run chatgpt-bridge --check-ax
 swift run chatgpt-bridge --front
 ```
 
-## Desk control
+## AI model control
 
 ```bash
 chatgpt-bridge --watch --port "$ESP_PORT"
