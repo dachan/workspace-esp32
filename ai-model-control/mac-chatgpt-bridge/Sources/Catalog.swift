@@ -9,12 +9,12 @@ enum Catalog {
         "GPT-5.5",
     ]
 
-    // OpenCode's supplied OpenAI provider menu order.
+    // OpenCode encoder order. Its native picker remains Luna-first.
     static let openCodeModels = [
-        "GPT-5.6 Luna",
-        "GPT-5.6 Sol",
-        "GPT-5.6 Terra",
         "GPT-6 Astra",
+        "GPT-5.6 Terra",
+        "GPT-5.6 Sol",
+        "GPT-5.6 Luna",
     ]
 
     private struct CursorModel {
@@ -107,8 +107,13 @@ enum Catalog {
 
     static func openCodeModelIndex(_ raw: String) -> Int? {
         index(raw, in: openCodeModels, aliases: [
-            "luna": 0, "sol": 1, "terra": 2, "astra": 3,
+            "astra": 0, "terra": 1, "sol": 2, "luna": 3,
         ])
+    }
+
+    /// Command-apostrophe's native list is the reverse of the encoder order.
+    static func openCodePickerIndex(_ raw: String) -> Int? {
+        openCodeModelIndex(raw).map { openCodeModels.count - 1 - $0 }
     }
 
     static func cursorModelIndex(_ raw: String) -> Int? {

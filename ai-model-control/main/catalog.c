@@ -11,9 +11,9 @@
 static const char *const chatgpt_models[] = {
     "GPT-6 Astra", "GPT-5.6 Sol", "GPT-5.6 Terra", "GPT-5.6 Luna", "GPT-5.5",
 };
-/* OpenCode model picker order, from the supplied OpenAI provider menu. */
+/* OpenCode encoder order. Its native picker remains Luna-first. */
 static const char *const opencode_models[] = {
-    "GPT-5.6 Luna", "GPT-5.6 Sol", "GPT-5.6 Terra", "GPT-6 Astra",
+    "GPT-6 Astra", "GPT-5.6 Terra", "GPT-5.6 Sol", "GPT-5.6 Luna",
 };
 static const char *const chatgpt_thinking[] = {"Light", "Medium", "High", "Extra High"};
 static const char *const cursor_thinking[] = {
@@ -326,7 +326,7 @@ const char *catalog_default_model(void)
 
 const char *catalog_default_model_for(desk_app_t app)
 {
-    if (app == DESK_OPENCODE) return opencode_models[0];
+    if (app == DESK_OPENCODE) return "GPT-5.6 Luna";
     return catalog_default_model_in(app == DESK_CURSOR);
 }
 

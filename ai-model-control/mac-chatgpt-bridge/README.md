@@ -184,16 +184,15 @@ commands; CLI callers supply `--set-model` together with `--set-thinking`.
 ## OpenCode
 
 The bridge recognizes the installed desktop app `ai.opencode.desktop` and sends
-`FRONT OpenCode`. The panel shows an OpenCode wordmark header and its own picker
-order: GPT-5.6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, then GPT-6 Astra. Firmware and
+`FRONT OpenCode`. The panel shows an OpenCode wordmark header and its encoder
+order: GPT-6 Astra, GPT-5.6 Terra, GPT-5.6 Sol, then GPT-5.6 Luna. Firmware and
 bridge validate OpenCode against that list, then save its selections separately
 (`last_o` and app ID 2 in the existing effort blob). ChatGPT and Cursor keep
 their existing app IDs.
 
-Command-apostrophe opens OpenCode's model picker. The bridge selects a unique
-enabled Accessibility button by exact model name, so provider ordering does
-not affect selection. The model must be available in OpenCode's picker;
-missing or duplicate names fail without choosing another model.
+Command-apostrophe opens OpenCode's Luna-first model picker. The bridge sends
+Down 1 for Luna, 2 for Sol, 3 for Terra, or 4 for Astra, then Return to confirm
+the selection. The native picker must retain that order.
 
 Effort uses the accessible **Choose model variant** menu to select an absolute
 value. Panel Light maps to Low, Medium to Medium, High to High, and Extra High

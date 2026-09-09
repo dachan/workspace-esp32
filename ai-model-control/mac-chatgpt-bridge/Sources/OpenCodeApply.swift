@@ -2,13 +2,14 @@
 import ApplicationServices
 import Foundation
 
-/// OpenCode lists models by provider, so select exact accessible names rather
-/// than relying on picker order. Effort uses the absolute variant menu.
+/// OpenCode's encoder order is reversed from its native Luna-first picker.
+/// Effort uses the absolute variant menu.
 enum OpenCodeApply {
     private static var openPickers: Set<Int32> = []
 
     static func model(_ raw: String, focus: FocusOperation, pulse: @escaping () -> Bool) -> Switcher.Result {
-        guard let name = Catalog.openCodeModelName(raw) else {
+        guard let name = Catalog.openCodeModelName(raw),
+              let pickerIndex = Catalog.openCodePickerIndex(raw) else {
             return .failed("unknown OpenCode model \(raw)")
         }
         if let result = prepare(focus, pulse: pulse) { return result }
@@ -16,7 +17,17 @@ enum OpenCodeApply {
         guard Keys.command(Keys.apostrophe, pulse: pulse), Keys.wait(0.45, pulse: pulse) else {
             return .interrupted
         }
-        return select(name, roles: ["AXButton"], focus: focus, pulse: pulse)
+        // The native menu starts before Luna, so the first Down selects Luna.
+        for _ in 0...pickerIndex {
+            guard Keys.key(Keys.down, pulse: pulse), Keys.wait(0.05, pulse: pulse) else {
+                return .interrupted
+            }
+        }
+        guard Keys.key(Keys.return, pulse: pulse), Keys.wait(0.25, pulse: pulse) else {
+            return .interrupted
+        }
+        openPickers.remove(focus.pid)
+        return .applied(path: "OpenCode Command-' Down \(pickerIndex + 1) Return \(name)")
     }
 
     static func thinking(_ raw: String, focus: FocusOperation, pulse: @escaping () -> Bool) -> Switcher.Result {
