@@ -3,6 +3,9 @@ import CoreGraphics
 import Foundation
 
 enum Keys {
+    /// Delay between repeated navigation keys.
+    static let navigationDelay = 0.025
+
     static let apostrophe: UInt16 = 0x27
     static let comma: UInt16 = 0x2B
     static let period: UInt16 = 0x2F

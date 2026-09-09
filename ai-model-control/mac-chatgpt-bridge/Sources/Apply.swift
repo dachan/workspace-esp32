@@ -126,7 +126,7 @@ enum Switcher {
                     ? .interrupted
                     : .failed("could not move to \(name)")
             }
-            guard Keys.wait(0.05, pulse: pulse) else {
+            guard Keys.wait(Keys.navigationDelay, pulse: pulse) else {
                 return .interrupted
             }
             guard DeskFront.isForeground(preferred: preferred) else {
@@ -215,7 +215,7 @@ enum Switcher {
             return stopped
         }
         if let stopped = repeatKey(
-            Keys.down, times: index + 1, gap: 0.05, pulse: pulse,
+            Keys.down, times: index + 1, gap: Keys.navigationDelay, pulse: pulse,
             fail: "could not move to \(name)"
         ) {
             return stopped
@@ -339,7 +339,7 @@ enum Switcher {
     ) -> Result {
         // Right highlights the first supported entry (Low or None).
         if let stopped = repeatKey(
-            Keys.down, times: index, gap: 0.05, pulse: pulse,
+            Keys.down, times: index, gap: Keys.navigationDelay, pulse: pulse,
             fail: "could not move to \(name)"
         ) {
             return stopped
@@ -396,7 +396,7 @@ enum Switcher {
         let code: UInt16 = delta > 0 ? Keys.period : Keys.comma
         for _ in 0..<abs(delta) {
             guard Keys.controlShift(code, pulse: pulse) else { return false }
-            guard Keys.wait(0.15, pulse: pulse) else { return false }
+            guard Keys.wait(Keys.navigationDelay, pulse: pulse) else { return false }
             if pulse?() == true {
                 return false
             }

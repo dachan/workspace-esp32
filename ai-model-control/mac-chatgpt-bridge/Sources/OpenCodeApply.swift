@@ -19,7 +19,7 @@ enum OpenCodeApply {
         // therefore zero-based: the first Down advances to Sol.
         if pickerIndex > 0 {
             for _ in 0..<pickerIndex {
-                guard Keys.key(Keys.down, pulse: pulse), Keys.wait(0.05, pulse: pulse) else {
+                guard Keys.key(Keys.down, pulse: pulse), Keys.wait(Keys.navigationDelay, pulse: pulse) else {
                     return .interrupted
                 }
             }
