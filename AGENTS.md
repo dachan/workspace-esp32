@@ -62,8 +62,9 @@ ChatGPT-only model name (e.g. GPT-6 Astra) is skipped while
 Cursor is focused so effort can still apply. The helper sends `FRONT Cursor`, `FRONT ChatGPT`, `FRONT OpenCode`, or `FRONT None`. Cursor
 and ChatGPT select that app's catalog and header lockup. OpenCode has its own
 fixed encoder order: GPT-6 Astra, GPT-5.6 Terra, GPT-5.6 Sol, then GPT-5.6 Luna.
-Its Command-apostrophe picker remains Luna-first: Down 1/2/3/4, then Return. Keep
-firmware `opencode_models` and Swift `openCodeModels` aligned.
+Its Command-apostrophe picker opens with Luna selected: Down 3/2/1/0, then Return.
+OpenCode thinking remains local to the panel and is never synchronized. Keep firmware
+`opencode_models` and Swift `openCodeModels` aligned.
 `FRONT None` keeps
 the last app's catalog and logo; after 1 min without focus or encoder/touch
 the panel shows a date/time screensaver. Focus, a knob, or a tap wakes it;

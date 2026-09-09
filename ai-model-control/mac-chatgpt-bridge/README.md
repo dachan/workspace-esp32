@@ -196,12 +196,9 @@ highlighted. The bridge sends zero-based Down presses: 0 for Luna, 1 for Sol,
 2 for Terra, or 3 for Astra, then Return to confirm the selection. The native
 picker must retain that order.
 
-Effort uses the accessible **Choose model variant** menu to select an absolute
-value. Panel Light maps to Low, Medium to Medium, High to High, and Extra High
-to Xhigh. The cycling Command-Shift-D shortcut is intentionally not used because
-it cannot establish an absolute value without knowing the current selection.
-Other OpenCode models, None/Max variants, and agent cycling are not exposed by
-this initial four-model integration.
+OpenCode effort sync is unsupported. The panel may retain its local thinking
+value, but the bridge skips OpenCode thinking updates; it does not open the
+variant menu or use the cycling shortcut.
 
 Prompt focus, interruption cleanup, per-process apply caching, SYNC reapply,
 and dropping changes when the app is not foreground follow the existing bridge

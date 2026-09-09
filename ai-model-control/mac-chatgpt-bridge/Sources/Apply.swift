@@ -19,6 +19,9 @@ enum Switcher {
         guard let focus = FocusOperation(preferred: preferredBundleID) else {
             return .failed("ChatGPT, Cursor, or OpenCode is not focused")
         }
+        if focus.kind == .openCode {
+            return .applied(path: "OpenCode effort sync unsupported; skipped")
+        }
         return InputGuard.protect(focus: focus) { inputGuard in
             let upstream = wrappedPulse(focus: focus, upstream: pulse)
             let pulse = { !inputGuard.isValid || upstream() }
@@ -59,7 +62,7 @@ enum Switcher {
             let pulse = { !inputGuard.isValid || upstream() }
             switch focus.kind {
             case .openCode:
-                return OpenCodeApply.thinking(raw, focus: focus, pulse: pulse)
+                return .applied(path: "OpenCode effort sync unsupported; skipped")
             case .chatGPT:
                 guard let target = Catalog.chatgptThinkingIndex(raw), let name = Catalog.chatgptThinkingName(raw) else {
                     return .failed("unknown thinking \(raw)")

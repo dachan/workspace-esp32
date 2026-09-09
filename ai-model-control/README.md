@@ -242,10 +242,11 @@ commands; CLI callers supply `--set-model` together with `--set-thinking`.
 
 `FRONT OpenCode` selects an OpenCode wordmark header and its own fixed encoder:
 GPT-6 Astra, GPT-5.6 Terra, GPT-5.6 Sol, then GPT-5.6 Luna. OpenCode's native
-picker is Luna-first, so the bridge sends one to four Down presses followed by
-Return for the selected encoder entry. Its last model
-(`last_o`) and per-model effort (app ID 2 in `effort`) are stored separately
-from ChatGPT and Cursor. `FRONT None` retains that state. An older saved OpenCode
-model outside this set resets to GPT-5.6 Luna when OpenCode next becomes focused.
+picker opens with Luna selected, so the bridge sends zero to three Down presses
+followed by Return for the selected encoder entry. Its last model is stored
+separately from ChatGPT and Cursor. Thinking remains local to the panel and does
+not synchronize with OpenCode. `FRONT None` retains that state. An older saved
+OpenCode model outside this set resets to GPT-5.6 Luna when OpenCode next becomes
+focused.
 See the [OpenCode bridge mapping](mac-chatgpt-bridge/README.md#opencode) for
 model availability, effort mappings, and integration limits.
