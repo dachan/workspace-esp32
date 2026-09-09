@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-08 (v0.88 OpenCode wordmark app-flash)
+Last inventory pass: 2026-09-08 (v0.89 OpenCode catalog app-flash)
 
 ## radar-transmitter
 
@@ -37,7 +37,7 @@ Last inventory pass: 2026-09-08 (v0.88 OpenCode wordmark app-flash)
 - Firmware: `super-tamagotchi/`
 - Mac serial: unknown
 
-## chatgpt-bridge target (model / thinking display)
+## ai-model-control target (model / thinking display)
 
 - MCU: ESP32-S3 (QFN56) rev v0.2, embedded 8MB PSRAM (AP_3v3), 40MHz XTAL — Lonely Binary N16R8-class
 - MAC: 28:84:85:44:1b:5c
@@ -59,12 +59,12 @@ Last inventory pass: 2026-09-08 (v0.88 OpenCode wordmark app-flash)
   - Board pinout image: [`s3-n16r8.jpeg`](s3-n16r8.jpeg)
 - Touch: FT6336 — SDA GPIO6, SCL GPIO15, reset GPIO7, INT GPIO5 (5 s hold starts five-point calibration, NVS `touch`/`c35_desk`)
 - Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
-- Firmware currently on device: `ai-model-control/` **v 0.88** (OpenCode integration and supplied wordmark; existing clock screensaver and wake behavior)
+- Firmware currently on device: `ai-model-control/` **v 0.89** (OpenCode has its own four-model dial: GPT-5.6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, GPT-6 Astra)
 - Display settings (LOCKED — title-strip noise fix 2026-09-07):
   - Controller: ST7796U, 480×320 landscape, SPI 26 MHz, `invert_color(true)`, RGB
   - MADCTL: `swap_xy(true)`, `mirror(true, true)` — desk 180 in hardware; do not flip only one mirror (glyphs)
   - Software 180 flush: ON via internal-RAM band blit + SPI transfer sync (v 0.22+)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → OpenAI/Cursor brand lockup at top of glass, MODEL left, version bottom-right
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
-- Last verified: 2026-09-08 — v0.88 application-only reflash on `/dev/cu.usbmodem21201` (hash-verified), preserving NVS. Board identity matched the recorded ESP32-S3. Live serial returned ENABLED and revisioned MODEL/THINKING state. Rebuilt Mac helper restarted and connected; foreground was loginwindow. Physical OpenCode wordmark and app-control behavior remain unverified; model CLK/DT wiring fault still open (see above).
+- Last verified: 2026-09-08 — v0.89 application-only reflash on `/dev/cu.usbmodem21201` (hash-verified), preserving NVS. Board identity matched the recorded ESP32-S3. Live serial returned ENABLED and revisioned MODEL/THINKING state. The rebuilt bridge reconnected, applied OpenCode GPT-6 Astra from the new catalog, and restarted from `ai-model-control/`. Physical dial order and input suppression remain unverified; OpenCode Xhigh variant selection and the model CLK/DT wiring fault remain open (see above).
 - Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
