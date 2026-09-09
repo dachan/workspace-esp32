@@ -17,17 +17,20 @@ enum OpenCodeApply {
         guard Keys.command(Keys.apostrophe, pulse: pulse), Keys.wait(0.45, pulse: pulse) else {
             return .interrupted
         }
-        // The native menu starts before Luna, so the first Down selects Luna.
-        for _ in 0...pickerIndex {
-            guard Keys.key(Keys.down, pulse: pulse), Keys.wait(0.05, pulse: pulse) else {
-                return .interrupted
+        // Luna is already highlighted when the native menu opens. Down is
+        // therefore zero-based: the first Down advances to Sol.
+        if pickerIndex > 0 {
+            for _ in 0..<pickerIndex {
+                guard Keys.key(Keys.down, pulse: pulse), Keys.wait(0.05, pulse: pulse) else {
+                    return .interrupted
+                }
             }
         }
         guard Keys.key(Keys.return, pulse: pulse), Keys.wait(0.25, pulse: pulse) else {
             return .interrupted
         }
         openPickers.remove(focus.pid)
-        return .applied(path: "OpenCode Command-' Down \(pickerIndex + 1) Return \(name)")
+        return .applied(path: "OpenCode Command-' Down \(pickerIndex) Return \(name)")
     }
 
     static func thinking(_ raw: String, focus: FocusOperation, pulse: @escaping () -> Bool) -> Switcher.Result {

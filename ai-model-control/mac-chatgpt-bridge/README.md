@@ -191,9 +191,10 @@ bridge validate OpenCode against that list, then save its selections separately
 (`last_o` and app ID 2 in the existing effort blob). ChatGPT and Cursor keep
 their existing app IDs.
 
-Command-apostrophe opens OpenCode's Luna-first model picker. The bridge sends
-Down 1 for Luna, 2 for Sol, 3 for Terra, or 4 for Astra, then Return to confirm
-the selection. The native picker must retain that order.
+Command-apostrophe opens OpenCode's Luna-first model picker with Luna already
+highlighted. The bridge sends zero-based Down presses: 0 for Luna, 1 for Sol,
+2 for Terra, or 3 for Astra, then Return to confirm the selection. The native
+picker must retain that order.
 
 Effort uses the accessible **Choose model variant** menu to select an absolute
 value. Panel Light maps to Low, Medium to Medium, High to High, and Extra High
