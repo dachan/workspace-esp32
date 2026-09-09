@@ -205,6 +205,10 @@ focused. ChatGPT applies via Control-Shift-M
 via Command-/ (first Down is Auto) and Left, Up, Right then Down to the level.
 A five-second press-and-hold starts a five-point touch calibration.
 
+## v0.90 release freeze
+
+`ai-model-control` firmware is frozen at **v0.90** until the user explicitly lifts this freeze. Do not change `ai-model-control/VERSION` or flash a newer application build.
+
 ## Build and flash
 
 Use a local ESP-IDF installation without embedding its path in scripts or
