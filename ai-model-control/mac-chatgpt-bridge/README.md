@@ -117,8 +117,9 @@ This confirms availability, not physical input suppression or the app's selectio
 
 ## Accessibility grant
 
-Foreground detection does not need Accessibility. Posting the ChatGPT and
-Cursor shortcuts, and focusing the prompt field, do.
+Foreground detection and `FRONT` updates over serial do not need Accessibility.
+Posting shortcuts and focusing the prompt field do; without it, the bridge keeps
+sending the panel's focused-app state and drops keyboard-control requests.
 
 1. System Settings → Privacy & Security → Accessibility
 2. Enable the terminal (or Cursor) you will run the CLI from

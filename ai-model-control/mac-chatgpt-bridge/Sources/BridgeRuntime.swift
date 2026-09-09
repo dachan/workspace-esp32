@@ -127,6 +127,10 @@ final class BridgeRuntime {
 
     private func applyPending() {
         guard !desired.isEmpty, let focus = targetFocus else { return }
+        guard AXTrust.isTrusted(prompt: false) else {
+            discardPending("Accessibility unavailable for keyboard control")
+            return
+        }
         guard focus.isCurrent else {
             discardPending("target app left the foreground")
             return
@@ -245,9 +249,8 @@ func runWatch(options: Options) -> Int32 {
         fputs("chatgpt-bridge: --listen needs --port\n", stderr)
         return 2
     }
-    if options.port != nil {
-        guard AXTrust.require(prompt: true) else { return 2 }
-    }
+    // Watching the frontmost app and forwarding FRONT state only use NSWorkspace.
+    // Keyboard control is gated at the point keys could be posted.
     BridgeRuntime(options: options).run()
 }
 #endif
