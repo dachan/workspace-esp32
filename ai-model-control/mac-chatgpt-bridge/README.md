@@ -21,7 +21,7 @@ model and thinking state instead of holding it for later.
    Command-L only when the Agents panel is missing (Cmd+L toggles it closed
    if it is already open), otherwise AX-focus `aislash-editor-input`;
    ChatGPT/Codex by message-box identity — then apply using that app's shortcuts.
-   Applies start 1 s after the last
+   Applies start 0.25 s after the last
    received change. One worker retains the latest complete model/effort target,
    with a generation that changes on every accepted update or `PUSH` (SYNC tap).
    Serial is drained during delays; a newer generation aborts and re-targets,
@@ -30,7 +30,8 @@ model and thinking state instead of holding it for later.
    Each field is marked unknown before posting keys, so an interrupted or failed
    sequence cannot cause a later correction to be skipped. Completed fields are
    cached per process only while their generation is current. `PUSH` forces both
-   fields to be posted again.
+   fields to be posted again. Model picker and confirmation waits use 0.25 s;
+   every bridge-posted keystroke uses a shared 0.05 s gap.
    - ChatGPT / Codex model: Control-Shift-M (picker opens on Astra), Down
      to the ESP dial index, Return.
    - ChatGPT / Codex reasoning: absolute Light clamp (Ctrl+Shift+,) then

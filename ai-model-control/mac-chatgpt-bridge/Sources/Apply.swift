@@ -113,7 +113,7 @@ enum Switcher {
                 ? .interrupted
                 : .failed("could not post Ctrl+Shift+M")
         }
-        guard Keys.wait(0.45, pulse: pulse) else {
+        guard Keys.wait(Keys.modelTiming, pulse: pulse) else {
             return .interrupted
         }
         guard DeskFront.isForeground(preferred: preferred) else {
@@ -126,7 +126,7 @@ enum Switcher {
                     ? .interrupted
                     : .failed("could not move to \(name)")
             }
-            guard Keys.wait(Keys.navigationDelay, pulse: pulse) else {
+            guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
                 return .interrupted
             }
             guard DeskFront.isForeground(preferred: preferred) else {
@@ -140,7 +140,7 @@ enum Switcher {
                 : .failed("could not confirm \(name)")
         }
         interruptedPickers.removeValue(forKey: focus.pid)
-        guard Keys.wait(0.15, pulse: pulse) else {
+        guard Keys.wait(Keys.modelTiming, pulse: pulse) else {
             return .interrupted
         }
         return .applied(path: "Ctrl+Shift+M Down \(index) \(name)")
@@ -195,7 +195,7 @@ enum Switcher {
                 ? .interrupted
                 : .failed("could not set reasoning to \(name)")
         }
-        guard Keys.wait(0.1, pulse: pulse) else {
+        guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
             return .interrupted
         }
         guard DeskFront.isForeground(preferred: preferred) else {
@@ -215,7 +215,7 @@ enum Switcher {
             return stopped
         }
         if let stopped = repeatKey(
-            Keys.down, times: index + 1, gap: Keys.navigationDelay, pulse: pulse,
+            Keys.down, times: index + 1, gap: Keys.keystrokeDelay, pulse: pulse,
             fail: "could not move to \(name)"
         ) {
             return stopped
@@ -227,7 +227,7 @@ enum Switcher {
             return pulse() ? .interrupted : .failed("could not confirm \(name)")
         }
         interruptedPickers.removeValue(forKey: focus.pid)
-        guard Keys.wait(0.15, pulse: pulse) else {
+        guard Keys.wait(Keys.modelTiming, pulse: pulse) else {
             return .interrupted
         }
         return nil
@@ -250,20 +250,20 @@ enum Switcher {
         guard Keys.key(Keys.left, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not leave Cursor model list")
         }
-        guard Keys.wait(0.08, pulse: pulse) else {
+        guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
             return .interrupted
         }
         guard Keys.key(Keys.up, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not move to Cursor Thinking")
         }
-        guard Keys.wait(0.08, pulse: pulse) else {
+        guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
             return .interrupted
         }
         guard Keys.key(Keys.right, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not open Cursor Thinking menu")
         }
         interruptedPickers[focus.pid] = 2
-        guard Keys.wait(0.25, pulse: pulse) else {
+        guard Keys.wait(Keys.modelTiming, pulse: pulse) else {
             return .interrupted
         }
         return pickCursorSubmenuIndex(
@@ -298,7 +298,7 @@ enum Switcher {
                 return nil
             }
         }
-        guard Keys.wait(0.2, pulse: pulse) else { return .interrupted }
+        guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else { return .interrupted }
         guard DeskFront.isForeground(preferred: preferred) else {
             return .failed("\(focus.displayName) is not focused")
         }
@@ -320,7 +320,7 @@ enum Switcher {
         guard Keys.command(Keys.slash, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not post Command-/")
         }
-        guard Keys.wait(0.45, pulse: pulse) else {
+        guard Keys.wait(Keys.modelTiming, pulse: pulse) else {
             return .interrupted
         }
         guard DeskFront.isForeground(preferred: preferred) else {
@@ -339,7 +339,7 @@ enum Switcher {
     ) -> Result {
         // Right highlights the first supported entry (Low or None).
         if let stopped = repeatKey(
-            Keys.down, times: index, gap: Keys.navigationDelay, pulse: pulse,
+            Keys.down, times: index, gap: Keys.keystrokeDelay, pulse: pulse,
             fail: "could not move to \(name)"
         ) {
             return stopped
@@ -350,14 +350,14 @@ enum Switcher {
         guard Keys.key(Keys.return, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not confirm \(name)")
         }
-        guard Keys.wait(0.15, pulse: pulse) else {
+        guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
             return .interrupted
         }
         // Track each closed layer so superseding input cannot strand a submenu.
         if let stopped = dismissInterruptedPicker(pid: focus.pid, pulse: pulse) {
             return stopped
         }
-        guard Keys.wait(0.15, pulse: pulse) else {
+        guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
             return .interrupted
         }
         return .applied(path: path)
@@ -385,7 +385,7 @@ enum Switcher {
         while let remaining = interruptedPickers[pid], remaining > 0 {
             guard Keys.key(Keys.escape, pulse: pulse) else { return .interrupted }
             interruptedPickers[pid] = remaining - 1
-            guard Keys.wait(0.15, pulse: pulse) else { return .interrupted }
+            guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else { return .interrupted }
         }
         interruptedPickers.removeValue(forKey: pid)
         return nil
@@ -396,7 +396,7 @@ enum Switcher {
         let code: UInt16 = delta > 0 ? Keys.period : Keys.comma
         for _ in 0..<abs(delta) {
             guard Keys.controlShift(code, pulse: pulse) else { return false }
-            guard Keys.wait(Keys.navigationDelay, pulse: pulse) else { return false }
+            guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else { return false }
             if pulse?() == true {
                 return false
             }

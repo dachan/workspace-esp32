@@ -3,8 +3,11 @@ import CoreGraphics
 import Foundation
 
 enum Keys {
-    /// Delay between repeated navigation keys.
-    static let navigationDelay = 0.025
+    /// Shared settle time for model pickers and confirmations.
+    static let modelTiming = 0.250
+
+    /// Shared delay between bridge-posted keystrokes.
+    static let keystrokeDelay = 0.050
 
     static let apostrophe: UInt16 = 0x27
     static let comma: UInt16 = 0x2B

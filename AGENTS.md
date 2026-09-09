@@ -42,9 +42,13 @@ Mac folder).
 
 Firmware `v 0.35+` updates panel/NVS immediately, then sends
 `SET MODEL <name>` / `SET THINKING <level>` **0.4 s** after the last rotary
-detent. The bridge settles **1 s** more after the last received change, then
+detent. The bridge settles **0.25 s** more after the last received change, then
 applies only fields that differ from its last apply to that app (both in one
 pass when both changed — thinking-only skips model selection).
+
+Model picker and confirmation timing is **0.25 s**; every bridge-posted
+keystroke is separated by **0.05 s** across ChatGPT, Cursor, and OpenCode.
+The firmware's 0.4 s encoder settle remains unchanged.
 
 Foreground is `NSWorkspace.frontmostApplication` (`com.openai.chat` /
 `com.openai.codex`, Cursor `com.todesktop.230313mzl4w4u92`, OpenCode

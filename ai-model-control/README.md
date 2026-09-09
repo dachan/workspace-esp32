@@ -134,7 +134,7 @@ Control-Shift-M and steps reasoning with Control-Shift-, / Control-Shift-.
 While Cursor is focused it opens the model list with Command-/ (first Down
 is Auto), then reopens it for Effort with Left, Up, Right, then Down-only to
 the level; Return selects, then Escape twice closes the menus. The bridge
-settles 1 s after the last received change, applies model and effort in one
+settles 0.25 s after the last received change, applies model and effort in one
 pass using a single latest-target worker. New generations supersede older
 operations. Fields are marked unknown before posting keys, so partial or
 interrupted operations cannot suppress the final correction when a dial returns
@@ -146,7 +146,9 @@ Cursor restores that app's last model and effort on the panel. When neither is
 focused, encoder changes stay on the ESP32 display/NVS and the bridge discards
 them without activating either app; turning the knob again while ChatGPT or
 Cursor is focused is what applies a setting. Focus lost mid-apply discards the
-change too. A five-second hold on the glass starts touch calibration.
+change too. Model picker and confirmation waits use 0.25 s; all posted
+keystrokes use a shared 0.05 s gap. A five-second hold on the glass starts
+touch calibration.
 
 ```bash
 chatgpt-bridge --watch --port "$ESP_PORT"

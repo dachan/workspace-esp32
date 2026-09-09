@@ -60,9 +60,9 @@ final class BridgeRuntime {
             return
         }
         acceptTarget()
-        // Batch paired knob turns: apply 1 s after the last received change.
-        // PUSH (sync button) skips the 1 s batch window.
-        settleAt = ProcessInfo.processInfo.systemUptime + (forceApply ? 0.4 : 1.0)
+        // Batch paired knob turns using the shared model settle time.
+        // PUSH uses the same short settle so the app can render its current UI.
+        settleAt = ProcessInfo.processInfo.systemUptime + Keys.modelTiming
         retryAt = 0
         lastFailure = nil
         print("\(stamp()) rx \(update.kind.rawValue) \(value)")
@@ -103,7 +103,7 @@ final class BridgeRuntime {
                 }
                 acceptTarget()
                 forceApply = true
-                settleAt = ProcessInfo.processInfo.systemUptime + 0.4
+                settleAt = ProcessInfo.processInfo.systemUptime + Keys.modelTiming
                 retryAt = 0
                 lastFailure = nil
                 print("\(stamp()) rx PUSH")
@@ -191,7 +191,7 @@ final class BridgeRuntime {
                     retryAt = 0
                     print("\(stamp()) posted \(kind.rawValue) \(value) via \(path)")
                     if kind == .model, focus.kind == .cursor,
-                       !Keys.wait(0.4, pulse: pulse) { break applyFields }
+                       !Keys.wait(Keys.modelTiming, pulse: pulse) { break applyFields }
                 case .interrupted:
                     return .interrupted
                 case .failed(let message):

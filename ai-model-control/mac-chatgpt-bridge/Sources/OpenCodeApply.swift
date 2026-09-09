@@ -12,19 +12,19 @@ enum OpenCodeApply {
         }
         if let result = prepare(focus, pulse: pulse) { return result }
         openPickers.insert(focus.pid)
-        guard Keys.command(Keys.apostrophe, pulse: pulse), Keys.wait(0.45, pulse: pulse) else {
+        guard Keys.command(Keys.apostrophe, pulse: pulse), Keys.wait(Keys.modelTiming, pulse: pulse) else {
             return .interrupted
         }
         // Luna is already highlighted when the native menu opens. Down is
         // therefore zero-based: the first Down advances to Sol.
         if pickerIndex > 0 {
             for _ in 0..<pickerIndex {
-                guard Keys.key(Keys.down, pulse: pulse), Keys.wait(Keys.navigationDelay, pulse: pulse) else {
+                guard Keys.key(Keys.down, pulse: pulse), Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
                     return .interrupted
                 }
             }
         }
-        guard Keys.key(Keys.return, pulse: pulse), Keys.wait(0.25, pulse: pulse) else {
+        guard Keys.key(Keys.return, pulse: pulse), Keys.wait(Keys.modelTiming, pulse: pulse) else {
             return .interrupted
         }
         openPickers.remove(focus.pid)
@@ -34,7 +34,7 @@ enum OpenCodeApply {
     private static func prepare(_ focus: FocusOperation, pulse: @escaping () -> Bool) -> Switcher.Result? {
         guard !pulse() else { return .interrupted }
         if openPickers.contains(focus.pid) {
-            guard Keys.key(Keys.escape, pulse: pulse), Keys.wait(0.15, pulse: pulse) else {
+            guard Keys.key(Keys.escape, pulse: pulse), Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
                 return .interrupted
             }
             openPickers.remove(focus.pid)
