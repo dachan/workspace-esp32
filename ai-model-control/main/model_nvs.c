@@ -81,16 +81,15 @@ static void load_last_model(nvs_handle_t h, const char *key, char *out, size_t o
 
 static void seed_factory_for(desk_app_t app)
 {
-    bool cursor = app == DESK_CURSOR;
     if (s_last_model[app][0]) {
         return;
     }
     model_fields_t seed = {0};
-    snprintf(seed.model, sizeof(seed.model), "%s", catalog_default_model_in(cursor));
+    snprintf(seed.model, sizeof(seed.model), "%s", catalog_default_model_for(app));
     seed.has_model = 1;
-    if (catalog_thinking_count_in(cursor, seed.model) > 0) {
+    if (catalog_thinking_count_for(app, seed.model) > 0) {
         snprintf(seed.thinking, sizeof(seed.thinking), "%s",
-                 catalog_default_thinking_in(cursor, seed.model));
+                 catalog_default_thinking_for(app, seed.model));
         seed.has_thinking = 1;
     }
     model_nvs_remember_for(&seed, app);
@@ -232,18 +231,17 @@ esp_err_t model_nvs_save(const model_fields_t *fields)
 
 void model_nvs_remember_for(const model_fields_t *fields, desk_app_t app)
 {
-    bool cursor = app == DESK_CURSOR;
     if (!fields || !fields->has_model || fields->model[0] == '\0') {
         return;
     }
-    if (catalog_model_index_in(cursor, fields->model) < 0) {
+    if (catalog_model_index_for(app, fields->model) < 0) {
         return;
     }
     copy_trunc(s_last_model[app], EFFORT_MODEL_MAX, fields->model);
     if (!fields->has_thinking || fields->thinking[0] == '\0') {
         return;
     }
-    if (catalog_thinking_count_in(cursor, fields->model) == 0) {
+    if (catalog_thinking_count_for(app, fields->model) == 0) {
         return;
     }
 
@@ -267,19 +265,18 @@ void model_nvs_remember(const model_fields_t *fields)
 
 void model_nvs_restore_for(model_fields_t *fields, desk_app_t app)
 {
-    bool cursor = app == DESK_CURSOR;
     if (!fields) {
         return;
     }
     const char *saved = s_last_model[app];
-    if (saved[0] && catalog_model_index_in(cursor, saved) >= 0) {
+    if (saved[0] && catalog_model_index_for(app, saved) >= 0) {
         snprintf(fields->model, sizeof(fields->model), "%s", saved);
         fields->has_model = 1;
-    } else if (!fields->has_model || catalog_model_index_in(cursor, fields->model) < 0) {
-        snprintf(fields->model, sizeof(fields->model), "%s", catalog_default_model_in(cursor));
+    } else if (!fields->has_model || catalog_model_index_for(app, fields->model) < 0) {
+        snprintf(fields->model, sizeof(fields->model), "%s", catalog_default_model_for(app));
         fields->has_model = 1;
     }
-    if (catalog_thinking_count_in(cursor, fields->model) == 0) {
+    if (catalog_thinking_count_for(app, fields->model) == 0) {
         return;
     }
     int slot = find_slot(app, fields->model);
@@ -290,7 +287,7 @@ void model_nvs_restore_for(model_fields_t *fields, desk_app_t app)
     }
     if (!fields->has_thinking) {
         snprintf(fields->thinking, sizeof(fields->thinking), "%s",
-                 catalog_default_thinking_in(cursor, fields->model));
+                 catalog_default_thinking_for(app, fields->model));
         fields->has_thinking = 1;
     }
 }
@@ -301,8 +298,7 @@ void model_nvs_restore_effort(model_fields_t *fields)
         return;
     }
     desk_app_t app = front_title_app();
-    bool cursor = app == DESK_CURSOR;
-    if (catalog_thinking_count_in(cursor, fields->model) == 0) {
+    if (catalog_thinking_count_for(app, fields->model) == 0) {
         return;
     }
     int slot = find_slot(app, fields->model);

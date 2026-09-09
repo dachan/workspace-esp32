@@ -184,9 +184,11 @@ commands; CLI callers supply `--set-model` together with `--set-thinking`.
 ## OpenCode
 
 The bridge recognizes the installed desktop app `ai.opencode.desktop` and sends
-`FRONT OpenCode`. The panel shows an OpenCode wordmark header, uses the existing
-GPT dial catalog, and saves its selections separately (`last_o` and app ID 2
-in the existing effort blob). ChatGPT and Cursor keep their existing app IDs.
+`FRONT OpenCode`. The panel shows an OpenCode wordmark header and its own picker
+order: GPT-5.6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, then GPT-6 Astra. Firmware and
+bridge validate OpenCode against that list, then save its selections separately
+(`last_o` and app ID 2 in the existing effort blob). ChatGPT and Cursor keep
+their existing app IDs.
 
 Command-apostrophe opens OpenCode's model picker. The bridge selects a unique
 enabled Accessibility button by exact model name, so provider ordering does
@@ -198,7 +200,7 @@ value. Panel Light maps to Low, Medium to Medium, High to High, and Extra High
 to Xhigh. The cycling Command-Shift-D shortcut is intentionally not used because
 it cannot establish an absolute value without knowing the current selection.
 Other OpenCode models, None/Max variants, and agent cycling are not exposed by
-this initial GPT dial integration.
+this initial four-model integration.
 
 Prompt focus, interruption cleanup, per-process apply caching, SYNC reapply,
 and dropping changes when the app is not foreground follow the existing bridge

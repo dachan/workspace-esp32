@@ -240,8 +240,10 @@ commands; CLI callers supply `--set-model` together with `--set-thinking`.
 
 ## OpenCode
 
-`FRONT OpenCode` selects an OpenCode wordmark header and the existing GPT dial
-catalog. Its last model (`last_o`) and per-model effort (app ID 2 in `effort`)
-are stored separately from ChatGPT and Cursor. `FRONT None` retains that state.
+`FRONT OpenCode` selects an OpenCode wordmark header and its own fixed dial:
+GPT-5.6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, then GPT-6 Astra. Its last model
+(`last_o`) and per-model effort (app ID 2 in `effort`) are stored separately
+from ChatGPT and Cursor. `FRONT None` retains that state. An older saved OpenCode
+model outside this set resets to GPT-5.6 Luna when OpenCode next becomes focused.
 See the [OpenCode bridge mapping](mac-chatgpt-bridge/README.md#opencode) for
 model availability, effort mappings, and integration limits.

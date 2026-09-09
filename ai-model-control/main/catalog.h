@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "front_title.h"
+
 int catalog_model_count(void);
 int catalog_model_count_in(bool cursor);
 const char *catalog_model_at(int index);
@@ -12,6 +14,12 @@ int catalog_model_index_in(bool cursor, const char *name);
 bool catalog_model_known(const char *name);
 const char *catalog_default_model(void);
 const char *catalog_default_model_in(bool cursor);
+int catalog_model_count_for(desk_app_t app);
+const char *catalog_model_at_for(desk_app_t app, int index);
+int catalog_model_index_for(desk_app_t app, const char *name);
+const char *catalog_default_model_for(desk_app_t app);
+int catalog_thinking_count_for(desk_app_t app, const char *model);
+const char *catalog_default_thinking_for(desk_app_t app, const char *model);
 
 /* Cursor dial enable mask. Auto is always on. Default is the Settings "on" set. */
 uint64_t catalog_cursor_enabled_mask(void);

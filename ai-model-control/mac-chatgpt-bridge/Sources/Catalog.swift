@@ -9,6 +9,14 @@ enum Catalog {
         "GPT-5.5",
     ]
 
+    // OpenCode's supplied OpenAI provider menu order.
+    static let openCodeModels = [
+        "GPT-5.6 Luna",
+        "GPT-5.6 Sol",
+        "GPT-5.6 Terra",
+        "GPT-6 Astra",
+    ]
+
     private struct CursorModel {
         let name: String
         let efforts: [String]
@@ -97,6 +105,12 @@ enum Catalog {
         ])
     }
 
+    static func openCodeModelIndex(_ raw: String) -> Int? {
+        index(raw, in: openCodeModels, aliases: [
+            "luna": 0, "sol": 1, "terra": 2, "astra": 3,
+        ])
+    }
+
     static func cursorModelIndex(_ raw: String) -> Int? {
         index(raw, in: cursorModels, aliases: [
             "auto": 0, "grok": 1, "composer": 2, "opus": 3,
@@ -129,7 +143,7 @@ enum Catalog {
     }
 
     static func modelIndex(_ raw: String) -> Int? {
-        chatgptModelIndex(raw) ?? cursorModelIndex(raw)
+        chatgptModelIndex(raw) ?? cursorModelIndex(raw) ?? openCodeModelIndex(raw)
     }
 
     // Keep these small protocol tables aligned with firmware catalog.c.
@@ -173,8 +187,12 @@ enum Catalog {
         cursorModelIndex(raw).map { cursorModels[$0] }
     }
 
+    static func openCodeModelName(_ raw: String) -> String? {
+        openCodeModelIndex(raw).map { openCodeModels[$0] }
+    }
+
     static func modelName(_ raw: String) -> String? {
-        chatgptModelName(raw) ?? cursorModelName(raw)
+        chatgptModelName(raw) ?? cursorModelName(raw) ?? openCodeModelName(raw)
     }
 
     static func chatgptThinkingName(_ raw: String) -> String? {

@@ -11,6 +11,10 @@
 static const char *const chatgpt_models[] = {
     "GPT-6 Astra", "GPT-5.6 Sol", "GPT-5.6 Terra", "GPT-5.6 Luna", "GPT-5.5",
 };
+/* OpenCode model picker order, from the supplied OpenAI provider menu. */
+static const char *const opencode_models[] = {
+    "GPT-5.6 Luna", "GPT-5.6 Sol", "GPT-5.6 Terra", "GPT-6 Astra",
+};
 static const char *const chatgpt_thinking[] = {"Light", "Medium", "High", "Extra High"};
 static const char *const cursor_thinking[] = {
     "None", "Minimal", "Low", "Medium", "High", "Extra High", "Max",
@@ -197,7 +201,13 @@ static const char *const *active_thinking(const char *model, int *count)
 
 int catalog_model_count(void)
 {
-    return catalog_model_count_in(front_title_is_cursor());
+    return catalog_model_count_for(front_title_app());
+}
+
+int catalog_model_count_for(desk_app_t app)
+{
+    return app == DESK_OPENCODE ? COUNT(opencode_models)
+        : catalog_model_count_in(app == DESK_CURSOR);
 }
 
 int catalog_model_count_in(bool cursor)
@@ -209,7 +219,16 @@ int catalog_model_count_in(bool cursor)
 
 const char *catalog_model_at(int index)
 {
-    return catalog_model_at_in(front_title_is_cursor(), index);
+    return catalog_model_at_for(front_title_app(), index);
+}
+
+const char *catalog_model_at_for(desk_app_t app, int index)
+{
+    if (app == DESK_OPENCODE) {
+        if (index < 0 || index >= COUNT(opencode_models)) return opencode_models[0];
+        return opencode_models[index];
+    }
+    return catalog_model_at_in(app == DESK_CURSOR, index);
 }
 
 const char *catalog_model_at_in(bool cursor, int index)
@@ -224,7 +243,15 @@ const char *catalog_model_at_in(bool cursor, int index)
 
 int catalog_model_index(const char *name)
 {
-    return catalog_model_index_in(front_title_is_cursor(), name);
+    return catalog_model_index_for(front_title_app(), name);
+}
+
+int catalog_model_index_for(desk_app_t app, const char *name)
+{
+    if (app == DESK_OPENCODE) {
+        return table_count(opencode_models, COUNT(opencode_models), name);
+    }
+    return catalog_model_index_in(app == DESK_CURSOR, name);
 }
 
 int catalog_model_index_in(bool cursor, const char *name)
@@ -288,12 +315,19 @@ bool catalog_model_known(const char *name)
     if (table_count(chatgpt_models, COUNT(chatgpt_models), name) >= 0) {
         return true;
     }
-    return cursor_index(name) >= 0;
+    return cursor_index(name) >= 0
+        || table_count(opencode_models, COUNT(opencode_models), name) >= 0;
 }
 
 const char *catalog_default_model(void)
 {
-    return catalog_default_model_in(front_title_is_cursor());
+    return catalog_default_model_for(front_title_app());
+}
+
+const char *catalog_default_model_for(desk_app_t app)
+{
+    if (app == DESK_OPENCODE) return opencode_models[0];
+    return catalog_default_model_in(app == DESK_CURSOR);
 }
 
 const char *catalog_default_model_in(bool cursor)
@@ -306,7 +340,12 @@ const char *catalog_default_model_in(bool cursor)
 
 int catalog_thinking_count(const char *model)
 {
-    return catalog_thinking_count_in(front_title_is_cursor(), model);
+    return catalog_thinking_count_for(front_title_app(), model);
+}
+
+int catalog_thinking_count_for(desk_app_t app, const char *model)
+{
+    return catalog_thinking_count_in(app == DESK_CURSOR, model);
 }
 
 int catalog_thinking_count_in(bool cursor, const char *model)
@@ -365,7 +404,12 @@ const char *catalog_thinking_name(const char *model, int level)
 
 const char *catalog_default_thinking(const char *model)
 {
-    return catalog_default_thinking_in(front_title_is_cursor(), model);
+    return catalog_default_thinking_for(front_title_app(), model);
+}
+
+const char *catalog_default_thinking_for(desk_app_t app, const char *model)
+{
+    return catalog_default_thinking_in(app == DESK_CURSOR, model);
 }
 
 const char *catalog_default_thinking_in(bool cursor, const char *model)

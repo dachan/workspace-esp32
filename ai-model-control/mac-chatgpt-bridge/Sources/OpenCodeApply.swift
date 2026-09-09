@@ -8,7 +8,7 @@ enum OpenCodeApply {
     private static var openPickers: Set<Int32> = []
 
     static func model(_ raw: String, focus: FocusOperation, pulse: @escaping () -> Bool) -> Switcher.Result {
-        guard let name = Catalog.chatgptModelName(raw) else {
+        guard let name = Catalog.openCodeModelName(raw) else {
             return .failed("unknown OpenCode model \(raw)")
         }
         if let result = prepare(focus, pulse: pulse) { return result }
