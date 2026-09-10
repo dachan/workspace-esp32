@@ -33,12 +33,13 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         statusRow.isEnabled = false
         menu.addItem(.separator())
         bridgeToggleRow = NSMenuItem()
-        bridgeSwitch = NSSwitch(frame: NSRect(x: 12, y: 3, width: 130, height: 24))
-        bridgeSwitch.title = "Bridge"
+        let bridgeLabel = NSTextField(labelWithString: "Bridge")
+        bridgeLabel.frame = NSRect(x: 12, y: 6, width: 54, height: 18)
+        bridgeSwitch = NSSwitch(frame: NSRect(x: 78, y: 4, width: 44, height: 22))
         bridgeSwitch.target = self
         bridgeSwitch.action = #selector(toggleBridge)
-        bridgeSwitch.accessibilityLabel = "Bridge"
-        let bridgeView = NSView(frame: NSRect(x: 0, y: 0, width: 154, height: 30))
+        let bridgeView = NSView(frame: NSRect(x: 0, y: 0, width: 134, height: 30))
+        bridgeView.addSubview(bridgeLabel)
         bridgeView.addSubview(bridgeSwitch)
         bridgeToggleRow.view = bridgeView
         menu.addItem(bridgeToggleRow)
