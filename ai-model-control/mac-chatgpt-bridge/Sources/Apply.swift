@@ -40,7 +40,7 @@ enum Switcher {
                 if pulse() {
                     return .interrupted
                 }
-                return cursorModel(index: index, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
+                return cursorModel(name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
             }
         }
     }
@@ -79,11 +79,11 @@ enum Switcher {
                 guard let effort = Catalog.cursorEffort(raw, model: model) else {
                     return .failed("unknown thinking \(raw)")
                 }
-                let (target, name) = effort
+                let (_, name) = effort
                 if pulse() { return .interrupted }
                 // Effort-only: open the popover and navigate directly to Reasoning.
                 return cursorSelectEffort(
-                    target: target, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse
+                    name: name, focus: focus, preferred: preferredBundleID, pulse: pulse
                 )
             }
         }
@@ -106,24 +106,20 @@ enum Switcher {
         return ChatGPTPicker.select(name: name, focus: focus, preferred: preferred, pulse: pulse)
     }
 
-    /// Command-/ focuses Search; first Down is Auto, then enabled catalog order.
+    /// Command-/ opens Cursor's model control; selection uses accessible labels.
     private static func cursorModel(
-        index: Int,
         name: String,
         focus: FocusOperation,
         preferred: String?,
         pulse: @escaping () -> Bool
     ) -> Result {
-        fputs(
-            "chatgpt-bridge: Cursor model via Command-/, Down \(index + 1) to \(name)\n",
-            stderr
-        )
+        fputs("chatgpt-bridge: Cursor model via accessibility Model \(name)\n", stderr)
         if let stopped = cursorSelectModel(
-            index: index, name: name, focus: focus, preferred: preferred, pulse: pulse
+            name: name, focus: focus, preferred: preferred, pulse: pulse
         ) {
             return stopped
         }
-        return .applied(path: "Command-/ Down \(index + 1) \(name)")
+        return .applied(path: "Accessibility model \(name)")
     }
 
     /// Always absolute: clamp to Light, then climb. Avoids relative desync when
@@ -165,7 +161,6 @@ enum Switcher {
     }
 
     private static func cursorSelectModel(
-        index: Int,
         name: String,
         focus: FocusOperation,
         preferred: String?,
@@ -174,62 +169,42 @@ enum Switcher {
         if let stopped = openCursorPopover(focus: focus, preferred: preferred, pulse: pulse) {
             return stopped
         }
-        if let stopped = repeatKey(
-            Keys.down, times: index + 1, gap: Keys.keystrokeDelay, pulse: pulse,
-            fail: "could not move to \(name)"
-        ) {
-            return stopped
-        }
-        guard DeskFront.isForeground(preferred: preferred) else {
-            return .failed("\(focus.displayName) is not focused")
-        }
-        guard Keys.key(Keys.return, pulse: pulse) else {
-            return pulse() ? .interrupted : .failed("could not confirm \(name)")
-        }
-        interruptedPickers.removeValue(forKey: focus.pid)
-        guard Keys.wait(Keys.modelTiming, pulse: pulse) else {
+        let result = CursorPicker.model(
+            name: name, focus: focus, preferred: preferred, pulse: pulse
+        )
+        switch result {
+        case .applied:
+            interruptedPickers.removeValue(forKey: focus.pid)
+            return nil
+        case .interrupted:
             return .interrupted
+        case .failed:
+            return result
         }
-        return nil
     }
 
     private static func cursorSelectEffort(
-        target: Int,
         name: String,
         focus: FocusOperation,
         preferred: String?,
         pulse: @escaping () -> Bool
     ) -> Result {
-        fputs(
-            "chatgpt-bridge: Cursor effort via Command-/ Left Up Right, Effort Down \(target) to \(name)\n",
-            stderr
-        )
+        fputs("chatgpt-bridge: Cursor effort via accessibility Reasoning \(name)\n", stderr)
         if let stopped = openCursorPopover(focus: focus, preferred: preferred, pulse: pulse) {
             return stopped
         }
-        guard Keys.key(Keys.left, pulse: pulse) else {
-            return pulse() ? .interrupted : .failed("could not leave Cursor model list")
-        }
-        guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
-            return .interrupted
-        }
-        guard Keys.key(Keys.up, pulse: pulse) else {
-            return pulse() ? .interrupted : .failed("could not move to Cursor Thinking")
-        }
-        guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
-            return .interrupted
-        }
-        guard Keys.key(Keys.right, pulse: pulse) else {
-            return pulse() ? .interrupted : .failed("could not open Cursor Thinking menu")
-        }
-        interruptedPickers[focus.pid] = 2
-        guard Keys.wait(Keys.modelTiming, pulse: pulse) else {
-            return .interrupted
-        }
-        return pickCursorSubmenuIndex(
-            target, name: name, focus: focus, preferred: preferred, pulse: pulse,
-            path: "Command-/ Left Up Right Reasoning \(name)"
+        let result = CursorPicker.effort(
+            name: name, focus: focus, preferred: preferred, pulse: pulse
         )
+        switch result {
+        case .applied:
+            interruptedPickers.removeValue(forKey: focus.pid)
+            return result
+        case .interrupted:
+            return .interrupted
+        case .failed:
+            return result
+        }
     }
 
     private static func wrappedPulse(focus: FocusOperation, upstream: (() -> Bool)?) -> () -> Bool {
@@ -287,40 +262,6 @@ enum Switcher {
             return .failed("\(focus.displayName) is not focused")
         }
         return nil
-    }
-
-    private static func pickCursorSubmenuIndex(
-        _ index: Int,
-        name: String,
-        focus: FocusOperation,
-        preferred: String?,
-        pulse: @escaping () -> Bool,
-        path: String
-    ) -> Result {
-        // Right highlights the first supported entry (Low or None).
-        if let stopped = repeatKey(
-            Keys.down, times: index, gap: Keys.keystrokeDelay, pulse: pulse,
-            fail: "could not move to \(name)"
-        ) {
-            return stopped
-        }
-        guard DeskFront.isForeground(preferred: preferred) else {
-            return .failed("\(focus.displayName) is not focused")
-        }
-        guard Keys.key(Keys.return, pulse: pulse) else {
-            return pulse() ? .interrupted : .failed("could not confirm \(name)")
-        }
-        guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
-            return .interrupted
-        }
-        // Track each closed layer so superseding input cannot strand a submenu.
-        if let stopped = dismissInterruptedPicker(pid: focus.pid, pulse: pulse) {
-            return stopped
-        }
-        guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
-            return .interrupted
-        }
-        return .applied(path: path)
     }
 
     private static func repeatKey(

@@ -35,11 +35,9 @@ enum Keys {
         Reasoning: absolute Light clamp then Control-Shift-. up to target.
         Bind those shortcuts in ChatGPT if they are Unassigned.
       Cursor
-        Command-/ opens the model list on Search. First Down is Auto,
-        then catalog order (Settings toggle order). Return selects.
-        Models that are toggled off in Cursor are skipped by the picker.
-        Effort: Command-/, Left, Up, Right directly into Reasoning,
-        then Down to the level and Return once, then Escape twice to close the menus. Chat/agent input must be focused.
+        Command-/ opens the model control; click Model, then the exact visible
+        model label. Click Reasoning, then the exact visible effort label.
+        Chat/agent input must be focused.
         Fast/Slow is not set from the dial.
         MODELS (Cursor only) opens the on-device enable list; Auto stays on.
         Tap SYNC on the panel to reapply the current model and thinking.
