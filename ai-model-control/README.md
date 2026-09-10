@@ -131,8 +131,8 @@ two detents are one level and a quick turn can run Light↔Extra High. Model
 steps still use a 160 ms emit gap. The Mac helper uses `NSWorkspace.frontmostApplication`
 and focuses the prompt first: Cursor Command-L only if Agents is not already
 open (it toggles the panel otherwise), otherwise AX-focus the composer;
-ChatGPT by Accessibility element identity. While ChatGPT is focused it opens the model picker with
-Control-Shift-M and steps reasoning with Control-Shift-, / Control-Shift-.
+ChatGPT by Accessibility element identity. While ChatGPT is focused it opens the visible model
+control by Accessibility, chooses **Select model**, and presses the exact model label; it steps reasoning with Control-Shift-, / Control-Shift-.
 While Cursor is focused it opens the model list with Command-/ (first Down
 is Auto), then reopens it for Effort with Left, Up, Right, then Down-only to
 the level; Return selects, then Escape twice closes the menus. The bridge
@@ -207,9 +207,9 @@ identity — never by screen coordinates.
 
 **Per-app apply.**
 
-- **ChatGPT:** Control-Shift-M, Down to the ESP dial index, Return; then
-  absolute reasoning (Ctrl+Shift+, clamp to Light, Ctrl+Shift-. up to
-  target). Model clamps GPT-6 Astra through GPT-5.5 (no wrap).
+- **ChatGPT:** Accessibility clicks the visible model control, then **Select model**
+  and the exact ESP dial model label; then absolute reasoning (Ctrl+Shift+,
+  clamp to Light, Ctrl+Shift-. up to target).
 - **Cursor:** Command-/ (first Down is Auto); effort is Left, Up, Right into
   Reasoning after reopening (Right highlights the first supported level;
   Down to the target; Return; Escape twice closes menus). Model order is

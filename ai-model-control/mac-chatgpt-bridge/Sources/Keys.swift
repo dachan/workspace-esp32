@@ -31,7 +31,7 @@ enum Keys {
       Agents panel is not already open (Cmd+L toggles it closed otherwise),
       otherwise AX-focus aislash-editor-input; ChatGPT via the message box.
       ChatGPT / Codex
-        Model: Control-Shift-M (picker opens on Astra), Down to dial index, Return.
+        Model: accessibility click model control, Select model, then exact model label.
         Reasoning: absolute Light clamp then Control-Shift-. up to target.
         Bind those shortcuts in ChatGPT if they are Unassigned.
       Cursor
@@ -76,6 +76,22 @@ enum Keys {
             return false
         }
         return post(code, flags: flags, down: true) && post(code, flags: flags, down: false)
+    }
+
+    @discardableResult
+    static func click(_ point: CGPoint, pulse: (() -> Bool)? = nil) -> Bool {
+        guard pulse?() != true,
+              let source = CGEventSource(stateID: .hidSystemState),
+              let down = CGEvent(mouseEventSource: source, mouseType: .leftMouseDown,
+                                 mouseCursorPosition: point, mouseButton: .left),
+              let up = CGEvent(mouseEventSource: source, mouseType: .leftMouseUp,
+                               mouseCursorPosition: point, mouseButton: .left)
+        else { return false }
+        down.setIntegerValueField(.eventSourceUserData, value: InputGuard.eventTag)
+        up.setIntegerValueField(.eventSourceUserData, value: InputGuard.eventTag)
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+        return true
     }
 
     static let controlShiftFlags: CGEventFlags = [.maskControl, .maskShift]

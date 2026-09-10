@@ -98,7 +98,7 @@ func usage() -> String {
 
     Apply ESP32 encoder SET MODEL / SET THINKING with keyboard
     shortcuts, only while ChatGPT, Cursor, or OpenCode is already the foreground app.
-    ChatGPT: Ctrl+Shift+M, Down to dial index; thinking Ctrl+Shift+, / .
+    ChatGPT: accessibility model control → Select model → exact label; thinking Ctrl+Shift+, / .
     Cursor: Command-/ model first, then Command-/ again for Effort.
 
     Options:

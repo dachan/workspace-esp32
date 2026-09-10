@@ -26,13 +26,13 @@ enum Switcher {
             case .openCode:
                 return OpenCodeApply.model(raw, focus: focus, pulse: pulse)
             case .chatGPT:
-                guard let index = Catalog.chatgptModelIndex(raw), let name = Catalog.chatgptModelName(raw) else {
+                guard let name = Catalog.chatgptModelName(raw) else {
                     return .failed("unknown model \(raw)")
                 }
                 if pulse() {
                     return .interrupted
                 }
-                return chatGPTModel(index: index, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
+                return chatGPTModel(name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
             case .cursor:
                 guard let index = Catalog.cursorPickerIndex(raw), let name = Catalog.cursorModelName(raw) else {
                     return .failed("unknown model \(raw)")
@@ -89,61 +89,21 @@ enum Switcher {
         }
     }
 
-    /// Ctrl+Shift+M opens the picker on Astra; Down N to the dial index; Return.
+    /// ChatGPT/Codex uses visible accessibility labels, not a fixed picker order.
     private static func chatGPTModel(
-        index: Int,
         name: String,
         focus: FocusOperation,
         preferred: String?,
         pulse: @escaping () -> Bool
     ) -> Result {
-        fputs(
-            "chatgpt-bridge: open model picker via Ctrl+Shift+M, Down \(index) to \(name)\n",
-            stderr
-        )
+        fputs("chatgpt-bridge: ChatGPT model via accessibility Select model \(name)\n", stderr)
         if let stopped = dismissInterruptedPicker(pid: focus.pid, pulse: pulse) {
             return stopped
         }
         if let stopped = primePrompt(focus: focus, preferred: preferred, pulse: pulse) {
             return stopped
         }
-        interruptedPickers[focus.pid] = 1
-        guard Keys.controlShift(Keys.m, pulse: pulse) else {
-            return pulse()
-                ? .interrupted
-                : .failed("could not post Ctrl+Shift+M")
-        }
-        guard Keys.wait(Keys.modelTiming, pulse: pulse) else {
-            return .interrupted
-        }
-        guard DeskFront.isForeground(preferred: preferred) else {
-            return .failed("\(focus.displayName) is not focused")
-        }
-
-        for _ in 0..<index {
-            guard Keys.key(Keys.down, pulse: pulse) else {
-                return pulse()
-                    ? .interrupted
-                    : .failed("could not move to \(name)")
-            }
-            guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
-                return .interrupted
-            }
-            guard DeskFront.isForeground(preferred: preferred) else {
-                return .failed("\(focus.displayName) is not focused")
-            }
-        }
-
-        guard Keys.key(Keys.return, pulse: pulse) else {
-            return pulse()
-                ? .interrupted
-                : .failed("could not confirm \(name)")
-        }
-        interruptedPickers.removeValue(forKey: focus.pid)
-        guard Keys.wait(Keys.modelTiming, pulse: pulse) else {
-            return .interrupted
-        }
-        return .applied(path: "Ctrl+Shift+M Down \(index) \(name)")
+        return ChatGPTPicker.select(name: name, focus: focus, preferred: preferred, pulse: pulse)
     }
 
     /// Command-/ focuses Search; first Down is Auto, then enabled catalog order.

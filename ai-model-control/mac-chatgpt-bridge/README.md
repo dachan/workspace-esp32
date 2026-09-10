@@ -32,8 +32,8 @@ model and thinking state instead of holding it for later.
    cached per process only while their generation is current. `PUSH` forces both
    fields to be posted again. Model picker and confirmation waits use 0.25 s;
    every bridge-posted keystroke uses a shared 0.05 s gap.
-   - ChatGPT / Codex model: Control-Shift-M (picker opens on Astra), Down
-     to the ESP dial index, Return.
+   - ChatGPT / Codex model: click the visible model control by Accessibility,
+     then **Select model** and the exact ESP dial model label.
    - ChatGPT / Codex reasoning: absolute Light clamp (Ctrl+Shift+,) then
      climb with Ctrl+Shift-.
    - Cursor model: Command-/ opens Search; first Down is Auto, then the
