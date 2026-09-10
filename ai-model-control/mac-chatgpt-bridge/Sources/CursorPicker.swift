@@ -66,7 +66,22 @@ enum CursorPicker {
         guard DeskFront.isForeground(preferred: preferred) else {
             return .failed("\(focus.displayName) is not focused")
         }
-        return .applied(path: "Accessibility effort \(name)")
+        // Cursor can retain the parent parameters menu after choosing an effort.
+        // Only dismiss menus belonging to this picker, and stop if focus changes.
+        for _ in 0..<3 {
+            guard !pulse() else { return .interrupted }
+            guard find(in: root, where: {
+                role($0) == "AXMenu" &&
+                    (description($0).lowercased().hasSuffix(" parameters") ||
+                     description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame)
+            }) != nil else {
+                _ = PromptFocus.ensure(pid: focus.pid, kind: .cursor)
+                return .applied(path: "Accessibility effort \(name)")
+            }
+            guard Keys.key(Keys.escape, pulse: pulse),
+                  Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
+        }
+        return .failed("Cursor effort selected but picker did not close")
     }
 
     private static func root(for focus: FocusOperation) -> AXUIElement {
