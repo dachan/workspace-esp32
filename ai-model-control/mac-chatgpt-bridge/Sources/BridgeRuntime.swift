@@ -220,6 +220,11 @@ final class BridgeRuntime {
                 case .interrupted:
                     return .interrupted
                 case .failed(let message):
+                    if focus.kind == .cursor {
+                        fputs("chatgpt-bridge: \(message); stopped until a new dial update or Sync\n", stderr)
+                        discardPending("Cursor apply could not be verified")
+                        return .failed(message)
+                    }
                     if message != lastFailure {
                         fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)
                     }

@@ -6,6 +6,35 @@ import Foundation
 /// Selects Cursor models and reasoning levels by their visible accessibility
 /// labels. This avoids assumptions about enabled-model order or current focus.
 enum CursorPicker {
+    static func matches(_ name: String, focus: FocusOperation, effort: Bool) -> Bool {
+        control(name, focus: focus, effort: effort) != nil
+    }
+
+    private static func control(_ name: String, focus: FocusOperation, effort: Bool) -> AXUIElement? {
+        find(in: root(for: focus), where: {
+            guard role($0) == "AXPopUpButton" else { return false }
+            let label = title($0).isEmpty ? description($0) : title($0)
+            if label.caseInsensitiveCompare(name) == .orderedSame { return true }
+            if effort {
+                return Catalog.cursorModels.contains {
+                    label.caseInsensitiveCompare($0 + " " + name) == .orderedSame
+                }
+            }
+            return Catalog.cursorEfforts(for: name)?.contains {
+                label.caseInsensitiveCompare(name + " " + $0) == .orderedSame
+            } == true
+        })
+    }
+
+    static func openEffort(focus: FocusOperation, pulse: @escaping () -> Bool) -> Bool {
+        for name in Catalog.cursorThinking {
+            if let button = control(name, focus: focus, effort: true) {
+                return click(button, pulse: pulse) && Keys.wait(Keys.modelTiming, pulse: pulse)
+            }
+        }
+        return false
+    }
+
     static func model(
         name: String,
         focus: FocusOperation,
@@ -41,6 +70,9 @@ enum CursorPicker {
         pulse: @escaping () -> Bool
     ) -> Switcher.Result {
         let root = root(for: focus)
+        if find(in: root, where: {
+            role($0) == "AXMenu" && description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame
+        }) == nil {
         guard let parameters = find(in: root, where: {
             role($0) == "AXMenu" && description($0).lowercased().hasSuffix(" parameters")
         }), let reasoning = find(in: parameters, where: {
@@ -51,6 +83,7 @@ enum CursorPicker {
         }
         guard click(reasoning, pulse: pulse), Keys.wait(Keys.modelTiming, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not open Cursor reasoning menu")
+        }
         }
         guard let menu = find(in: root, where: {
             role($0) == "AXMenu" && description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame
@@ -76,7 +109,9 @@ enum CursorPicker {
                      description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame)
             }) != nil else {
                 _ = PromptFocus.ensure(pid: focus.pid, kind: .cursor)
-                return .applied(path: "Accessibility effort \(name)")
+                return matches(name, focus: focus, effort: true)
+                    ? .applied(path: "Accessibility verified effort \(name)")
+                    : .failed("Cursor effort could not be verified")
             }
             guard Keys.key(Keys.escape, pulse: pulse),
                   Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
