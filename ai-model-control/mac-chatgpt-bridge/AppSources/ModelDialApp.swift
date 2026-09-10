@@ -256,13 +256,17 @@ private final class DialController {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
         process.arguments = [database, "SELECT CAST(value AS TEXT) FROM ItemTable WHERE key='src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser';"]
-        let output = Pipe()
-        process.standardOutput = output
+        let outputURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("model-dial-cursor-catalog.json")
+        FileManager.default.createFile(atPath: outputURL.path, contents: nil)
         do {
+            let output = try FileHandle(forWritingTo: outputURL)
+            process.standardOutput = output
             try process.run()
             process.waitUntilExit()
+            try output.close()
             guard process.terminationStatus == 0,
-                  let object = try JSONSerialization.jsonObject(with: output.fileHandleForReading.readDataToEndOfFile()) as? [String: Any],
+                  let object = try JSONSerialization.jsonObject(with: Data(contentsOf: outputURL)) as? [String: Any],
                   let enabled = findValue("modelOverrideEnabled", in: object) as? [String] else { return false }
             let enabledIDs = Set(enabled)
             var mask: UInt64 = 1
