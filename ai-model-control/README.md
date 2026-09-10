@@ -11,7 +11,9 @@ is dropped by the helper and stays on the panel and in NVS only.
 
 ## Protocol (USB serial, 115200)
 
-The current helper sends `SYNC` on connection and every two seconds. Firmware
+The current helper sends `SYNC` on connection and on `READY <16-hex boot id>`.
+Firmware repeats READY every 0.5 seconds until SYNC, recovering even when
+a reset does not disconnect USB. There is no periodic SYNC. Firmware
 responds with its latest model and thinking after any active 0.4 s settle window:
 
 ```text
@@ -35,7 +37,7 @@ Unacknowledged state retries every 0.5 s; a full USB transmit buffer retries aft
 0.2 s without blocking encoder polling. The helper acknowledges validated state
 on receipt and ignores repeated revisions for application purposes.
 Acknowledgement does **not** confirm the app's selected value: keyboard posting
-has no UI readback. Periodic SYNC also recovers a device reset without requiring
+has no UI readback. READY-triggered SYNC also recovers a device reset without requiring
 the USB device path to disappear.
 
 Mac also sends `TIME <unix-seconds> <tz-offset-minutes>` on connect and every
@@ -252,3 +254,8 @@ OpenCode model outside this set resets to GPT-5.6 Luna when OpenCode next become
 focused.
 See the [OpenCode bridge mapping](mac-chatgpt-bridge/README.md#opencode) for
 model availability, effort mappings, and integration limits.
+
+The event-driven recovery build retains version 0.90 by user request. Older
+v0.90 binaries lack READY and require a serial reconnect after a silent reset
+with this bridge. ENABLED is sent on SYNC or a model-list change; the
+30-second TIME refresh remains for clock accuracy.

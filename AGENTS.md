@@ -195,9 +195,12 @@ reset high and backlight low during either; POWER OFF also holds LCD reset low
 
 ## v0.90 release freeze
 
-`ai-model-control` firmware is frozen at **v0.90** until the user explicitly
-lifts this freeze. Do not change `ai-model-control/VERSION` or flash a newer
-application build.
+Keep `ai-model-control/VERSION` at **0.90**. The user explicitly authorized
+rebuilding and reflashing the event-driven serial recovery change while retaining
+this version number. This exception does not authorize other firmware changes.
+Firmware repeats `READY <16-hex boot id>` until SYNC. The bridge sends SYNC
+on connection and READY, never periodically. ENABLED is sent for SYNC and
+model-list changes; STATE retries until ACK. Retain the 30-second TIME refresh.
 
 ## Build and flash
 

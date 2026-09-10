@@ -28,6 +28,7 @@ final class BridgeRuntime {
     private var receivedThinking: String?
     private var lastApplied: [Int32: [SettingKind: String]] = [:]
     private var forceApply = false
+    private var bootID: UInt64?
 
     init(options: Options) {
         self.options = options
@@ -96,6 +97,22 @@ final class BridgeRuntime {
     private func drainSerial() {
         guard let session else { return }
         for raw in session.readLines() {
+            if raw.hasPrefix("READY ") {
+                let hex = raw.dropFirst("READY ".count)
+                guard hex.count == 16, let id = UInt64(hex, radix: 16) else { continue }
+                if bootID != id {
+                    bootID = id
+                    discardPending("panel restarted")
+                    receivedRevisions.removeAll()
+                    receivedModel = nil
+                    receivedThinking = nil
+                    print("\(stamp()) rx READY \(hex)")
+                    fflush(stdout)
+                }
+                // Respond to duplicates too: an earlier SYNC may have been lost.
+                session.requestSync()
+                continue
+            }
             if raw == "PUSH" {
                 guard DeskFront.isForeground(preferred: options.bundleID) else {
                     discardPending("SYNC received without focus")

@@ -23,6 +23,9 @@ static sync_field_t s_fields[] = {{.kind = "MODEL"}, {.kind = "THINKING"}};
 static bool s_acknowledged_protocol;
 static bool s_push;
 static bool s_send_enabled;
+static uint64_t s_boot_id;
+static TickType_t s_ready_at;
+static bool s_ready_sent;
 
 void serial_sync_note_enabled(void)
 {
@@ -98,6 +101,20 @@ bool serial_sync_handle_line(const char *line)
 
 void serial_sync_poll(void)
 {
+    // Retry until SYNC so a late host or lost boot announcement still recovers.
+    TickType_t ready_now = xTaskGetTickCount();
+    if (!s_acknowledged_protocol &&
+        (!s_ready_sent || (TickType_t)(ready_now - s_ready_at) >= pdMS_TO_TICKS(500))) {
+        if (!s_boot_id) {
+            s_boot_id = ((uint64_t)esp_random() << 32) | esp_random();
+            if (!s_boot_id) { s_boot_id = 1; }
+        }
+        char ready[40];
+        snprintf(ready, sizeof(ready), "READY %016" PRIx64, s_boot_id);
+        serial_model_write_line(ready);
+        s_ready_at = ready_now;
+        s_ready_sent = true;
+    }
     if (s_push) {
         if (!serial_model_write_line("PUSH")) {
             return;

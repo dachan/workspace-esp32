@@ -13,7 +13,7 @@ model and thinking state instead of holding it for later.
    ChatGPT/Codex (`com.openai.chat`, `com.openai.codex`), Cursor
    (`com.todesktop.230313mzl4w4u92`), or OpenCode (`ai.opencode.desktop`).
    `--bundle-id` can force one of those.
-3. Requests current state on connection and every two seconds. Accepts revisioned
+3. Requests current state on connection and each firmware READY announcement. Accepts revisioned
    `STATE` updates and legacy `SET MODEL` / `SET THINKING` lines. ACKs validated
    updates on receipt; duplicate revisions are acknowledged without reapplying.
    An ACK means received, not applied.
@@ -205,3 +205,9 @@ Prompt focus, interruption cleanup, per-process apply caching, SYNC reapply,
 and dropping changes when the app is not foreground follow the existing bridge
 workflow. A new firmware build is required for the OpenCode header and saved
 state; rebuilding alone does not update the connected device or running helper.
+
+The event-driven firmware build (still version 0.90) retries
+`READY <16-hex boot id>` until SYNC. This replaces periodic state polling,
+including after silent USB-preserving resets. Earlier firmware binaries need
+a serial reconnect after such a reset. TIME still refreshes every 30 seconds;
+ENABLED arrives on SYNC or a model-list change.

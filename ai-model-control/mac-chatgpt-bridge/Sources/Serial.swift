@@ -16,7 +16,7 @@ final class SerialSession {
     private var discardLine = false
     private var reconnectAt: TimeInterval = 0
     private var lastConnectionError: String?
-    private var nextSyncAt: TimeInterval = 0
+    private var syncPending = true
     private var nextTimeAt: TimeInterval = 0
     private var panelFrontWanted: String?
     private var panelFrontSent: String?
@@ -44,7 +44,7 @@ final class SerialSession {
             throw error
         }
         fd = opened
-        nextSyncAt = 0
+        requestSync()
         nextTimeAt = 0
         panelFrontSent = nil
         lastConnectionError = nil
@@ -117,6 +117,12 @@ final class SerialSession {
         }
     }
 
+    func requestSync() {
+        syncPending = true
+        panelFrontSent = nil
+        nextTimeAt = 0
+    }
+
     func setPanelFront(_ title: String) {
         panelFrontWanted = title
     }
@@ -132,10 +138,10 @@ final class SerialSession {
                 } else if let wanted = panelFrontWanted, wanted != panelFrontSent {
                     line = "FRONT \(wanted)"
                     panelFrontSent = wanted
-                } else if ProcessInfo.processInfo.systemUptime >= nextSyncAt {
-                    // Repeated snapshots recover a reset even if the USB device did not reopen.
+                } else if syncPending {
+                    // READY retries recover a reset without periodic state polling.
                     line = "SYNC"
-                    nextSyncAt = ProcessInfo.processInfo.systemUptime + 2
+                    syncPending = false
                     panelFrontSent = nil
                 } else if ProcessInfo.processInfo.systemUptime >= nextTimeAt {
                     let unix = Int64(Date().timeIntervalSince1970)
