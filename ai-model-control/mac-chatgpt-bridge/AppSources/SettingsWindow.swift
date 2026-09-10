@@ -21,6 +21,7 @@ struct CursorModelGroup: Identifiable {
 final class BridgePreferences: ObservableObject {
     static let chatGPTEfforts = ["Light", "Medium", "High", "Extra High", "Max", "Ultra"]
     static let chatGPTModels = ["GPT-6 Astra", "GPT-5.6 Sol", "GPT-5.6 Terra", "GPT-5.6 Luna", "GPT-5.5"]
+    static let openCodeModels = ["GPT-6 Astra", "GPT-5.6 Terra", "GPT-5.6 Sol", "GPT-5.6 Luna"]
     static let cursorModels = [
         "Auto", "Cursor Grok 4.6", "Composer 2.5", "Claude Opus 5", "GPT-5.6 Sol",
         "Claude Fable 5", "GPT-5.6 Terra", "GPT-5.6 Luna", "Claude Opus 4.8", "GPT-5.5",
@@ -180,7 +181,7 @@ struct SettingsView: View {
         TabView {
             chatGPTTab.tabItem { Text("ChatGPT") }
             cursorTab.tabItem { Text("Cursor") }
-            Color.clear.tabItem { Text("OpenCode") }
+            openCodeTab.tabItem { Text("OpenCode") }
         }
         .frame(minWidth: 600, minHeight: 620)
     }
@@ -227,6 +228,23 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             resetButton("Reset Cursor Defaults") { preferences.resetCursorModels() }
+        }
+    }
+
+    private var openCodeTab: some View {
+        settingsScroll {
+            settingsSection(title: "Models", detail: "OpenCode's supported model list is fixed in the bridge.") {
+                twoColumnGrid {
+                    ForEach(BridgePreferences.openCodeModels, id: \.self) { model in
+                        Toggle(model, isOn: .constant(true)).disabled(true)
+                    }
+                }
+            }
+            Divider()
+            settingsSection(title: "Efforts", detail: "OpenCode effort synchronization is not supported.") {
+                Text("Efforts cannot be customized in Model Dial.")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
