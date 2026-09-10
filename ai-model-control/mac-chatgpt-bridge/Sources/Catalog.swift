@@ -22,7 +22,7 @@ enum Catalog {
         let efforts: [String]
     }
 
-    // Auto, then Cursor Settings toggle order. Keep these aligned with firmware catalog.c.
+    // Auto, then Model Dial Settings toggle order. Keep these aligned with firmware catalog.c.
     // Empty efforts means the effort knob is ignored (Unsupported).
     private static let cursorCatalog: [CursorModel] = [
         .init(name: "Auto", efforts: []),
@@ -143,7 +143,7 @@ enum Catalog {
         ])
     }
 
-    /// Auto plus the seven Cursor Settings toggles that ship enabled.
+    /// Auto plus the seven Model Dial Settings entries that ship enabled.
     static var cursorEnabledMask: UInt64 = 0xFF
 
     static func setCursorEnabledMask(_ mask: UInt64) {

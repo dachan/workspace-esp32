@@ -39,7 +39,7 @@ enum Keys {
         model label. Click Reasoning, then the exact visible effort label.
         Chat/agent input must be focused.
         Fast/Slow is not set from the dial.
-        MODELS (Cursor only) opens the on-device enable list; Auto stays on.
+        The Model Dial Settings window controls the enabled Cursor model list; Auto stays on.
         Tap SYNC on the panel to reapply the current model and thinking.
       OpenCode
         Command-apostrophe opens models; exact accessible names select choices.

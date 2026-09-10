@@ -43,10 +43,10 @@ typedef struct {
 
 #define THINK(arr) arr, (uint8_t)COUNT(arr)
 #define THINK_NONE NULL, 0
-/* Auto plus the seven Cursor Settings toggles that ship enabled. */
+/* Auto plus the seven Model Dial Settings entries that ship enabled. */
 #define CURSOR_ENABLED_DEFAULT 0xFFull
 
-/* Auto, then Cursor Settings toggle order (enabled group, then the rest). */
+/* Auto, then Model Dial Settings toggle order (enabled group, then the rest). */
 static const cursor_model_t cursor_models[] = {
     {"Auto", THINK_NONE},
     {"Cursor Grok 4.6", THINK(think_lmhx)},
