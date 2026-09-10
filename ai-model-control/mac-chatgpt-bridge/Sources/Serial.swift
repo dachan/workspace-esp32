@@ -39,6 +39,9 @@ final class SerialSession {
                 throw SerialError.io("could not exclusively claim \(port) (errno \(errno))")
             }
             try configure(opened)
+            guard tcflush(opened, TCIFLUSH) == 0 else {
+                throw SerialError.io("could not clear queued input from \(port) (errno \(errno))")
+            }
         } catch {
             Darwin.close(opened)
             throw error

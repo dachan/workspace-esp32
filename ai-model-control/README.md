@@ -55,8 +55,10 @@ A five-second press-and-hold anywhere on the glass starts a five-point touch
 calibration. A short tap on **SYNC** (bottom left) asks the helper to apply
 the current panel model and thinking to the focused app. In Cursor mode a
 **MODELS** control next to SYNC opens a saved enable list (Auto stays on;
-defaults match Cursor's shipped-on set). Encoder scroll, encoder click, or a
-row tap toggles a model; **DONE** closes.
+defaults match Cursor's shipped-on set). A release is confirmed after 150 ms
+without contact so a transient FT6336 read error cannot create another SYNC
+tap. Encoder scroll, encoder click, or a row tap toggles a model; **DONE**
+closes.
 
 Before the first `SYNC`, firmware uses the legacy `SET MODEL <name>` and
 `SET THINKING <level>` lines. The current helper accepts these from older firmware,

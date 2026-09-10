@@ -19,6 +19,7 @@ enum {
     TOUCH_REG_POINTS = 0x02,
     NATIVE_W = 320,
     NATIVE_H = 480,
+    TOUCH_RELEASE_DEBOUNCE_US = 150 * 1000,
 };
 
 static const char *TAG = "touch";
@@ -27,6 +28,7 @@ static i2c_master_dev_handle_t s_dev;
 static bool s_ready;
 static bool s_down;
 static int64_t s_down_us;
+static int64_t s_last_touch_us;
 static int s_last_x;
 static int s_last_y;
 
@@ -115,6 +117,7 @@ void touch_clear_state(void)
 {
     s_down = false;
     s_down_us = 0;
+    s_last_touch_us = 0;
 }
 
 bool touch_poll(touch_sample_t *ev)
@@ -128,8 +131,14 @@ bool touch_poll(touch_sample_t *ev)
     }
     uint16_t raw_x = 0;
     uint16_t raw_y = 0;
-    bool down = touch_raw(&raw_x, &raw_y);
+    bool sampled_down = touch_raw(&raw_x, &raw_y);
     int64_t now = esp_timer_get_time();
+    if (sampled_down) {
+        s_last_touch_us = now;
+    }
+    // A failed FT6336 read looks like no contact. Keep the prior contact live
+    // long enough to prevent a transient I2C miss from becoming another SYNC tap.
+    bool down = sampled_down || (s_down && now - s_last_touch_us < TOUCH_RELEASE_DEBOUNCE_US);
     ev->pressed = down && !s_down;
     ev->released = !down && s_down;
     if (down) {
@@ -137,14 +146,19 @@ bool touch_poll(touch_sample_t *ev)
             s_down_us = now;
         }
         ev->held_ms = (int)((now - s_down_us) / 1000);
-        calibrate_map(raw_x, raw_y, &ev->x, &ev->y);
-        s_last_x = ev->x;
-        s_last_y = ev->y;
+        if (sampled_down) {
+            calibrate_map(raw_x, raw_y, &ev->x, &ev->y);
+            s_last_x = ev->x;
+            s_last_y = ev->y;
+        } else {
+            ev->x = s_last_x;
+            ev->y = s_last_y;
+        }
     } else {
         ev->x = s_last_x;
         ev->y = s_last_y;
         if (s_down) {
-            ev->held_ms = (int)((now - s_down_us) / 1000);
+            ev->held_ms = (int)((s_last_touch_us - s_down_us) / 1000);
         }
     }
     ev->down = down;

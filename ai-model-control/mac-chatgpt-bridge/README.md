@@ -62,7 +62,9 @@ Debounce reduces intermediate work, while generation checks and invalidation mak
 slow turns converge on the final target as long as the same app stays focused.
 This is keyboard-posting completion, not verified on-screen synchronization.
 
-Serial open, configuration, read, and write failures are logged and the configured
+Serial input is flushed on every open before `SYNC` requests fresh panel state, so
+queued `PUSH` frames from a disabled bridge cannot replay after reconnecting.
+Open, configuration, read, and write failures are logged and the configured
 port is retried every two seconds, including when missing at startup. The helper
 claims exclusive access to prevent another helper or monitor opening the port.
 Current firmware retransmits until ACK and answers SYNC with its state, so a
