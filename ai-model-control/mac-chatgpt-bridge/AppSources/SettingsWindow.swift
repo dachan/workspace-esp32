@@ -209,15 +209,21 @@ struct SettingsView: View {
                     Text(group.provider)
                         .font(.subheadline.weight(.semibold))
                         .padding(.top, group.provider == "Automatic" ? 0 : 8)
-                    ForEach(group.models) { model in
-                        Toggle(model.name, isOn: preferences.cursorModelBinding(index: model.index))
-                            .disabled(model.index == 0)
+                    LazyVGrid(
+                        columns: [GridItem(.flexible(), spacing: 18), GridItem(.flexible(), spacing: 18)],
+                        alignment: .leading,
+                        spacing: 8
+                    ) {
+                        ForEach(group.models) { model in
+                            Toggle(model.name, isOn: preferences.cursorModelBinding(index: model.index))
+                                .disabled(model.index == 0)
+                        }
                     }
                 }
             }
             Divider()
             settingsSection(title: "Efforts", detail: "Cursor determines the available effort levels for each selected model.") {
-                Text("Effort settings are not customizable in Model Dial.")
+                Text("Cursor efforts cannot be customized in Model Dial.")
                     .foregroundStyle(.secondary)
             }
             resetButton("Reset Cursor Defaults") { preferences.resetCursorModels() }
