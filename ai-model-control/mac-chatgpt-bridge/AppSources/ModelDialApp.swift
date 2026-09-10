@@ -120,18 +120,13 @@ private final class DialController {
     func openBridgeLog() {
         do {
             try ensureLogFile()
-            let command = "tail -n 100 -F \(shellQuote(bridgeLogURL.path))"
-            let source = """
-            tell application "Terminal"
-                activate
-                do script \(appleScriptLiteral(command))
-            end tell
-            """
-            var error: NSDictionary?
-            NSAppleScript(source: source)?.executeAndReturnError(&error)
-            if let error { message = "Could not open Terminal: \(error.description)" }
+            let scriptURL = try bridgeLogCommandURL()
+            try "#!/bin/zsh\nexec /usr/bin/tail -n 100 -F \(shellQuote(bridgeLogURL.path))\n"
+                .write(to: scriptURL, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+            NSWorkspace.shared.open(scriptURL)
         } catch {
-            message = "Could not create bridge log: \(error.localizedDescription)"
+            message = "Could not open bridge log: \(error.localizedDescription)"
         }
     }
 
@@ -238,8 +233,11 @@ private final class DialController {
         "'\(value.replacingOccurrences(of: "'", with: "'\\\\''"))'"
     }
 
-    private func appleScriptLiteral(_ value: String) -> String {
-        "\"\(value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\""
+    private func bridgeLogCommandURL() throws -> URL {
+        let directory = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Model Dial", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent("open-bridge-log.command")
     }
 
     private func bridgeExecutable() -> URL? {
