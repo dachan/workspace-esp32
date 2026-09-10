@@ -193,6 +193,16 @@ selecting SLEEP or POWER OFF. Both are tap-to-wake deep-sleep modes. Keep touch
 reset high and backlight low during either; POWER OFF also holds LCD reset low
 (no accessible EN switch on the receiver).
 
+## Model Dial desktop app
+
+\`ai-model-control/mac-chatgpt-bridge\` includes \`model-dial\`, a macOS menu-bar
+wrapper around the \`chatgpt-bridge\` executable. Keep the bridge CLI available
+for diagnostics. The app discovers compatible USB serial paths, owns one bridge
+child process, can register at user login, and flashes only the application
+partition when the user explicitly selects an image and esptool. Do not claim
+the unsigned local app is a distributable release: that needs code signing,
+notarization, a bundled flasher, and signed firmware artifacts.
+
 ## v0.90 release freeze
 
 Keep `ai-model-control/VERSION` at **0.90**. The user explicitly authorized

@@ -9,11 +9,16 @@ let package = Package(
     ],
     products: [
         .executable(name: "chatgpt-bridge", targets: ["chatgpt-bridge"]),
+        .executable(name: "model-dial", targets: ["model-dial"]),
     ],
     targets: [
         .executableTarget(
             name: "chatgpt-bridge",
             path: "Sources"
+        ),
+        .executableTarget(
+            name: "model-dial",
+            path: "AppSources"
         ),
     ]
 )

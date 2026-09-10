@@ -164,6 +164,34 @@ and returns typed applied/interrupted/failed outcomes.
 Rebuilding does not replace a running helper. To deploy an updated binary, stop
 the previous helper and relaunch it from the same Accessibility-authorized app.
 
+## Model Dial app
+
+\`model-dial\` is the macOS menu-bar wrapper for this bridge. It starts and
+supervises \`chatgpt-bridge\`, finds a supported USB serial path, reconnects when
+the device path changes, and can register itself to start at login. The bridge
+still reconnects independently when a device temporarily disappears at the same
+path.
+
+Build an unsigned local app bundle, optionally with the firmware app binary:
+
+\`\`\`sh
+cd ai-model-control/mac-chatgpt-bridge
+./scripts/package-app.sh --firmware ../build-v0.90-event-sync/ai-model-control.bin
+open "dist/Model Dial.app"
+\`\`\`
+
+The app needs Accessibility permission to post app shortcuts. Its **Open at
+login** control registers the app with macOS. The app must run in the logged-in
+desktop session; a system daemon cannot inspect or control the foreground app.
+
+For a USB update, choose the firmware image and the \`esptool\` executable from
+the local ESP-IDF Python environment. The app stops its bridge, flashes only
+the ESP32 application partition at \`0x10000\`, checks for esptool's \`Hash of data
+verified\` result, then reconnects. Application-only flashing preserves NVS.
+The current app bundle is unsigned and relies on a locally installed esptool;
+release distribution still needs a signed/notarized app, a bundled flasher, and
+a signed firmware release feed.
+
 ### Cursor effort ranges
 
 - Unsupported (knob ignored): Auto, Composer 2.5, Claude Opus 4.5, Claude Haiku 4.5, Claude Sonnet 4.5, Claude Sonnet 4, Gemini 3.1 Pro, Gemini 3 Flash, Gemini 3.5 Flash, GPT-5 Mini, Gemini 2.5 Flash, Kimi K2.7 Code.
