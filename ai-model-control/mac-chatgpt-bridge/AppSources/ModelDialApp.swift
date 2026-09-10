@@ -67,7 +67,6 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         (loginRow, loginSwitch) = makeToggleRow(title: "Open At Login", action: #selector(toggleLogin))
         menu.addItem(loginRow)
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Sync", action: #selector(syncApps), keyEquivalent: "")
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: "")
         menu.addItem(withTitle: "Open Log", action: #selector(openBridgeLog), keyEquivalent: "")
         menu.addItem(.separator())
@@ -89,7 +88,6 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         refreshMenu()
     }
     @objc private func openBridgeLog() { controller.openBridgeLog() }
-    @objc private func syncApps() { controller.syncApps() }
     @objc private func openSettings() {
         if settingsWindow == nil {
             settingsWindow = SettingsWindowController(
@@ -184,13 +182,6 @@ private final class DialController {
         }
     }
 
-    func syncApps() {
-        guard wantsBridge else { return }
-        _ = syncCursorModelsFromApp()
-        recordBridgeEvent("Sync requested for ChatGPT, Cursor, and OpenCode")
-        restartBridge()
-    }
-
     func openBridgeLog() {
         do {
             try ensureLogFile()
@@ -255,53 +246,6 @@ private final class DialController {
             message = error.localizedDescription
             recordBridgeEvent("Bridge could not start: \(message!)")
         }
-    }
-
-    private func syncCursorModelsFromApp() -> Bool {
-        let database = NSHomeDirectory() + "/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
-        guard FileManager.default.fileExists(atPath: database) else { return false }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-        process.arguments = [database, "SELECT CAST(value AS TEXT) FROM ItemTable WHERE key='src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser';"]
-        let outputURL = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("model-dial-cursor-catalog.json")
-        FileManager.default.createFile(atPath: outputURL.path, contents: nil)
-        do {
-            let output = try FileHandle(forWritingTo: outputURL)
-            process.standardOutput = output
-            try process.run()
-            process.waitUntilExit()
-            try output.close()
-            guard process.terminationStatus == 0,
-                  let object = try JSONSerialization.jsonObject(with: Data(contentsOf: outputURL)) as? [String: Any],
-                  let enabled = findValue("modelOverrideEnabled", in: object) as? [String] else { return false }
-            let enabledIDs = Set(enabled)
-            var mask: UInt64 = 1
-            for (index, name) in BridgePreferences.cursorModels.enumerated() where index > 0 {
-                if enabledIDs.contains(cursorModelID(name)) { mask |= UInt64(1) << UInt64(index) }
-            }
-            return preferences.syncCursorModels(mask)
-        } catch { return false }
-    }
-
-    private func findValue(_ key: String, in value: Any) -> Any? {
-        if let dictionary = value as? [String: Any] {
-            if let found = dictionary[key] { return found }
-            for child in dictionary.values {
-                if let found = findValue(key, in: child) { return found }
-            }
-        } else if let values = value as? [Any] {
-            for child in values {
-                if let found = findValue(key, in: child) { return found }
-            }
-        }
-        return nil
-    }
-
-    private func cursorModelID(_ name: String) -> String {
-        if name == "Codex 5.3" { return "gpt-5.3-codex" }
-        if name.hasPrefix("Cursor Grok ") { return name.replacingOccurrences(of: "Cursor ", with: "").lowercased() }
-        return name.lowercased().replacingOccurrences(of: " ", with: "-")
     }
 
     private func stopBridge() {

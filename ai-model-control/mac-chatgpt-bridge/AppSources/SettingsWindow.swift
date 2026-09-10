@@ -138,14 +138,6 @@ final class BridgePreferences: ObservableObject {
     func resetChatGPTEfforts() { updateChatGPTMask(Self.defaultChatGPTThinkingMask) }
     func resetCursorModels() { updateCursorMask(Self.defaultCursorModelMask) }
 
-    @discardableResult
-    func syncCursorModels(_ mask: UInt64) -> Bool {
-        let next = Self.normalizedCursorMask(mask)
-        guard next != cursorModelMask else { return false }
-        updateCursorMask(next)
-        return true
-    }
-
     private func updateChatGPTMask(_ raw: UInt64) {
         let next = Self.normalizedEffortMask(raw)
         guard next != chatGPTThinkingMask else { return }
