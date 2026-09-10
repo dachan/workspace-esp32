@@ -20,7 +20,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
     private let menu = NSMenu()
     private var statusRow: NSMenuItem!
     private var bridgeToggleRow: NSMenuItem!
-    private var reconnectRow: NSMenuItem!
+    private var bridgeSwitch: NSSwitch!
     private var loginRow: NSMenuItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -32,8 +32,16 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         statusRow = menu.addItem(withTitle: "", action: nil, keyEquivalent: "")
         statusRow.isEnabled = false
         menu.addItem(.separator())
-        bridgeToggleRow = menu.addItem(withTitle: "", action: #selector(toggleBridge), keyEquivalent: "")
-        reconnectRow = menu.addItem(withTitle: "Reconnect now", action: #selector(reconnect), keyEquivalent: "")
+        bridgeToggleRow = NSMenuItem()
+        bridgeSwitch = NSSwitch(frame: NSRect(x: 12, y: 3, width: 130, height: 24))
+        bridgeSwitch.title = "Bridge"
+        bridgeSwitch.target = self
+        bridgeSwitch.action = #selector(toggleBridge)
+        bridgeSwitch.accessibilityLabel = "Bridge"
+        let bridgeView = NSView(frame: NSRect(x: 0, y: 0, width: 154, height: 30))
+        bridgeView.addSubview(bridgeSwitch)
+        bridgeToggleRow.view = bridgeView
+        menu.addItem(bridgeToggleRow)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Open bridge log in Terminal", action: #selector(openBridgeLog), keyEquivalent: "")
         menu.addItem(.separator())
@@ -48,8 +56,10 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
 
     func menuWillOpen(_ menu: NSMenu) { refreshMenu() }
 
-    @objc private func toggleBridge() { controller.setBridgeEnabled(!controller.bridgeEnabled); refreshMenu() }
-    @objc private func reconnect() { controller.reconnect(); refreshMenu() }
+    @objc private func toggleBridge(_ sender: NSSwitch) {
+        controller.setBridgeEnabled(sender.state == .on)
+        refreshMenu()
+    }
     @objc private func openBridgeLog() { controller.openBridgeLog() }
     @objc private func toggleLogin() { controller.setStartsAtLogin(!controller.startsAtLogin); refreshMenu() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
@@ -58,14 +68,11 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         if controller.bridgeEnabled {
             let panel = controller.port.map { " — \($0)" } ?? ""
             statusRow.title = "Bridge: On — \(controller.status)\(panel)"
-            bridgeToggleRow.title = "Turn bridge off"
-            bridgeToggleRow.state = .on
+            bridgeSwitch.state = .on
         } else {
             statusRow.title = "Bridge: Off"
-            bridgeToggleRow.title = "Turn bridge on"
-            bridgeToggleRow.state = .off
+            bridgeSwitch.state = .off
         }
-        reconnectRow.isEnabled = controller.bridgeEnabled
         loginRow.state = controller.startsAtLogin ? .on : .off
     }
 }
@@ -119,14 +126,6 @@ private final class DialController {
         } catch {
             message = "Could not change login setting: \(error.localizedDescription)"
         }
-    }
-
-    func reconnect() {
-        wantsBridge = true
-        stopBridge()
-        status = "Starting"
-        recordBridgeEvent("Reconnecting")
-        startBridge()
     }
 
     func openBridgeLog() {
