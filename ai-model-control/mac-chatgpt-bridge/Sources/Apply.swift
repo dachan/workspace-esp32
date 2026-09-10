@@ -34,7 +34,7 @@ enum Switcher {
                 }
                 return chatGPTModel(name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
             case .cursor:
-                guard let index = Catalog.cursorPickerIndex(raw), let name = Catalog.cursorModelName(raw) else {
+                guard Catalog.cursorPickerIndex(raw) != nil, let name = Catalog.cursorModelName(raw) else {
                     return .failed("unknown model \(raw)")
                 }
                 if pulse() {
