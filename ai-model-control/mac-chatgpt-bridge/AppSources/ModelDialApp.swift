@@ -214,6 +214,7 @@ private final class DialController {
             recordBridgeEvent(message!)
             return
         }
+        syncCursorModelsFromApp()
         let process = Process()
         process.executableURL = executable
         process.arguments = [
@@ -246,6 +247,49 @@ private final class DialController {
             message = error.localizedDescription
             recordBridgeEvent("Bridge could not start: \(message!)")
         }
+    }
+
+    private func syncCursorModelsFromApp() {
+        let database = NSHomeDirectory() + "/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+        guard FileManager.default.fileExists(atPath: database) else { return }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+        process.arguments = [database, "SELECT CAST(value AS TEXT) FROM ItemTable WHERE key='src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser';"]
+        let output = Pipe()
+        process.standardOutput = output
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0,
+                  let object = try JSONSerialization.jsonObject(with: output.fileHandleForReading.readDataToEndOfFile()) as? [String: Any],
+                  let enabled = findValue("modelOverrideEnabled", in: object) as? [String] else { return }
+            let enabledIDs = Set(enabled)
+            var mask: UInt64 = 1
+            for (index, name) in BridgePreferences.cursorModels.enumerated() where index > 0 {
+                if enabledIDs.contains(cursorModelID(name)) { mask |= UInt64(1) << UInt64(index) }
+            }
+            preferences.syncCursorModels(mask)
+        } catch { }
+    }
+
+    private func findValue(_ key: String, in value: Any) -> Any? {
+        if let dictionary = value as? [String: Any] {
+            if let found = dictionary[key] { return found }
+            for child in dictionary.values {
+                if let found = findValue(key, in: child) { return found }
+            }
+        } else if let values = value as? [Any] {
+            for child in values {
+                if let found = findValue(key, in: child) { return found }
+            }
+        }
+        return nil
+    }
+
+    private func cursorModelID(_ name: String) -> String {
+        if name == "Codex 5.3" { return "gpt-5.3-codex" }
+        if name.hasPrefix("Cursor Grok ") { return name.replacingOccurrences(of: "Cursor ", with: "").lowercased() }
+        return name.lowercased().replacingOccurrences(of: " ", with: "-")
     }
 
     private func stopBridge() {
