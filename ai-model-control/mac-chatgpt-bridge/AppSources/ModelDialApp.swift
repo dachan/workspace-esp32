@@ -202,7 +202,7 @@ private final class DialController {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-        process.arguments = [database, "SELECT CAST(value AS TEXT) FROM ItemTable WHERE key='src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser';"]
+        process.arguments = ["-readonly", database, "SELECT CAST(value AS TEXT) FROM ItemTable WHERE key='src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser';"]
         let outputURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("model-dial-cursor-catalog-\(UUID().uuidString).json")
         FileManager.default.createFile(atPath: outputURL.path, contents: nil)
@@ -216,12 +216,23 @@ private final class DialController {
             try output.close()
             guard process.terminationStatus == 0,
                   let object = try JSONSerialization.jsonObject(with: Data(contentsOf: outputURL)) as? [String: Any],
-                  let enabled = findValue("modelOverrideEnabled", in: object) as? [String] else { return false }
+                  let catalog = object["availableDefaultModels2"] as? [[String: Any]],
+                  let settings = object["aiSettings"] as? [String: Any],
+                  let enabled = settings["modelOverrideEnabled"] as? [String],
+                  let disabled = settings["modelOverrideDisabled"] as? [String] else {
+                recordBridgeEvent("Cursor sync failed: model catalog or overrides unavailable; saved selection retained")
+                return false
+            }
 
-            let enabledIDs = Set(enabled)
+            let defaultIDs = catalog.compactMap { model -> String? in
+                model["defaultOn"] as? Bool == true ? model["name"] as? String : nil
+            }
+            let enabledIDs = Set(defaultIDs).union(enabled).subtracting(disabled)
             var mask: UInt64 = 1
             for (index, name) in BridgePreferences.cursorModels.enumerated() where index > 0 {
-                if enabledIDs.contains(cursorModelID(name)) {
+                let model = catalog.first { $0["clientDisplayName"] as? String == name }
+                let modelID = model?["name"] as? String ?? cursorModelID(name)
+                if enabledIDs.contains(modelID) {
                     mask |= UInt64(1) << UInt64(index)
                 }
             }
