@@ -82,8 +82,61 @@ static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_lev
     }
 }
 
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+static esp_err_t ui_render_round(const model_fields_t *fields)
+{
+    const uint16_t bg = display_rgb(8, 10, 17);
+    const uint16_t card = display_rgb(24, 28, 42);
+    const uint16_t label = display_rgb(140, 150, 170);
+    const uint16_t text = display_rgb(240, 244, 250);
+    const uint16_t muted = display_rgb(110, 118, 135);
+    const uint16_t clock = display_rgb(160, 168, 182);
+    const uint16_t track = display_rgb(40, 46, 62);
+
+    display_fill(bg);
+    /* Leave a circular-safe margin; the glass masks the corners. */
+    display_fill_rect(12, 12, 216, 216, card);
+
+    const char *app = front_title_app() == DESK_OPENCODE ? "OPENCODE"
+        : front_title_is_cursor() ? "CURSOR" : "CHATGPT";
+    const int app_w = font_text_width(app, 1);
+    font_draw_text((DISPLAY_WIDTH - app_w) / 2, 20, app, clock, card, 1);
+
+    font_draw_text(28, 50, "MODEL", label, card, 1);
+    if (!fields->has_model) {
+        font_draw_text(28, 66, "WAITING", muted, card, 2);
+    } else {
+        draw_wrapped(28, 66, 184, fields->model, text, card, 2);
+    }
+
+    font_draw_text(28, 112, "THINKING", label, card, 1);
+    const char *thinking = !fields->has_model ? "-"
+        : catalog_thinking_count(fields->model) == 0 ? "UNSUPPORTED"
+        : fields->has_thinking ? fields->thinking : "-";
+    draw_wrapped(28, 128, 184, thinking, fields->has_model ? text : muted, card, 2);
+
+    const int levels = fields->has_model ? catalog_thinking_count(fields->model) : 0;
+    const int level = levels > 0 && fields->has_thinking
+        ? catalog_thinking_level(fields->model, thinking) : 0;
+    draw_thinking_bar(28, 166, 184, 8, level, levels > 0 ? levels : 1, track, text);
+
+    const char *build = FIRMWARE_BUILD_STRING;
+    const int bw = font_text_width(build, 1);
+    font_draw_text((DISPLAY_WIDTH - bw) / 2, 202, build, muted, card, 1);
+
+    esp_err_t err = display_flush();
+    if (err == ESP_OK) {
+        front_title_mark_drawn();
+    }
+    return err;
+}
+#endif
+
 esp_err_t ui_render(const model_fields_t *fields)
 {
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+    return ui_render_round(fields);
+#else
     const uint16_t bg = display_rgb(12, 14, 22);
     const uint16_t card = display_rgb(24, 28, 42);
     const uint16_t label = display_rgb(140, 150, 170);
@@ -161,6 +214,7 @@ esp_err_t ui_render(const model_fields_t *fields)
         front_title_mark_drawn();
     }
     return err;
+#endif
 }
 
 esp_err_t ui_render_screensaver(void)
@@ -174,11 +228,19 @@ esp_err_t ui_render_screensaver(void)
     char date_text[16];
     if (clock_format(time_text, sizeof(time_text))
         && clock_format_date(date_text, sizeof(date_text))) {
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+        const int time_scale = 3;
+        const int date_scale = 1;
+        const int time_h = 7 * time_scale;
+        const int date_h = 7 * date_scale;
+        const int gap = 10;
+#else
         const int time_scale = 4;
         const int date_scale = 2;
         const int time_h = 7 * time_scale;
         const int date_h = 7 * date_scale;
         const int gap = 14;
+#endif
         const int block_h = time_h + gap + date_h;
         const int time_w = font_text_width(time_text, time_scale);
         const int date_w = font_text_width(date_text, date_scale);

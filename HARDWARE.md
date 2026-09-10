@@ -68,3 +68,14 @@ Last inventory pass: 2026-09-09 (v0.90 event-driven serial recovery app-flash)
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
 - Last verified: 2026-09-10 — application-only reflash, hash-verified, preserving NVS and the **v0.90** version. The panel has no SYNC control; Model Dial owns Sync, ChatGPT effort, and Cursor model enable lists. Build from commit `fd2c5d2`; firmware SHA-256 `f8f31afe5ca9efabd5ee3440dc20769be1c1123da98393fe8577ed1f28d0b612`. Board identity matched the recorded ESP32-S3. Bridge launched with the configured masks; live serial received ENABLED and both state fields after reconnect. Physical touch behavior was not rechecked; the documented model-knob wiring fault remains unresolved.
 - Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
+
+## ai-model-control supermini target (round model / thinking display)
+
+- MCU: ESP32-S3FH4R2 Super Mini — 4 MB in-package quad flash, 2 MB in-package quad PSRAM; single-core board variant per supplier listing
+- Display: **1.28-inch round 240x240 GC9A01 SPI** — VCC 3V3, GND GND, SCK GPIO18, MOSI GPIO8, CS GPIO11, DC GPIO9, RST GPIO10; no MISO or separate BL connection
+- Rotary encoders: same KY-040-style pair and GPIOs as the desk target — thinking CLK/DT/SW GPIO41/40/39; model CLK/DT/SW GPIO1/2/42; encoder + to 3V3 and grounds to GND
+- Touch: none identified; round profile disables FT6336 initialization and uses the Model Dial helper's Sync command
+- Firmware expected: `ai-model-control/` with `AI_MODEL_PROFILE=supermini`; `sdkconfig.defaults.supermini`; v0.90
+- Mac USB serial: unknown — verify the newly connected `/dev/cu.usbmodem*` before flashing
+- Last verified: 2026-09-10 — source build completed on Hetzner; board flash and live round-panel/encoder behavior still pending physical USB connection
+- Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac

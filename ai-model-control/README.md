@@ -123,6 +123,46 @@ Settings. Canonical names live in firmware `main/catalog.c` and Swift
 USB: native USB Serial/JTAG (`/dev/cu.usbmodem*` on macOS). Flash and
 `SET` traffic share that port.
 
+### ESP32S3SuperMini round profile
+
+The alternate `supermini` profile targets the ESP32-S3FH4R2 (4 MB quad flash,
+2 MB quad PSRAM) and the 1.28-inch 240x240 GC9A01 round SPI panel shown in the
+hardware inventory. It keeps the same rotary-encoder GPIOs and serial protocol
+as the desk target, but uses a compact circular layout and disables touch.
+
+Round-panel wiring:
+
+| Signal | GPIO / rail |
+|---|---:|
+| GC9A01 SCL/SCK | 18 |
+| GC9A01 SDA/MOSI | 8 |
+| GC9A01 CS | 11 |
+| GC9A01 DC | 9 |
+| GC9A01 RST | 10 |
+| GC9A01 VCC | 3V3 |
+| GC9A01 GND | GND |
+| Thinking encoder CLK / DT / SW | 41 / 40 / 39 |
+| Model encoder CLK / DT / SW | 1 / 2 / 42 |
+| Encoder + / GND | 3V3 / GND |
+
+The round module has no MISO or separate backlight control in this wiring;
+leave MISO unconnected and power its VCC from 3V3. Build it in its own output
+directory so the legacy 480x320 profile remains intact:
+
+```sh
+export IDF_PATH=/path/to/esp-idf
+source "$IDF_PATH/export.sh"
+cd ai-model-control
+idf.py -B build-supermini \
+  -D AI_MODEL_PROFILE=supermini \
+  -D SDKCONFIG=/absolute/path/to/build-supermini/sdkconfig \
+  -D SDKCONFIG_DEFAULTS=sdkconfig.defaults.supermini build
+```
+
+The round target has no touch calibration or glass SYNC control; use the
+Model Dial helper's Sync command, and use encoder clicks for the existing local
+thinking/model actions.
+
 ## Desk control (encoders → ChatGPT / Cursor)
 
 Firmware `v 0.35+` updates the panel immediately, then sends SET after a

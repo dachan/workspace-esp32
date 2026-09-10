@@ -5,6 +5,10 @@ idf_component_register(
     INCLUDE_DIRS "." "${CMAKE_CURRENT_BINARY_DIR}"
 )
 
+if(AI_MODEL_PROFILE STREQUAL "supermini")
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE AI_MODEL_PROFILE_SUPERMINI=1)
+endif()
+
 set(BUILD_NUMBER_H "${CMAKE_CURRENT_BINARY_DIR}/build_number.h")
 add_custom_command(
     OUTPUT "${BUILD_NUMBER_H}"

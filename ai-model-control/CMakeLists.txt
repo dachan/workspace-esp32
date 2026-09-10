@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
+set(AI_MODEL_PROFILE "legacy" CACHE STRING "ai-model-control hardware profile")
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(ai-model-control)
 

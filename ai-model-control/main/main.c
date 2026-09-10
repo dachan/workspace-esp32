@@ -116,9 +116,13 @@ void app_main(void)
     ESP_ERROR_CHECK(display_set_backlight(80));
     ESP_ERROR_CHECK(serial_model_init());
     ESP_ERROR_CHECK(encoder_init());
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+    ESP_LOGI(TAG, "round target: touch disabled; encoder clicks provide local controls");
+#else
     if (touch_init() != ESP_OK) {
         ESP_LOGW(TAG, "touch unavailable; five-point calibration hold is disabled");
     }
+#endif
     ESP_ERROR_CHECK(calibrate_init());
 
     model_fields_t fields = {0};
