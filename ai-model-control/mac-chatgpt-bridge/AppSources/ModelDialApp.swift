@@ -8,51 +8,58 @@ import SwiftUI
 
 @main
 struct ModelDialApp: App {
-    @StateObject private var controller: DialController
-
-    init() {
-        let controller = DialController()
-        _controller = StateObject(wrappedValue: controller)
-        controller.start()
-    }
+    @NSApplicationDelegateAdaptor(StatusItemDelegate.self) private var delegate
 
     var body: some Scene {
-        MenuBarExtra("Model Dial", systemImage: controller.symbol) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Model Dial").font(.headline)
-                LabeledContent("Bridge", value: controller.status)
-                LabeledContent("Panel", value: controller.port ?? "Not connected")
-                if let message = controller.message {
-                    Text(message).font(.caption).foregroundStyle(.secondary).lineLimit(3)
-                }
-                Divider()
-                Toggle("Open at login", isOn: Binding(
-                    get: { controller.startsAtLogin },
-                    set: { controller.setStartsAtLogin($0) }
-                ))
-                Button("Reconnect now") { controller.reconnect() }
-                Divider()
-                Text("Firmware update").font(.headline)
-                LabeledContent("Image", value: controller.firmwareName ?? "Choose a firmware image")
-                LabeledContent("Flasher", value: controller.flasherName ?? "Choose esptool")
-                if let hash = controller.firmwareHash {
-                    Text("SHA-256 \(hash)").font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1)
-                }
-                HStack {
-                    Button("Choose image…") { controller.chooseFirmware() }
-                    Button("Choose flasher…") { controller.chooseFlasher() }
-                }
-                Button(controller.flashing ? "Installing…" : "Install selected firmware") {
-                    controller.installFirmware()
-                }
-                .disabled(!controller.canInstall)
-                Divider()
-                Button("Quit Model Dial") { NSApplication.shared.terminate(nil) }
-            }
-            .padding(14)
-            .frame(width: 360)
-        }
-        .menuBarExtraStyle(.window)
+        Settings { EmptyView() }
+    }
+}
+
+@MainActor
+private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    private let controller = DialController()
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private let menu = NSMenu()
+    private var statusRow: NSMenuItem!
+    private var loginRow: NSMenuItem!
+    private var installRow: NSMenuItem!
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        statusItem.button?.image = NSImage(systemSymbolName: "dial.medium", accessibilityDescription: "Model Dial")
+        statusItem.button?.imagePosition = .imageLeading
+        statusItem.button?.title = "Model Dial"
+        menu.delegate = self
+        menu.addItem(withTitle: "Model Dial", action: nil, keyEquivalent: "").isEnabled = false
+        statusRow = menu.addItem(withTitle: "", action: nil, keyEquivalent: "")
+        statusRow.isEnabled = false
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Reconnect now", action: #selector(reconnect), keyEquivalent: "")
+        loginRow = menu.addItem(withTitle: "Open at login", action: #selector(toggleLogin), keyEquivalent: "")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Choose firmware image…", action: #selector(chooseFirmware), keyEquivalent: "")
+        menu.addItem(withTitle: "Choose esptool…", action: #selector(chooseFlasher), keyEquivalent: "")
+        installRow = menu.addItem(withTitle: "Install selected firmware", action: #selector(installFirmware), keyEquivalent: "")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit Model Dial", action: #selector(quit), keyEquivalent: "")
+        for item in menu.items { item.target = self }
+        statusItem.menu = menu
+        controller.start()
+        refreshMenu()
+    }
+
+    func menuWillOpen(_ menu: NSMenu) { refreshMenu() }
+
+    @objc private func reconnect() { controller.reconnect(); refreshMenu() }
+    @objc private func toggleLogin() { controller.setStartsAtLogin(!controller.startsAtLogin); refreshMenu() }
+    @objc private func chooseFirmware() { controller.chooseFirmware(); refreshMenu() }
+    @objc private func chooseFlasher() { controller.chooseFlasher(); refreshMenu() }
+    @objc private func installFirmware() { controller.installFirmware(); refreshMenu() }
+    @objc private func quit() { NSApplication.shared.terminate(nil) }
+
+    private func refreshMenu() {
+        statusRow.title = "\(controller.status) — \(controller.port ?? "No panel")"
+        loginRow.state = controller.startsAtLogin ? .on : .off
+        installRow.isEnabled = controller.canInstall
     }
 }
 
