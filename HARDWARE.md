@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-08 (v0.90 OpenCode encoder mapping app-flash)
+Last inventory pass: 2026-09-09 (v0.90 event-driven serial recovery app-flash)
 
 ## radar-transmitter
 
@@ -58,7 +58,7 @@ Last inventory pass: 2026-09-08 (v0.90 OpenCode encoder mapping app-flash)
   - Changes persist in NVS, including last effort per app+model (firmware v0.67+)
   - Board pinout image: [`s3-n16r8.jpeg`](s3-n16r8.jpeg)
 - Touch: FT6336 — SDA GPIO6, SCL GPIO15, reset GPIO7, INT GPIO5 (5 s hold starts five-point calibration, NVS `touch`/`c35_desk`)
-- Protocol: USB Serial/JTAG 115200, lines `MODEL <name>`; optional `THINKING <level>`
+- Protocol: USB Serial/JTAG 115200; READY boot announcement, SYNC snapshot, revisioned STATE/ACK, and ENABLED model mask.
 - Firmware currently on device: `ai-model-control/` **v 0.90** (OpenCode encoder: GPT-6 Astra, GPT-5.6 Terra, GPT-5.6 Sol, GPT-5.6 Luna; its native picker is Luna-first and confirms with Return)
 - Display settings (LOCKED — title-strip noise fix 2026-09-07):
   - Controller: ST7796U, 480×320 landscape, SPI 26 MHz, `invert_color(true)`, RGB
@@ -66,5 +66,5 @@ Last inventory pass: 2026-09-08 (v0.90 OpenCode encoder mapping app-flash)
   - Software 180 flush: ON via internal-RAM band blit + SPI transfer sync (v 0.22+)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → OpenAI/Cursor brand lockup at top of glass, MODEL left, version bottom-right
 - Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
-- Last verified: 2026-09-08 — v0.90 application-only reflash on `/dev/cu.usbmodem21201` (hash-verified), preserving NVS. Board identity matched the recorded ESP32-S3. The rebuilt bridge reconnected with `--watch --send-serial` and received ENABLED plus revisioned MODEL/THINKING state. Physical encoder direction remains unverified because the model CLK/DT wiring fault is unresolved; OpenCode Xhigh variant selection remains open (see above).
+- Last verified: 2026-09-09 — application-only reflash, hash-verified, preserving NVS and the **v0.90** version by explicit user request. Event-driven build from commit `50a9538`; firmware SHA-256 `7b6dc8f77fe374ee55d9fece9d44b6d1121de176c3ef4a2a67c4aaeb2ef25556`. Board identity matched the recorded ESP32-S3. Live serial received READY, ENABLED and both STATE fields; after ACK the nine-second observation had no repeated mask/state. Following a bootloader-mediated reset, the rebuilt bridge received a different READY boot id and recovered both fields. Reset recovery while keeping the same host serial connection open was not demonstrated. Physical display/encoder behavior was not rechecked; the documented wiring fault remains unresolved.
 - Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
