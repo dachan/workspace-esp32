@@ -81,7 +81,7 @@ enum Keys {
     @discardableResult
     static func click(_ point: CGPoint, pulse: (() -> Bool)? = nil) -> Bool {
         guard pulse?() != true,
-              let source = CGEventSource(stateID: .hidSystemState),
+              let source = CGEventSource(stateID: .privateState),
               let down = CGEvent(mouseEventSource: source, mouseType: .leftMouseDown,
                                  mouseCursorPosition: point, mouseButton: .left),
               let up = CGEvent(mouseEventSource: source, mouseType: .leftMouseUp,
@@ -119,7 +119,7 @@ enum Keys {
     }
 
     private static func post(_ code: UInt16, flags: CGEventFlags, down: Bool) -> Bool {
-        guard let source = CGEventSource(stateID: .hidSystemState),
+        guard let source = CGEventSource(stateID: .privateState),
               let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down)
         else {
             return false

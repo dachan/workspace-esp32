@@ -27,9 +27,10 @@ final class InputGuard {
             guard current.focus.pid == focus.pid, current.isValid else { return .interrupted }
             return body(current)
         }
-        // Starting with an existing press would hide its release from the app.
-        guard !(0..<128).contains(where: { CGEventSource.keyState(.combinedSessionState, key: CGKeyCode($0)) }),
-              !(0..<3).contains(where: { CGEventSource.buttonState(.combinedSessionState, button: CGMouseButton(rawValue: UInt32($0))!) })
+        // Check hardware state only: synthetic bridge events must not hold acquisition.
+        // Starting with a physical press would hide its release from the app.
+        guard !(0..<128).contains(where: { CGEventSource.keyState(.hidSystemState, key: CGKeyCode($0)) }),
+              !(0..<3).contains(where: { CGEventSource.buttonState(.hidSystemState, button: CGMouseButton(rawValue: UInt32($0))!) })
         else { return .failed("input guard waiting for held keys or mouse buttons to release") }
         let guardInput = InputGuard(focus: focus)
         guard guardInput.start() else {
