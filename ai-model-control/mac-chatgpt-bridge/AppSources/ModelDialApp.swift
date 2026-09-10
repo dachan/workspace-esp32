@@ -27,7 +27,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem.button?.image = NSImage(systemSymbolName: "dial.medium", accessibilityDescription: "Model Dial")
         statusItem.button?.imagePosition = .imageLeading
-        statusItem.button?.title = "Model Dial"
+        statusItem.button?.title = ""
         menu.delegate = self
         menu.addItem(withTitle: "Model Dial", action: nil, keyEquivalent: "").isEnabled = false
         statusRow = menu.addItem(withTitle: "", action: nil, keyEquivalent: "")
