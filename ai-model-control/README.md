@@ -25,14 +25,12 @@ ESP → Mac: STATE <16-hex revision> MODEL <name>
 ESP → Mac: STATE <16-hex revision> THINKING <level>
 Mac → ESP: ACK <16-hex revision> MODEL
 Mac → ESP: ACK <16-hex revision> THINKING
-ESP → Mac: PUSH
 ESP → Mac: STATE <16-hex revision> MODEL <name>
 ESP → Mac: STATE <16-hex revision> THINKING <level>
 ```
 
-`PUSH` is sent when the panel's SYNC button is tapped. It precedes new
-MODEL/THINKING revisions so the helper reapplies them even if it already
-posted those values to the focused app.
+The Model Dial helper's Sync menu item restarts the bridge, which requests the
+panel's current MODEL/THINKING revisions and reapplies them to the focused app.
 
 Each changed field gets a new revision, including after firmware restart.
 Unacknowledged state retries every 0.5 s; a full USB transmit buffer retries after
@@ -50,16 +48,15 @@ header brand lockup matches. `FRONT None` keeps the last app's catalog and
 logo; it does not fall back to ChatGPT. After each SYNC the helper resends
 FRONT so a firmware restart recovers focus. After 1 min without Cursor, ChatGPT, or OpenCode
 focus and without encoder or touch, the panel shows a date/time screensaver.
-Focusing Cursor, ChatGPT, or OpenCode, turning a knob, or tapping the glass wakes it;
-the waking tap does not press SYNC.
+Focusing Cursor, ChatGPT, or OpenCode, turning a knob, or tapping the glass wakes it.
 
 A five-second press-and-hold anywhere on the glass starts a five-point touch
-calibration. A short tap on **SYNC** (bottom left) asks the helper to apply
-the current panel model and thinking to the focused app. The Model Dial
+calibration. The Model Dial helper's **Sync** menu item asks the bridge to
+apply the current panel model and thinking to the focused app. The Model Dial
 Settings window controls which ChatGPT effort levels and Cursor models are
 available on the encoders; the bridge sends those masks to the panel on every
 connection. A release is confirmed after 150 ms without contact so a transient
-FT6336 read error cannot create another SYNC tap.
+FT6336 read error cannot create a false release.
 
 Before the first `SYNC`, firmware uses the legacy `SET MODEL <name>` and
 `SET THINKING <level>` lines. The current helper accepts these from older firmware,
@@ -145,8 +142,8 @@ operations. Fields are marked unknown before posting keys, so partial or
 interrupted operations cannot suppress the final correction when a dial returns
 to an earlier value. Model changes always invalidate effort; otherwise an
 effort-only change skips model selection. Completed values are cached per Mac
-process, and focus loss discards the target. Keyboard posting is not UI readback. A SYNC tap on the glass sends `PUSH`
-so the helper reapplies the current panel values anyway. Switching ChatGPT ↔
+process, and focus loss discards the target. Keyboard posting is not UI readback. The
+Model Dial helper's Sync menu item reapplies the current panel values. Switching ChatGPT ↔
 Cursor restores that app's last model and effort on the panel. When neither is
 focused, encoder changes stay on the ESP32 display/NVS and the bridge discards
 them without activating either app; turning the knob again while ChatGPT or

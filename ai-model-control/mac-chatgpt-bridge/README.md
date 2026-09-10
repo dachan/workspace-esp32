@@ -23,7 +23,7 @@ model and thinking state instead of holding it for later.
    ChatGPT/Codex by message-box identity — then apply using that app's shortcuts.
    Applies start 0.25 s after the last
    received change. One worker retains the latest complete model/effort target,
-   with a generation that changes on every accepted update or `PUSH` (SYNC tap).
+   with a generation that changes on every accepted update or bridge SYNC.
    Serial is drained during delays; a newer generation aborts and re-targets,
    including when the dial returns to an earlier value. Model is applied before
    effort, and model changes invalidate the cached effort for both apps.
@@ -112,7 +112,7 @@ The bridge waits for held keys and mouse buttons to be released before starting.
 Escape cancels the transaction. The filter is removed on every exit; an independent
 five-second watchdog disables it even if an Accessibility call stalls. Focus loss,
 Escape, or filter failure/timeout during an apply drops that target; use the dial
-or SYNC to try again. A newer dial state can supersede the current sequence.
+or the Model Dial Sync menu item to try again. A newer dial state can supersede the current sequence.
 When creating the filter fails, the bridge posts no keys and reports a permission
 error (check Accessibility and Input Monitoring for the launching app).
 

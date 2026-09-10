@@ -1,6 +1,5 @@
 #include "ui.h"
 
-#include <math.h>
 #include <string.h>
 
 #include "build_number.h"
@@ -8,14 +7,8 @@
 #include "clock.h"
 #include "display.h"
 #include "font.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "front_title.h"
 #include "logo.h"
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
 
 static void draw_wrapped(int x, int y, int max_w, const char *text, uint16_t fg, uint16_t bg, int scale)
 {
@@ -53,93 +46,6 @@ static void draw_wrapped(int x, int y, int max_w, const char *text, uint16_t fg,
             cx = x;
             cy += line_h + scale;
         }
-    }
-}
-
-
-static int s_sync_x;
-static int s_sync_y;
-static int s_sync_w;
-static int s_sync_h;
-static int s_sync_angle;
-static TickType_t s_sync_spin_start;
-static TickType_t s_sync_spin_last;
-static bool s_sync_spinning;
-
-bool ui_hit_sync(int x, int y)
-{
-    const int pad = 6;
-    return s_sync_w > 0 && x >= s_sync_x - pad && x < s_sync_x + s_sync_w + pad
-        && y >= s_sync_y - pad && y < s_sync_y + s_sync_h + pad;
-}
-
-void ui_sync_pulse(void)
-{
-    TickType_t now = xTaskGetTickCount();
-    s_sync_spin_start = now;
-    s_sync_spin_last = now;
-    s_sync_angle = 0;
-    s_sync_spinning = true;
-}
-
-bool ui_sync_tick(void)
-{
-    if (!s_sync_spinning) {
-        return false;
-    }
-    TickType_t now = xTaskGetTickCount();
-    if ((TickType_t)(now - s_sync_spin_start) >= pdMS_TO_TICKS(3000)) {
-        s_sync_spinning = false;
-        s_sync_angle = 0;
-        return true;
-    }
-    if ((TickType_t)(now - s_sync_spin_last) < pdMS_TO_TICKS(40)) {
-        return false;
-    }
-    s_sync_spin_last = now;
-    s_sync_angle = (s_sync_angle + 30) % 360;
-    return true;
-}
-
-static void draw_sync_dot(int x, int y, uint16_t fg)
-{
-    display_fill_rect(x, y, 2, 2, fg);
-}
-
-/* Classic circular-arrows refresh mark; `angle_deg` rotates the whole glyph. */
-static void draw_sync_icon(int cx, int cy, int angle_deg, uint16_t fg)
-{
-    const float base = (float)angle_deg * (float)M_PI / 180.0f;
-    const float r = 6.5f;
-
-    for (int pass = 0; pass < 2; pass++) {
-        const int start = pass == 0 ? 25 : 205;
-        const int end = pass == 0 ? 155 : 335;
-        float tip_x = 0, tip_y = 0, tip_tx = 0, tip_ty = 0;
-        for (int a = start; a <= end; a += 5) {
-            const float rad = base + (float)a * (float)M_PI / 180.0f;
-            const float c = cosf(rad);
-            const float s = sinf(rad);
-            const int x = cx + (int)lroundf(r * c);
-            const int y = cy + (int)lroundf(r * s);
-            draw_sync_dot(x, y, fg);
-            tip_x = (float)x;
-            tip_y = (float)y;
-            tip_tx = -s;
-            tip_ty = c;
-        }
-        /* Arrowhead pointing along the arc tangent. */
-        const int hx = (int)lroundf(tip_x + tip_tx * 4.0f);
-        const int hy = (int)lroundf(tip_y + tip_ty * 4.0f);
-        const int lx = (int)lroundf(tip_x - tip_ty * 3.0f - tip_tx * 1.5f);
-        const int ly = (int)lroundf(tip_y + tip_tx * 3.0f - tip_ty * 1.5f);
-        const int rx = (int)lroundf(tip_x + tip_ty * 3.0f - tip_tx * 1.5f);
-        const int ry = (int)lroundf(tip_y - tip_tx * 3.0f - tip_ty * 1.5f);
-        draw_sync_dot(hx, hy, fg);
-        draw_sync_dot(lx, ly, fg);
-        draw_sync_dot(rx, ry, fg);
-        draw_sync_dot((hx + lx) / 2, (hy + ly) / 2, fg);
-        draw_sync_dot((hx + rx) / 2, (hy + ry) / 2, fg);
     }
 }
 
@@ -241,29 +147,6 @@ esp_err_t ui_render(const model_fields_t *fields)
             ? catalog_thinking_level(fields->model, thinking) : 0;
         draw_wrapped(20, thinking_value_y, value_w, thinking, text, card, 2);
         draw_thinking_bar(20, bar_y, value_w, bar_h, level, levels > 0 ? levels : 1, track, text);
-    }
-
-    /* SYNC: circular-arrows icon + label; icon spins after a tap. */
-    {
-        const char *label_sync = "SYNC";
-        const int scale = 2;
-        const int icon = 16;
-        const int gap = 8;
-        const int pad_x = 6;
-        const int pad_y = 8;
-        const int tw = font_text_width(label_sync, scale);
-        const int th = 7 * scale;
-        const int content_h = th > icon ? th : icon;
-        s_sync_w = pad_x + icon + gap + tw + pad_x;
-        s_sync_h = content_h + pad_y * 2;
-        s_sync_x = 20;
-        s_sync_y = DISPLAY_HEIGHT - 12 - s_sync_h;
-        const int icon_cx = s_sync_x + pad_x + icon / 2;
-        const int icon_cy = s_sync_y + s_sync_h / 2;
-        const int text_x = s_sync_x + pad_x + icon + gap;
-        const int text_y = s_sync_y + (s_sync_h - th) / 2;
-        draw_sync_icon(icon_cx, icon_cy, s_sync_angle, text);
-        font_draw_text(text_x, text_y, label_sync, text, card, scale);
     }
 
     /* Version bottom-right. */

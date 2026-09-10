@@ -137,7 +137,7 @@ bool touch_poll(touch_sample_t *ev)
         s_last_touch_us = now;
     }
     // A failed FT6336 read looks like no contact. Keep the prior contact live
-    // long enough to prevent a transient I2C miss from becoming another SYNC tap.
+    // long enough to prevent a transient I2C miss from becoming a false release.
     bool down = sampled_down || (s_down && now - s_last_touch_us < TOUCH_RELEASE_DEBOUNCE_US);
     ev->pressed = down && !s_down;
     ev->released = !down && s_down;

@@ -67,6 +67,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         (loginRow, loginSwitch) = makeToggleRow(title: "Open At Login", action: #selector(toggleLogin))
         menu.addItem(loginRow)
         menu.addItem(.separator())
+        menu.addItem(withTitle: "Sync", action: #selector(syncApps), keyEquivalent: "")
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: "")
         menu.addItem(withTitle: "Open Log", action: #selector(openBridgeLog), keyEquivalent: "")
         menu.addItem(.separator())
@@ -88,6 +89,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         refreshMenu()
     }
     @objc private func openBridgeLog() { controller.openBridgeLog() }
+    @objc private func syncApps() { controller.syncApps() }
     @objc private func openSettings() {
         if settingsWindow == nil {
             settingsWindow = SettingsWindowController(
@@ -180,6 +182,12 @@ private final class DialController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             self?.startBridge()
         }
+    }
+
+    func syncApps() {
+        guard wantsBridge else { return }
+        recordBridgeEvent("Sync requested for ChatGPT, Cursor, and OpenCode")
+        restartBridge()
     }
 
     func openBridgeLog() {
