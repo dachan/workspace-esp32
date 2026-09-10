@@ -93,6 +93,16 @@ The LD2450 UART logic is 3.3 V. Its 5 V supply must support more than 200 mA.
 The installed module produces valid target frames at 9600 baud; the firmware
 probes its supported UART rates at startup.
 
+
+## UI chrome
+
+The radar UI uses a black-and-green palette, a proportional -60 to +60 degree
+fan, a visual-left distance readout, an edge-aligned coordinate readout, and a
+fading detected-person marker. After inactivity the display sleeps while the
+ESP32 keeps listening; a new detection or supported touch action redraws it.
+Keep receiver and transmitter visually and behaviorally equivalent where panel
+sizes allow.
+
 ## Build and flash
 
 ```sh

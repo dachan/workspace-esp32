@@ -158,6 +158,72 @@ chatgpt-bridge --watch --port "$ESP_PORT"
 
 Requires Accessibility for the launching app (key posting and prompt focus).
 
+
+## Locked ST7796 view mapping
+
+Desk pose: glass left of breadboard, pins toward the ESP32, USB toward the
+bottom of the frame. UI must read upright (focused app title at top of glass).
+Locked settings in `main/display.c`: `invert_color(true)`, RGB, SPI 26 MHz;
+`swap_xy(true)`, `mirror(true, true)` plus the internal-RAM soft-180 band
+blit in `display_flush()` (title top-left, version bottom-right). This is
+**not** the same as `hardware-test` `DISPLAY_PROFILE_ST7796U_3_5`
+(`mirror(false, true)`). Never reverse the PSRAM framebuffer in place (races
+SPI DMA, corrupts the title strip). Do not flip only one MADCTL mirror to
+“fix” rotation (glyphs mirror). Do not remove the band blit without desk
+verification. Keep repo `HARDWARE.md` in sync when this changes.
+
+The header brand lockup is an 8-bit coverage mask in `main/logo.c`, generated
+from `assets/` by `scripts/generate_logos.py` (needs Pillow) and committed.
+Coverage is luminance × alpha so the Cursor cube keeps shaded faces. Both
+logos share one `LOGO_HEIGHT` and baseline (identical header footprint).
+Re-run the script and commit `main/logo.c` after artwork or height changes;
+do not hand-edit the generated file.
+
+## Encoder decode (PCNT vs polled)
+
+Thinking uses a polled falling-CLK decode and holds pulses until the knob
+pauses (two detents = one level; a quick turn can run Light↔Extra High). The
+model knob uses PCNT hardware quadrature — a polled decode misreads it because
+the display flush delays the poll past the CLK/DT phase difference and the dial
+parks on one end. Thinking clamps Light ↔ Extra High or that Cursor model's
+effort range.
+
+## InputGuard and per-app apply
+
+`InputGuard.swift` protects each complete model/effort apply with a
+process-scoped active event tap. Keep bridge keys tagged in `Keys.swift`; user
+input is discarded, never queued. Do not post keys if the filter cannot start.
+Wait for held keys/buttons before acquisition, preserve serial supersession,
+and release on every exit. Escape, focus loss, disabled taps, and the
+independent five-second watchdog cancel the target. The `--check-input-guard`
+diagnostic acquires/releases without posting keys. A build or availability
+check does not verify physical input suppression. See also
+[input guard](mac-chatgpt-bridge/README.md#input-guard).
+
+**Prompt focus.** Before posting shortcuts: Cursor Command-L only if Agents
+is not already open (Cmd+L toggles the sidepanel and would close it);
+otherwise AX-focus `aislash-editor-input`. ChatGPT/Codex by message-box
+identity — never by screen coordinates.
+
+**Per-app apply.**
+
+- **ChatGPT:** Control-Shift-M, Down to the ESP dial index, Return; then
+  absolute reasoning (Ctrl+Shift+, clamp to Light, Ctrl+Shift-. up to
+  target). Model clamps GPT-6 Astra through GPT-5.5 (no wrap).
+- **Cursor:** Command-/ (first Down is Auto); effort is Left, Up, Right into
+  Reasoning after reopening (Right highlights the first supported level;
+  Down to the target; Return; Escape twice closes menus). Model order is
+  Auto then the enabled MODELS list (no wrap). A ChatGPT-only model name
+  (e.g. GPT-6 Astra) is skipped while Cursor is focused so effort can still
+  apply. Keep `catalog.c` ↔ `Catalog.swift` aligned for per-model effort
+  ranges (Unsupported / Max / None / Minimal extensions and clamp behavior).
+  None is a selectable GPT effort, not a synonym for unsupported.
+- **OpenCode:** fixed encoder order GPT-6 Astra, GPT-5.6 Terra, GPT-5.6 Sol,
+  GPT-5.6 Luna. Command-apostrophe picker opens with Luna selected: Down
+  3/2/1/0, then Return. Thinking stays local to the panel and is never
+  synchronized. Keep firmware `opencode_models` and Swift `openCodeModels`
+  aligned.
+
 ## Build / flash (Mac only)
 
 After a directory rename, use a fresh build directory: ESP-IDF/CMake caches
