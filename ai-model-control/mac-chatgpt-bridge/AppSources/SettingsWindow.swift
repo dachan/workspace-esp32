@@ -77,7 +77,7 @@ final class BridgePreferences: ObservableObject {
     }
 
     func setEffortEnabled(_ enabled: Bool, index: Int) {
-        guard index > 0, index < Self.chatGPTEfforts.count else { return }
+        guard index >= 0, index < Self.chatGPTEfforts.count else { return }
         var mask = chatGPTThinkingMask
         let bit = UInt64(1) << UInt64(index)
         if enabled { mask |= bit } else { mask &= ~bit }
@@ -166,7 +166,6 @@ struct SettingsView: View {
                 ) {
                     ForEach(Array(BridgePreferences.chatGPTEfforts.enumerated()), id: \.offset) { index, effort in
                         Toggle(effort, isOn: preferences.effortBinding(index: index))
-                            .disabled(index == 0)
                     }
                 }
 

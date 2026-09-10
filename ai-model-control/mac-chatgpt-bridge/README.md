@@ -78,8 +78,8 @@ formats and compatibility details. Buffers and bytes processed per poll are
 bounded. Retry and key-delay durations use a monotonic clock.
 
 The Model Dial Settings window controls the enabled lists sent to the panel.
-ChatGPT offers Light, Medium, High, Extra High, Max, and Ultra; at least Light
-stays enabled. Cursor offers the full model catalog; Auto is always enabled.
+ChatGPT offers Light, Medium, High, Extra High, Max, and Ultra; at least one
+level stays enabled. Cursor offers the full model catalog; Auto is always enabled.
 Changes restart the bridge so the new masks are sent immediately. The CLI
 accepts the same values with --chatgpt-effort-mask HEX and
 --cursor-model-mask HEX; the bridge configuration is authoritative when it
