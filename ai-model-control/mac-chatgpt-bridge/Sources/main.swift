@@ -62,6 +62,7 @@ func run() -> Int32 {
         if !options.watch && !options.listen { return 0 }
     }
     if options.watch || options.listen {
+        _ = AXTrust.isTrusted(prompt: true)
         return runWatch(options: options)
     }
 
