@@ -188,14 +188,18 @@ struct SettingsView: View {
     private var chatGPTTab: some View {
         settingsScroll {
             settingsSection(title: "Models", detail: "ChatGPT model availability is fixed and cannot be changed here.") {
-                ForEach(BridgePreferences.chatGPTModels, id: \.self) { model in
-                    Toggle(model, isOn: .constant(true)).disabled(true)
+                twoColumnGrid {
+                    ForEach(BridgePreferences.chatGPTModels, id: \.self) { model in
+                        Toggle(model, isOn: .constant(true)).disabled(true)
+                    }
                 }
             }
             Divider()
             settingsSection(title: "Efforts", detail: "Enabled levels are available on the ESP32 effort dial.") {
-                ForEach(Array(BridgePreferences.chatGPTEfforts.enumerated()), id: \.offset) { index, effort in
-                    Toggle(effort, isOn: preferences.effortBinding(index: index))
+                twoColumnGrid {
+                    ForEach(Array(BridgePreferences.chatGPTEfforts.enumerated()), id: \.offset) { index, effort in
+                        Toggle(effort, isOn: preferences.effortBinding(index: index))
+                    }
                 }
             }
             resetButton("Reset ChatGPT Defaults") { preferences.resetChatGPTEfforts() }
@@ -209,11 +213,7 @@ struct SettingsView: View {
                     Text(group.provider)
                         .font(.subheadline.weight(.semibold))
                         .padding(.top, group.provider == "Automatic" ? 0 : 8)
-                    LazyVGrid(
-                        columns: [GridItem(.flexible(), spacing: 18), GridItem(.flexible(), spacing: 18)],
-                        alignment: .leading,
-                        spacing: 8
-                    ) {
+                    twoColumnGrid {
                         ForEach(group.models) { model in
                             Toggle(model.name, isOn: preferences.cursorModelBinding(index: model.index))
                                 .disabled(model.index == 0)
@@ -237,6 +237,15 @@ struct SettingsView: View {
             }
             .padding(22)
         }
+    }
+
+    private func twoColumnGrid<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        LazyVGrid(
+            columns: [GridItem(.flexible(), spacing: 18), GridItem(.flexible(), spacing: 18)],
+            alignment: .leading,
+            spacing: 8,
+            content: content
+        )
     }
 
     @ViewBuilder
