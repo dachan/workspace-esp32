@@ -97,7 +97,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         let item = NSMenuItem()
         let label = NSTextField(labelWithString: title)
         label.frame = NSRect(x: 12, y: 6, width: 92, height: 18)
-        let toggle = MenuToggle(frame: NSRect(x: 124, y: 3, width: 58, height: 28))
+        let toggle = MenuToggle(frame: NSRect(x: 134, y: 5, width: 48, height: 24))
         toggle.target = self
         toggle.action = action
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 194, height: 34))
