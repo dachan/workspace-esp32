@@ -13,35 +13,60 @@ struct ModelDialApp: App {
     }
 }
 
+
+@MainActor
+private final class MenuToggle: NSControl {
+    var isOn = false { didSet { needsDisplay = true } }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let track = bounds.insetBy(dx: 1, dy: 1)
+        let trackPath = NSBezierPath(roundedRect: track, xRadius: track.height / 2, yRadius: track.height / 2)
+        (isOn ? NSColor.systemGreen : NSColor.quaternaryLabelColor).setFill()
+        trackPath.fill()
+
+        let knobSize = track.height - 4
+        let knobX = isOn ? track.maxX - knobSize - 2 : track.minX + 2
+        let knob = NSRect(x: knobX, y: track.midY - knobSize / 2, width: knobSize, height: knobSize)
+        NSColor.white.setFill()
+        NSBezierPath(ovalIn: knob).fill()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard isEnabled else { return }
+        isOn.toggle()
+        sendAction(action, to: target)
+    }
+}
+
 @MainActor
 private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let controller = DialController()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
     private var bridgeToggleRow: NSMenuItem!
-    private var bridgeSwitch: NSSwitch!
+    private var bridgeSwitch: MenuToggle!
     private var loginRow: NSMenuItem!
+    private var loginSwitch: MenuToggle!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem.button?.image = NSImage(systemSymbolName: "dial.medium", accessibilityDescription: "Model Dial")
         statusItem.button?.imagePosition = .imageLeading
         statusItem.button?.title = ""
         menu.delegate = self
-        bridgeToggleRow = NSMenuItem()
-        let bridgeLabel = NSTextField(labelWithString: "Bridge")
-        bridgeLabel.frame = NSRect(x: 12, y: 6, width: 54, height: 18)
-        bridgeSwitch = NSSwitch(frame: NSRect(x: 78, y: 4, width: 44, height: 22))
-        bridgeSwitch.target = self
-        bridgeSwitch.action = #selector(toggleBridge)
-        let bridgeView = NSView(frame: NSRect(x: 0, y: 0, width: 134, height: 30))
-        bridgeView.addSubview(bridgeLabel)
-        bridgeView.addSubview(bridgeSwitch)
-        bridgeToggleRow.view = bridgeView
+        (bridgeToggleRow, bridgeSwitch) = makeToggleRow(title: "Bridge", action: #selector(toggleBridge))
         menu.addItem(bridgeToggleRow)
+        (loginRow, loginSwitch) = makeToggleRow(title: "Open at login", action: #selector(toggleLogin))
+        menu.addItem(loginRow)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Open bridge log in Terminal", action: #selector(openBridgeLog), keyEquivalent: "")
-        menu.addItem(.separator())
-        loginRow = menu.addItem(withTitle: "Open at login", action: #selector(toggleLogin), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Model Dial", action: #selector(quit), keyEquivalent: "")
         for item in menu.items { item.target = self }
@@ -52,17 +77,34 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
 
     func menuWillOpen(_ menu: NSMenu) { refreshMenu() }
 
-    @objc private func toggleBridge(_ sender: NSSwitch) {
-        controller.setBridgeEnabled(sender.state == .on)
+    @objc private func toggleBridge(_ sender: MenuToggle) {
+        controller.setBridgeEnabled(sender.isOn)
+        refreshMenu()
+    }
+    @objc private func toggleLogin(_ sender: MenuToggle) {
+        controller.setStartsAtLogin(sender.isOn)
         refreshMenu()
     }
     @objc private func openBridgeLog() { controller.openBridgeLog() }
-    @objc private func toggleLogin() { controller.setStartsAtLogin(!controller.startsAtLogin); refreshMenu() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 
     private func refreshMenu() {
-        bridgeSwitch.state = controller.bridgeEnabled ? .on : .off
-        loginRow.state = controller.startsAtLogin ? .on : .off
+        bridgeSwitch.isOn = controller.bridgeEnabled
+        loginSwitch.isOn = controller.startsAtLogin
+    }
+
+    private func makeToggleRow(title: String, action: Selector) -> (NSMenuItem, MenuToggle) {
+        let item = NSMenuItem()
+        let label = NSTextField(labelWithString: title)
+        label.frame = NSRect(x: 12, y: 6, width: 92, height: 18)
+        let toggle = MenuToggle(frame: NSRect(x: 124, y: 3, width: 58, height: 28))
+        toggle.target = self
+        toggle.action = action
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 194, height: 34))
+        view.addSubview(label)
+        view.addSubview(toggle)
+        item.view = view
+        return (item, toggle)
     }
 }
 
