@@ -67,6 +67,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         (loginRow, loginSwitch) = makeToggleRow(title: "Open At Login", action: #selector(toggleLogin))
         menu.addItem(loginRow)
         menu.addItem(.separator())
+        menu.addItem(withTitle: "Sync", action: #selector(syncApps), keyEquivalent: "")
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: "")
         menu.addItem(withTitle: "Open Log", action: #selector(openBridgeLog), keyEquivalent: "")
         menu.addItem(.separator())
@@ -88,6 +89,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         refreshMenu()
     }
     @objc private func openBridgeLog() { controller.openBridgeLog() }
+    @objc private func syncApps() { controller.syncApps() }
     @objc private func openSettings() {
         if settingsWindow == nil {
             settingsWindow = SettingsWindowController(
@@ -182,6 +184,13 @@ private final class DialController {
         }
     }
 
+    func syncApps() {
+        guard wantsBridge else { return }
+        _ = syncCursorModelsFromApp()
+        recordBridgeEvent("Sync requested for ChatGPT, Cursor, and OpenCode")
+        restartBridge()
+    }
+
     func openBridgeLog() {
         do {
             try ensureLogFile()
@@ -197,7 +206,6 @@ private final class DialController {
 
     private func checkPort() {
         guard wantsBridge else { return }
-        if syncCursorModelsFromApp() { stopBridge() }
         if ports().first != port { stopBridge() }
         startBridge()
     }
@@ -215,7 +223,6 @@ private final class DialController {
             recordBridgeEvent(message!)
             return
         }
-        _ = syncCursorModelsFromApp()
         let process = Process()
         process.executableURL = executable
         process.arguments = [
