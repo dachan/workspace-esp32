@@ -18,7 +18,6 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
     private let controller = DialController()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
-    private var statusRow: NSMenuItem!
     private var bridgeToggleRow: NSMenuItem!
     private var bridgeSwitch: NSSwitch!
     private var loginRow: NSMenuItem!
@@ -28,10 +27,6 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         statusItem.button?.imagePosition = .imageLeading
         statusItem.button?.title = ""
         menu.delegate = self
-        menu.addItem(withTitle: "Model Dial", action: nil, keyEquivalent: "").isEnabled = false
-        statusRow = menu.addItem(withTitle: "", action: nil, keyEquivalent: "")
-        statusRow.isEnabled = false
-        menu.addItem(.separator())
         bridgeToggleRow = NSMenuItem()
         let bridgeLabel = NSTextField(labelWithString: "Bridge")
         bridgeLabel.frame = NSRect(x: 12, y: 6, width: 54, height: 18)
@@ -66,14 +61,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 
     private func refreshMenu() {
-        if controller.bridgeEnabled {
-            let panel = controller.port.map { " — \($0)" } ?? ""
-            statusRow.title = "Bridge: On — \(controller.status)\(panel)"
-            bridgeSwitch.state = .on
-        } else {
-            statusRow.title = "Bridge: Off"
-            bridgeSwitch.state = .off
-        }
+        bridgeSwitch.state = controller.bridgeEnabled ? .on : .off
         loginRow.state = controller.startsAtLogin ? .on : .off
     }
 }
