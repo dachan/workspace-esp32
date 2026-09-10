@@ -186,8 +186,69 @@ private final class DialController {
 
     func syncApps() {
         guard wantsBridge else { return }
+        if syncCursorModelsFromApp() {
+            recordBridgeEvent("Cursor models updated from Cursor")
+        }
         recordBridgeEvent("Sync requested for ChatGPT, Cursor, and OpenCode")
         restartBridge()
+    }
+
+    private func syncCursorModelsFromApp() -> Bool {
+        let database = NSHomeDirectory() + "/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+        guard FileManager.default.fileExists(atPath: database) else { return false }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+        process.arguments = [database, "SELECT CAST(value AS TEXT) FROM ItemTable WHERE key='src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser';"]
+        let outputURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("model-dial-cursor-catalog-\(UUID().uuidString).json")
+        FileManager.default.createFile(atPath: outputURL.path, contents: nil)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        do {
+            let output = try FileHandle(forWritingTo: outputURL)
+            process.standardOutput = output
+            try process.run()
+            process.waitUntilExit()
+            try output.close()
+            guard process.terminationStatus == 0,
+                  let object = try JSONSerialization.jsonObject(with: Data(contentsOf: outputURL)) as? [String: Any],
+                  let enabled = findValue("modelOverrideEnabled", in: object) as? [String] else { return false }
+
+            let enabledIDs = Set(enabled)
+            var mask: UInt64 = 1
+            for (index, name) in BridgePreferences.cursorModels.enumerated() where index > 0 {
+                if enabledIDs.contains(cursorModelID(name)) {
+                    mask |= UInt64(1) << UInt64(index)
+                }
+            }
+            return preferences.syncCursorModels(mask)
+        } catch {
+            recordBridgeEvent("Could not read Cursor model selection: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func findValue(_ key: String, in value: Any) -> Any? {
+        if let dictionary = value as? [String: Any] {
+            if let found = dictionary[key] { return found }
+            for child in dictionary.values {
+                if let found = findValue(key, in: child) { return found }
+            }
+        } else if let values = value as? [Any] {
+            for child in values {
+                if let found = findValue(key, in: child) { return found }
+            }
+        }
+        return nil
+    }
+
+    private func cursorModelID(_ name: String) -> String {
+        if name == "Codex 5.3" { return "gpt-5.3-codex" }
+        if name.hasPrefix("Cursor Grok ") {
+            return name.replacingOccurrences(of: "Cursor ", with: "").lowercased()
+        }
+        return name.lowercased().replacingOccurrences(of: " ", with: "-")
     }
 
     func openBridgeLog() {
