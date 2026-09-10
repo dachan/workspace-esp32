@@ -16,6 +16,7 @@ enum CursorPicker {
         guard let menu = find(in: root, where: {
             role($0) == "AXMenu" && description($0).caseInsensitiveCompare("Model selection") == .orderedSame
         }) else {
+            closeMenus(pulse: pulse)
             return .failed("Cursor model menu unavailable")
         }
         guard let choice = find(in: menu, where: {
@@ -45,6 +46,7 @@ enum CursorPicker {
         }), let reasoning = find(in: parameters, where: {
             role($0) == "AXMenuItem" && title($0).hasPrefix("Reasoning ")
         }) else {
+            closeMenus(pulse: pulse)
             return .failed("Cursor reasoning menu unavailable")
         }
         guard click(reasoning, pulse: pulse), Keys.wait(Keys.modelTiming, pulse: pulse) else {

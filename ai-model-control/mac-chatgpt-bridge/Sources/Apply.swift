@@ -179,6 +179,7 @@ enum Switcher {
         case .interrupted:
             return .interrupted
         case .failed:
+            interruptedPickers.removeValue(forKey: focus.pid)
             return result
         }
     }
@@ -203,6 +204,7 @@ enum Switcher {
         case .interrupted:
             return .interrupted
         case .failed:
+            interruptedPickers.removeValue(forKey: focus.pid)
             return result
         }
     }
