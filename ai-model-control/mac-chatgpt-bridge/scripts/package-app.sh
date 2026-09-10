@@ -3,6 +3,7 @@ set -eu
 
 firmware=""
 output=dist
+signing_identity="${MODEL_DIAL_SIGNING_IDENTITY:-}"
 if [ "$#" -gt 0 ] && [ "$1" = "--firmware" ]; then
     firmware="$2"
     if [ "$#" -gt 2 ]; then output="$3"; fi
@@ -31,6 +32,10 @@ plutil -replace LSUIElement -bool true "$plist"
 
 if [ -n "$firmware" ]; then
     install -m 644 "$firmware" "$app/Contents/Resources/Firmware/ai-model-control-v0.90.bin"
+fi
+
+if [ -n "$signing_identity" ]; then
+    codesign --force --deep --options runtime --sign "$signing_identity" "$app"
 fi
 
 echo "$app"
