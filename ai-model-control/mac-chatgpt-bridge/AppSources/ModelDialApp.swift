@@ -8,7 +8,13 @@ import SwiftUI
 
 @main
 struct ModelDialApp: App {
-    @StateObject private var controller = DialController()
+    @StateObject private var controller: DialController
+
+    init() {
+        let controller = DialController()
+        _controller = StateObject(wrappedValue: controller)
+        controller.start()
+    }
 
     var body: some Scene {
         MenuBarExtra("Model Dial", systemImage: controller.symbol) {
@@ -45,7 +51,6 @@ struct ModelDialApp: App {
             }
             .padding(14)
             .frame(width: 360)
-            .task { controller.start() }
         }
         .menuBarExtraStyle(.window)
     }
