@@ -77,10 +77,12 @@ See the [firmware protocol](../README.md#protocol-usb-serial-115200) for frame
 formats and compatibility details. Buffers and bytes processed per poll are
 bounded. Retry and key-delay durations use a monotonic clock.
 
-The Model Dial Settings window controls the enabled lists sent to the panel.
-ChatGPT offers Light, Medium, High, Extra High, Max, and Ultra; at least one
-level stays enabled. Cursor offers the full model catalog; Auto is always enabled.
-Changes restart the bridge so the new masks are sent immediately. The CLI
+The Model Dial Settings window has ChatGPT, Cursor, and OpenCode tabs. ChatGPT
+models are fixed; its effort list offers Light, Medium, High, Extra High, Max,
+and Ultra, and at least one level stays enabled. Cursor models are grouped by
+provider and sorted alphabetically within each group; Auto is always enabled.
+The OpenCode tab is intentionally empty. Changes restart the bridge so the new
+masks are sent immediately. The CLI
 accepts the same values with --chatgpt-effort-mask HEX and
 --cursor-model-mask HEX; the bridge configuration is authoritative when it
 receives the panel's informational ENABLED snapshot.
@@ -193,8 +195,8 @@ open "dist/Model Dial.app"
 The app needs Accessibility permission to post app shortcuts. Its **Open at
 login** control registers the app with macOS. The app must run in the logged-in
 desktop session; a system daemon cannot inspect or control the foreground app.
-The menu's **Settings…** item opens the enabled ChatGPT effort and Cursor model
-lists. The **Open Log** item runs \`tail -F\` on the persistent log at
+The menu's **Settings…** item opens the tabbed ChatGPT, Cursor, and OpenCode
+settings. The **Open Log** item runs \`tail -F\` on the persistent log at
 \`~/Library/Logs/Model Dial/bridge.log\`.
 
 ### Cursor effort ranges
