@@ -81,7 +81,7 @@ enum ChatGPTPicker {
         return walk(root)
     }
 
-    private static func click(_ element: AXUIElement, pulse: () -> Bool) -> Bool {
+    private static func click(_ element: AXUIElement, pulse: @escaping () -> Bool) -> Bool {
         guard !pulse(),
               let positionRaw = copy(element, kAXPositionAttribute as String),
               let sizeRaw = copy(element, kAXSizeAttribute as String)
@@ -98,7 +98,7 @@ enum ChatGPTPicker {
         )
     }
 
-    private static func closeMenus(pulse: () -> Bool) {
+    private static func closeMenus(pulse: @escaping () -> Bool) {
         _ = Keys.key(Keys.escape, pulse: pulse)
         _ = Keys.wait(Keys.keystrokeDelay, pulse: pulse)
         _ = Keys.key(Keys.escape, pulse: pulse)
