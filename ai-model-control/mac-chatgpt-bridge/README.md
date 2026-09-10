@@ -183,14 +183,8 @@ open "dist/Model Dial.app"
 The app needs Accessibility permission to post app shortcuts. Its **Open at
 login** control registers the app with macOS. The app must run in the logged-in
 desktop session; a system daemon cannot inspect or control the foreground app.
-
-For a USB update, choose the firmware image and the \`esptool\` executable from
-the local ESP-IDF Python environment. The app stops its bridge, flashes only
-the ESP32 application partition at \`0x10000\`, checks for esptool's \`Hash of data
-verified\` result, then reconnects. Application-only flashing preserves NVS.
-The current app bundle is unsigned and relies on a locally installed esptool;
-release distribution still needs a signed/notarized app, a bundled flasher, and
-a signed firmware release feed.
+The menu's **Open bridge log in Terminal** item runs \`tail -F\` on the persistent
+log at \`~/Library/Logs/Model Dial/bridge.log\`.
 
 ### Cursor effort ranges
 

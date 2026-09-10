@@ -21,7 +21,6 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
     private var statusRow: NSMenuItem!
     private var bridgeToggleRow: NSMenuItem!
     private var reconnectRow: NSMenuItem!
-    private var logRows: [NSMenuItem] = []
     private var loginRow: NSMenuItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -36,12 +35,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         bridgeToggleRow = menu.addItem(withTitle: "", action: #selector(toggleBridge), keyEquivalent: "")
         reconnectRow = menu.addItem(withTitle: "Reconnect now", action: #selector(reconnect), keyEquivalent: "")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Recent bridge log", action: nil, keyEquivalent: "").isEnabled = false
-        logRows = (0..<10).map { _ in
-            let item = menu.addItem(withTitle: "", action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            return item
-        }
+        menu.addItem(withTitle: "Open bridge log in Terminal", action: #selector(openBridgeLog), keyEquivalent: "")
         menu.addItem(.separator())
         loginRow = menu.addItem(withTitle: "Open at login", action: #selector(toggleLogin), keyEquivalent: "")
         menu.addItem(.separator())
@@ -56,6 +50,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
 
     @objc private func toggleBridge() { controller.setBridgeEnabled(!controller.bridgeEnabled); refreshMenu() }
     @objc private func reconnect() { controller.reconnect(); refreshMenu() }
+    @objc private func openBridgeLog() { controller.openBridgeLog() }
     @objc private func toggleLogin() { controller.setStartsAtLogin(!controller.startsAtLogin); refreshMenu() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 
@@ -72,18 +67,6 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         }
         reconnectRow.isEnabled = controller.bridgeEnabled
         loginRow.state = controller.startsAtLogin ? .on : .off
-
-        let entries = controller.recentLogLines
-        for (index, row) in logRows.enumerated() {
-            guard index < entries.count else {
-                row.isHidden = index != 0 || !entries.isEmpty
-                row.title = entries.isEmpty ? "No bridge log entries yet" : ""
-                continue
-            }
-            row.isHidden = false
-            row.title = entries[index]
-            row.toolTip = entries[index]
-        }
     }
 }
 
@@ -94,18 +77,15 @@ private final class DialController {
     var message: String?
     var startsAtLogin: Bool
     var bridgeEnabled: Bool { wantsBridge }
-    var recentLogLines: [String] { Array(logLines.suffix(10).reversed()) }
 
     private let bridgeLogURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Logs/Model Dial/bridge.log")
     private var bridge: Process?
     private var monitor: Timer?
     private var wantsBridge = true
-    private var logLines: [String] = []
 
     init() {
         startsAtLogin = SMAppService.mainApp.status == .enabled
-        logLines = loadLogLines()
     }
 
     func start() {
@@ -147,6 +127,24 @@ private final class DialController {
         status = "Starting"
         recordBridgeEvent("Reconnecting")
         startBridge()
+    }
+
+    func openBridgeLog() {
+        do {
+            try ensureLogFile()
+            let command = "tail -n 100 -F \(shellQuote(bridgeLogURL.path))"
+            let source = """
+            tell application "Terminal"
+                activate
+                do script \(appleScriptLiteral(command))
+            end tell
+            """
+            var error: NSDictionary?
+            NSAppleScript(source: source)?.executeAndReturnError(&error)
+            if let error { message = "Could not open Terminal: \(error.description)" }
+        } catch {
+            message = "Could not create bridge log: \(error.localizedDescription)"
+        }
     }
 
     private func checkPort() {
@@ -229,14 +227,8 @@ private final class DialController {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let records = newLines.filter { !$0.isEmpty }.map { "\(timestamp) \($0)" }
         guard !records.isEmpty else { return }
-        logLines.append(contentsOf: records)
-        logLines = Array(logLines.suffix(100))
         do {
-            let directory = bridgeLogURL.deletingLastPathComponent()
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            if !FileManager.default.fileExists(atPath: bridgeLogURL.path) {
-                FileManager.default.createFile(atPath: bridgeLogURL.path, contents: nil)
-            }
+            try ensureLogFile()
             let handle = try FileHandle(forWritingTo: bridgeLogURL)
             try handle.seekToEnd()
             try handle.write(contentsOf: Data((records.joined(separator: "\n") + "\n").utf8))
@@ -246,9 +238,20 @@ private final class DialController {
         }
     }
 
-    private func loadLogLines() -> [String] {
-        guard let text = try? String(contentsOf: bridgeLogURL, encoding: .utf8) else { return [] }
-        return Array(text.split(whereSeparator: \.isNewline).suffix(100).map(String.init))
+    private func ensureLogFile() throws {
+        let directory = bridgeLogURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: bridgeLogURL.path) {
+            FileManager.default.createFile(atPath: bridgeLogURL.path, contents: nil)
+        }
+    }
+
+    private func shellQuote(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\\\''"))'"
+    }
+
+    private func appleScriptLiteral(_ value: String) -> String {
+        "\"\(value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\""
     }
 
     private func bridgeExecutable() -> URL? {
