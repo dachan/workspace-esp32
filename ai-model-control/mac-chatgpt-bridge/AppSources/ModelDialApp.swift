@@ -66,7 +66,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         (loginRow, loginSwitch) = makeToggleRow(title: "Open at login", action: #selector(toggleLogin))
         menu.addItem(loginRow)
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Open bridge log in Terminal", action: #selector(openBridgeLog), keyEquivalent: "")
+        menu.addItem(withTitle: "Open Log", action: #selector(openBridgeLog), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Model Dial", action: #selector(quit), keyEquivalent: "")
         for item in menu.items { item.target = self }

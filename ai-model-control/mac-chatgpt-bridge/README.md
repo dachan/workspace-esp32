@@ -183,7 +183,7 @@ open "dist/Model Dial.app"
 The app needs Accessibility permission to post app shortcuts. Its **Open at
 login** control registers the app with macOS. The app must run in the logged-in
 desktop session; a system daemon cannot inspect or control the foreground app.
-The menu's **Open bridge log in Terminal** item runs \`tail -F\` on the persistent
+The menu's **Open Log** item runs \`tail -F\` on the persistent
 log at \`~/Library/Logs/Model Dial/bridge.log\`.
 
 ### Cursor effort ranges
