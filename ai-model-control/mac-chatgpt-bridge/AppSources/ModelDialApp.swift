@@ -63,7 +63,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         menu.delegate = self
         (bridgeToggleRow, bridgeSwitch) = makeToggleRow(title: "Bridge", action: #selector(toggleBridge))
         menu.addItem(bridgeToggleRow)
-        (loginRow, loginSwitch) = makeToggleRow(title: "Open at login", action: #selector(toggleLogin))
+        (loginRow, loginSwitch) = makeToggleRow(title: "Open At Login", action: #selector(toggleLogin))
         menu.addItem(loginRow)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Open Log", action: #selector(openBridgeLog), keyEquivalent: "")
