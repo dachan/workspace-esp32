@@ -71,6 +71,8 @@ enum Catalog {
         "Medium",
         "High",
         "Extra High",
+        "Max",
+        "Ultra",
     ]
 
     static let cursorThinking = [
@@ -82,6 +84,24 @@ enum Catalog {
         "None",
         "Minimal",
     ]
+
+    static let defaultChatGPTThinkingMask: UInt64 = 0x0F
+    static var chatGPTThinkingMask: UInt64 = defaultChatGPTThinkingMask
+
+    static var chatGPTThinkingEnabled: [String] {
+        thinking.enumerated().compactMap { index, name in
+            chatGPTThinkingMask & (1 << index) != 0 ? name : nil
+        }
+    }
+
+    static func setChatGPTThinkingMask(_ mask: UInt64) {
+        let limit = (UInt64(1) << UInt64(thinking.count)) - 1
+        var next = mask & limit
+        if next == 0 {
+            next = 1
+        }
+        chatGPTThinkingMask = next
+    }
 
     /// Nil means the model is unknown; an empty list means effort is unsupported.
     static func cursorEfforts(for model: String) -> [String]? {
@@ -162,14 +182,30 @@ enum Catalog {
 
     static func chatgptThinkingIndex(_ raw: String) -> Int? {
         let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let allIndex: Int?
         if let index = thinking.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
-            return index
+            allIndex = index
+        } else if name.lowercased() == "none" {
+            allIndex = 0
+        } else if name.lowercased() == "max" {
+            allIndex = thinking.count - 2
+        } else {
+            allIndex = thinkingAliases[name.lowercased()].map { min($0, thinking.count - 1) }
         }
-        if name.lowercased() == "none" { return 0 }
-        if name.lowercased() == "max" {
-            return thinking.count - 1
+        guard let allIndex else {
+            return nil
         }
-        return thinkingAliases[name.lowercased()].map { min($0, thinking.count - 1) }
+        let enabledIndices = thinking.indices.filter { chatGPTThinkingMask & (1 << $0) != 0 }
+        guard !enabledIndices.isEmpty else { return 0 }
+        if let exact = enabledIndices.firstIndex(of: allIndex) {
+            return exact
+        }
+        let nearest = enabledIndices.min { lhs, rhs in
+            let leftDistance = abs(lhs - allIndex)
+            let rightDistance = abs(rhs - allIndex)
+            return leftDistance == rightDistance ? lhs < rhs : leftDistance < rightDistance
+        }
+        return nearest.flatMap { enabledIndices.firstIndex(of: $0) }
     }
 
     static func cursorThinkingIndex(_ raw: String) -> Int? {
@@ -201,7 +237,7 @@ enum Catalog {
     }
 
     static func chatgptThinkingName(_ raw: String) -> String? {
-        chatgptThinkingIndex(raw).map { thinking[$0] }
+        chatgptThinkingIndex(raw).map { chatGPTThinkingEnabled[$0] }
     }
 
     static func cursorThinkingName(_ raw: String) -> String? {

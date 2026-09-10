@@ -11,6 +11,8 @@ final class SerialSession {
 
     let port: String
     let baud: Int
+    private let chatGPTThinkingMask: UInt64
+    private let cursorModelMask: UInt64
     private var fd: Int32 = -1
     private var pending: [UInt8] = []
     private var discardLine = false
@@ -23,10 +25,18 @@ final class SerialSession {
     private var acknowledgements: [SettingKind: UInt64] = [:]
     private var outgoing: [UInt8] = []
     private var outgoingOffset = 0
+    private var configurationStep = 0
 
-    init(port: String, baud: Int) {
+    init(
+        port: String,
+        baud: Int,
+        chatGPTThinkingMask: UInt64 = Catalog.defaultChatGPTThinkingMask,
+        cursorModelMask: UInt64 = 0xFF
+    ) {
         self.port = port
         self.baud = baud
+        self.chatGPTThinkingMask = chatGPTThinkingMask
+        self.cursorModelMask = cursorModelMask
     }
 
     private func open() throws {
@@ -64,6 +74,7 @@ final class SerialSession {
         outgoing.removeAll(keepingCapacity: true)
         outgoingOffset = 0
         acknowledgements.removeAll()
+        configurationStep = 0
     }
 
     func readLines() -> [String] {
@@ -124,6 +135,7 @@ final class SerialSession {
         syncPending = true
         panelFrontSent = nil
         nextTimeAt = 0
+        configurationStep = 0
     }
 
     func setPanelFront(_ title: String) {
@@ -146,6 +158,12 @@ final class SerialSession {
                     line = "SYNC"
                     syncPending = false
                     panelFrontSent = nil
+                } else if configurationStep == 0 {
+                    line = "CONFIG CHATGPT_EFFORTS \(String(format: "%016llx", chatGPTThinkingMask))"
+                    configurationStep = 1
+                } else if configurationStep == 1 {
+                    line = "CONFIG CURSOR_MODELS \(String(format: "%016llx", cursorModelMask))"
+                    configurationStep = 2
                 } else if ProcessInfo.processInfo.systemUptime >= nextTimeAt {
                     let unix = Int64(Date().timeIntervalSince1970)
                     let tzMin = TimeZone.current.secondsFromGMT() / 60

@@ -19,6 +19,8 @@ responds with its latest model and thinking after any active 0.4 s settle window
 ```text
 Mac → ESP: SYNC
 ESP → Mac: ENABLED <16-hex Cursor enable mask>
+Mac → ESP: CONFIG CHATGPT_EFFORTS <16-hex effort mask>
+Mac → ESP: CONFIG CURSOR_MODELS <16-hex model mask>
 ESP → Mac: STATE <16-hex revision> MODEL <name>
 ESP → Mac: STATE <16-hex revision> THINKING <level>
 Mac → ESP: ACK <16-hex revision> MODEL
@@ -49,16 +51,15 @@ logo; it does not fall back to ChatGPT. After each SYNC the helper resends
 FRONT so a firmware restart recovers focus. After 1 min without Cursor, ChatGPT, or OpenCode
 focus and without encoder or touch, the panel shows a date/time screensaver.
 Focusing Cursor, ChatGPT, or OpenCode, turning a knob, or tapping the glass wakes it;
-the waking tap does not press SYNC or MODELS.
+the waking tap does not press SYNC.
 
 A five-second press-and-hold anywhere on the glass starts a five-point touch
 calibration. A short tap on **SYNC** (bottom left) asks the helper to apply
-the current panel model and thinking to the focused app. In Cursor mode a
-**MODELS** control next to SYNC opens a saved enable list (Auto stays on;
-defaults match Cursor's shipped-on set). A release is confirmed after 150 ms
-without contact so a transient FT6336 read error cannot create another SYNC
-tap. Encoder scroll, encoder click, or a row tap toggles a model; **DONE**
-closes.
+the current panel model and thinking to the focused app. The Model Dial
+Settings window controls which ChatGPT effort levels and Cursor models are
+available on the encoders; the bridge sends those masks to the panel on every
+connection. A release is confirmed after 150 ms without contact so a transient
+FT6336 read error cannot create another SYNC tap.
 
 Before the first `SYNC`, firmware uses the legacy `SET MODEL <name>` and
 `SET THINKING <level>` lines. The current helper accepts these from older firmware,
@@ -77,8 +78,8 @@ to recover framing after a disconnect mid-transfer.
 
 Changed values are saved once per input pass to NVS (`cgpt`/`model`,`think`
 for the last displayed pair, `cgpt`/`last_g` and `last_c` for each app's last
-model, `cgpt`/`c_en` for the Cursor enable mask, plus `cgpt`/`effort` for each
-app's last thinking level per model)
+model, `cgpt`/`c_en` for the Cursor model mask, `cgpt`/`g_en` for the ChatGPT
+effort mask, plus `cgpt`/`effort` for each app's last thinking level per model)
 and reloaded on boot. Empty NVS (first flash) starts ChatGPT on GPT-5.6 Luna
 Extra High and Cursor on Cursor Grok 4.6 Extra High. Changing models restores
 that model's saved effort for the focused app; switching ChatGPT ↔ Cursor
@@ -88,7 +89,7 @@ display work.
 
 Dial models follow the focused app. ChatGPT: GPT-6 Astra, GPT-5.6 Sol,
 GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5; thinking Light, Medium, High,
-Extra High. Cursor: Auto, then the enabled MODELS list (defaults: Cursor Grok 4.6,
+Extra High, Max, Ultra. Cursor: Auto, then the enabled model list (defaults: Cursor Grok 4.6,
 Composer 2.5, Claude Opus 5, GPT-5.6 Sol, Claude Fable 5, GPT-5.6 Terra,
 GPT-5.6 Luna). Effort depends on the model (see Cursor effort ranges below).
 Command-/ apply uses this enabled index; keep the same models on in Cursor
@@ -215,7 +216,7 @@ identity — never by screen coordinates.
 - **Cursor:** Command-/ (first Down is Auto); effort is Left, Up, Right into
   Reasoning after reopening (Right highlights the first supported level;
   Down to the target; Return; Escape twice closes menus). Model order is
-  Auto then the enabled MODELS list (no wrap). A ChatGPT-only model name
+  Auto then the enabled model list (no wrap). A ChatGPT-only model name
   (e.g. GPT-6 Astra) is skipped while Cursor is focused so effort can still
   apply. Keep `catalog.c` ↔ `Catalog.swift` aligned for per-model effort
   ranges (Unsupported / Max / None / Minimal extensions and clamp behavior).
@@ -281,9 +282,8 @@ swift build -c release
 - `main/serial_model.c`: bounded framing and legacy display commands.
 - `main/serial_sync.c`: state revisions, settling, snapshots, and ACK retries.
 - `main/model_nvs.c`: persistence of the current pair, last model per app, the
-  Cursor enable mask, and per-app per-model effort;
+  Cursor and ChatGPT enable masks, and per-app per-model effort;
   `model_parse.c`: legacy combined-name parsing.
-- `main/cursor_settings.c`: Cursor MODELS enable list.
 
 Display rotation, the internal-RAM 180-degree band blit, and encoder pin/direction
 configuration are unchanged. A DMA completion timeout retains buffer ownership;

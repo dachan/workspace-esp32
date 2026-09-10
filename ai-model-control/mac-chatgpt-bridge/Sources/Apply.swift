@@ -141,7 +141,7 @@ enum Switcher {
         if let stopped = primePrompt(focus: focus, preferred: preferred, pulse: pulse) {
             return stopped
         }
-        guard bump(delta: -(Catalog.thinking.count - 1), pulse: pulse) else {
+        guard bump(delta: -(Catalog.chatGPTThinkingEnabled.count - 1), pulse: pulse) else {
             return pulse()
                 ? .interrupted
                 : .failed("could not clamp reasoning to Light")

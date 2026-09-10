@@ -32,7 +32,16 @@ final class BridgeRuntime {
 
     init(options: Options) {
         self.options = options
-        session = options.port.map { SerialSession(port: $0, baud: options.baud) }
+        Catalog.setChatGPTThinkingMask(options.chatGPTThinkingMask)
+        Catalog.setCursorEnabledMask(options.cursorModelMask)
+        session = options.port.map {
+            SerialSession(
+                port: $0,
+                baud: options.baud,
+                chatGPTThinkingMask: options.chatGPTThinkingMask,
+                cursorModelMask: options.cursorModelMask
+            )
+        }
     }
 
     private func receive(_ update: SerialUpdate) {
@@ -130,8 +139,7 @@ final class BridgeRuntime {
             if raw.hasPrefix("ENABLED ") {
                 let hex = raw.dropFirst("ENABLED ".count).trimmingCharacters(in: .whitespaces)
                 if let mask = UInt64(hex, radix: 16) {
-                    Catalog.setCursorEnabledMask(mask)
-                    print("\(stamp()) rx ENABLED \(String(format: "%016llx", Catalog.cursorEnabledMask))")
+                    print("\(stamp()) rx ENABLED \(String(format: "%016llx", mask)) (configured mask retained)")
                     fflush(stdout)
                 }
                 continue

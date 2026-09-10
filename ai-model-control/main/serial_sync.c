@@ -2,6 +2,7 @@
 
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "catalog.h"
@@ -23,6 +24,7 @@ static sync_field_t s_fields[] = {{.kind = "MODEL"}, {.kind = "THINKING"}};
 static bool s_acknowledged_protocol;
 static bool s_push;
 static bool s_send_enabled;
+static bool s_config_changed;
 static uint64_t s_boot_id;
 static TickType_t s_ready_at;
 static bool s_ready_sent;
@@ -83,6 +85,30 @@ bool serial_sync_handle_line(const char *line)
         }
         return true;
     }
+    const char *chatgpt_prefix = "CONFIG CHATGPT_EFFORTS ";
+    if (strncmp(line, chatgpt_prefix, strlen(chatgpt_prefix)) == 0) {
+        char *end = NULL;
+        const char *value = line + strlen(chatgpt_prefix);
+        uint64_t mask = strtoull(value, &end, 16);
+        if (end != value && *end == '\0') {
+            uint64_t before = catalog_chatgpt_thinking_mask();
+            catalog_chatgpt_set_thinking_mask(mask);
+            s_config_changed |= before != catalog_chatgpt_thinking_mask();
+        }
+        return true;
+    }
+    const char *cursor_prefix = "CONFIG CURSOR_MODELS ";
+    if (strncmp(line, cursor_prefix, strlen(cursor_prefix)) == 0) {
+        char *end = NULL;
+        const char *value = line + strlen(cursor_prefix);
+        uint64_t mask = strtoull(value, &end, 16);
+        if (end != value && *end == '\0') {
+            uint64_t before = catalog_cursor_enabled_mask();
+            catalog_cursor_set_enabled_mask(mask);
+            s_config_changed |= before != catalog_cursor_enabled_mask();
+        }
+        return true;
+    }
     if (strncmp(line, "ACK ", 4) == 0) {
         char kind[9], extra;
         uint64_t revision;
@@ -97,6 +123,13 @@ bool serial_sync_handle_line(const char *line)
         return true;
     }
     return false;
+}
+
+bool serial_sync_take_config_changed(void)
+{
+    bool changed = s_config_changed;
+    s_config_changed = false;
+    return changed;
 }
 
 void serial_sync_poll(void)

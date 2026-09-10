@@ -15,6 +15,13 @@ struct Options {
     var port: String?
     var baud = SerialBridge.defaultBaud
     var bundleID: String?
+    var chatGPTThinkingMask = Catalog.defaultChatGPTThinkingMask
+    var cursorModelMask: UInt64 = 0xFF
+}
+
+private func parseMask(_ raw: String) -> UInt64? {
+    let value = raw.lowercased().hasPrefix("0x") ? String(raw.dropFirst(2)) : raw
+    return UInt64(value, radix: 16) ?? UInt64(raw)
 }
 
 func parseOptions(_ args: [String]) -> Options? {
@@ -79,6 +86,18 @@ func parseOptions(_ args: [String]) -> Options? {
                 return nil
             }
             options.bundleID = value
+        case "--chatgpt-effort-mask":
+            guard let value = takeValue(), let mask = parseMask(value) else {
+                fputs("chatgpt-bridge: --chatgpt-effort-mask needs a hexadecimal mask\n", stderr)
+                return nil
+            }
+            options.chatGPTThinkingMask = mask
+        case "--cursor-model-mask":
+            guard let value = takeValue(), let mask = parseMask(value) else {
+                fputs("chatgpt-bridge: --cursor-model-mask needs a hexadecimal mask\n", stderr)
+                return nil
+            }
+            options.cursorModelMask = mask
         case "--json", "--dump-ax", "--list-candidates", "--interval",
              "--max-depth", "--max-nodes":
             fputs("chatgpt-bridge: \(arg) was removed in the keyboard-only rewrite\n", stderr)
@@ -112,6 +131,8 @@ func usage() -> String {
       --set-model NAME    One-shot: select NAME if ChatGPT, Cursor, or OpenCode is focused
       --set-thinking LVL  One-shot: set reasoning if ChatGPT, Cursor, or OpenCode is focused
       --bundle-id ID      Force ChatGPT, Codex, Cursor, or OpenCode
+      --chatgpt-effort-mask HEX  Enabled ChatGPT effort levels (default 0x0f)
+      --cursor-model-mask HEX   Enabled Cursor model entries (Auto is always on)
       --hid-info          Describe the keyboard control path
       --check-ax          Check Accessibility permission and exit
       --check-input-guard Check input filter availability for the focused app; no keys posted

@@ -61,10 +61,6 @@ static int s_sync_x;
 static int s_sync_y;
 static int s_sync_w;
 static int s_sync_h;
-static int s_models_x;
-static int s_models_y;
-static int s_models_w;
-static int s_models_h;
 static int s_sync_angle;
 static TickType_t s_sync_spin_start;
 static TickType_t s_sync_spin_last;
@@ -75,13 +71,6 @@ bool ui_hit_sync(int x, int y)
     const int pad = 6;
     return s_sync_w > 0 && x >= s_sync_x - pad && x < s_sync_x + s_sync_w + pad
         && y >= s_sync_y - pad && y < s_sync_y + s_sync_h + pad;
-}
-
-bool ui_hit_models(int x, int y)
-{
-    const int pad = 6;
-    return s_models_w > 0 && x >= s_models_x - pad && x < s_models_x + s_models_w + pad
-        && y >= s_models_y - pad && y < s_models_y + s_models_h + pad;
 }
 
 void ui_sync_pulse(void)
@@ -275,23 +264,6 @@ esp_err_t ui_render(const model_fields_t *fields)
         const int text_y = s_sync_y + (s_sync_h - th) / 2;
         draw_sync_icon(icon_cx, icon_cy, s_sync_angle, text);
         font_draw_text(text_x, text_y, label_sync, text, card, scale);
-    }
-
-    s_models_w = 0;
-    if (front_title_is_cursor()) {
-        const char *label_models = "MODELS";
-        const int scale = 2;
-        const int pad_x = 6;
-        const int pad_y = 8;
-        const int tw = font_text_width(label_models, scale);
-        const int th = 7 * scale;
-        s_models_w = pad_x + tw + pad_x;
-        s_models_h = th + pad_y * 2;
-        s_models_x = s_sync_x + s_sync_w + 16;
-        s_models_y = s_sync_y;
-        const int text_x = s_models_x + pad_x;
-        const int text_y = s_models_y + (s_models_h - th) / 2;
-        font_draw_text(text_x, text_y, label_models, text, card, scale);
     }
 
     /* Version bottom-right. */

@@ -9,4 +9,5 @@ void serial_sync_note_enabled(void);
 // Re-emit both fields with new revisions and a PUSH so the helper reapplies.
 void serial_sync_push(const model_fields_t *fields);
 bool serial_sync_handle_line(const char *line);
+bool serial_sync_take_config_changed(void);
 void serial_sync_poll(void);

@@ -29,6 +29,10 @@ const char *catalog_cursor_slot_name(int slot);
 bool catalog_cursor_slot_on(int slot);
 bool catalog_cursor_set_slot(int slot, bool on);
 
+/* ChatGPT/OpenCode thinking enable mask. At least one effort is always on. */
+uint64_t catalog_chatgpt_thinking_mask(void);
+void catalog_chatgpt_set_thinking_mask(uint64_t mask);
+
 int catalog_thinking_count(const char *model);
 int catalog_thinking_count_in(bool cursor, const char *model);
 // UI levels are 1..count; zero means missing or unknown.

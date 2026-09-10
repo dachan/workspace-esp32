@@ -55,6 +55,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
     private var bridgeSwitch: MenuToggle!
     private var loginRow: NSMenuItem!
     private var loginSwitch: MenuToggle!
+    private var settingsWindow: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem.button?.image = NSImage(systemSymbolName: "dial.medium", accessibilityDescription: "Model Dial")
@@ -66,6 +67,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         (loginRow, loginSwitch) = makeToggleRow(title: "Open At Login", action: #selector(toggleLogin))
         menu.addItem(loginRow)
         menu.addItem(.separator())
+        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: "")
         menu.addItem(withTitle: "Open Log", action: #selector(openBridgeLog), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Model Dial", action: #selector(quit), keyEquivalent: "")
@@ -86,6 +88,15 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         refreshMenu()
     }
     @objc private func openBridgeLog() { controller.openBridgeLog() }
+    @objc private func openSettings() {
+        if settingsWindow == nil {
+            settingsWindow = SettingsWindowController(
+                preferences: controller.preferences,
+                onChange: { [weak controller] in controller?.restartBridge() }
+            )
+        }
+        settingsWindow?.showWindow()
+    }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 
     private func refreshMenu() {
@@ -115,6 +126,7 @@ private final class DialController {
     var message: String?
     var startsAtLogin: Bool
     var bridgeEnabled: Bool { wantsBridge }
+    let preferences = BridgePreferences()
 
     private let bridgeLogURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Logs/Model Dial/bridge.log")
@@ -159,6 +171,17 @@ private final class DialController {
         }
     }
 
+    func restartBridge() {
+        guard wantsBridge else { return }
+        stopBridge()
+        port = nil
+        status = "Starting"
+        recordBridgeEvent("Bridge restarting after settings change")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.startBridge()
+        }
+    }
+
     func openBridgeLog() {
         do {
             try ensureLogFile()
@@ -193,7 +216,11 @@ private final class DialController {
         }
         let process = Process()
         process.executableURL = executable
-        process.arguments = ["--watch", "--send-serial", "--port", candidate]
+        process.arguments = [
+            "--watch", "--send-serial", "--port", candidate,
+            "--chatgpt-effort-mask", maskArgument(preferences.chatGPTThinkingMask),
+            "--cursor-model-mask", maskArgument(preferences.cursorModelMask),
+        ]
         capture(process) { [weak self] text in self?.recordBridgeOutput(text) }
         process.terminationHandler = { [weak self] completed in
             Task { @MainActor in
@@ -288,6 +315,10 @@ private final class DialController {
         let sibling = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
             .appendingPathComponent("chatgpt-bridge")
         return FileManager.default.isExecutableFile(atPath: sibling.path) ? sibling : nil
+    }
+
+    private func maskArgument(_ mask: UInt64) -> String {
+        String(format: "%016llx", mask)
     }
 
     private func lastLine(_ text: String) -> String {
