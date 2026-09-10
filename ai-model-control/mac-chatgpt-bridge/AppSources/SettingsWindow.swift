@@ -147,6 +147,18 @@ final class BridgePreferences: ObservableObject {
         return true
     }
 
+    func enabledChatGPTEffortNames() -> [String] {
+        Self.chatGPTEfforts.enumerated().compactMap { index, name in
+            chatGPTThinkingMask & (UInt64(1) << UInt64(index)) != 0 ? name : nil
+        }
+    }
+
+    func enabledCursorModelNames() -> [String] {
+        Self.cursorModels.enumerated().compactMap { index, name in
+            isCursorModelEnabled(index) ? name : nil
+        }
+    }
+
     private func updateChatGPTMask(_ raw: UInt64) {
         let next = Self.normalizedEffortMask(raw)
         guard next != chatGPTThinkingMask else { return }

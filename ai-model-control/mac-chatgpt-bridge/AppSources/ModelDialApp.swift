@@ -189,6 +189,9 @@ private final class DialController {
         if syncCursorModelsFromApp() {
             recordBridgeEvent("Cursor models updated from Cursor")
         }
+        recordBridgeEvent("Synced ChatGPT efforts: \(preferences.enabledChatGPTEffortNames().joined(separator: ", "))")
+        recordBridgeEvent("Synced Cursor models: \(preferences.enabledCursorModelNames().joined(separator: ", "))")
+        recordBridgeEvent("Synced OpenCode models: \(BridgePreferences.openCodeModels.joined(separator: ", "))")
         recordBridgeEvent("Sync requested for ChatGPT, Cursor, and OpenCode")
         restartBridge()
     }
