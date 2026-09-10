@@ -216,7 +216,7 @@ final class BridgeRuntime {
                         fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)
                     }
                     lastFailure = message
-                    retryAt = ProcessInfo.processInfo.systemUptime + 2
+                    retryAt = ProcessInfo.processInfo.systemUptime + retryDelay(for: message)
                     return .failed(message)
                 }
             }
@@ -225,7 +225,7 @@ final class BridgeRuntime {
         if case .failed(let message) = guardedResult {
             if message != lastFailure { fputs("chatgpt-bridge: \(message)\n", stderr) }
             lastFailure = message
-            retryAt = ProcessInfo.processInfo.systemUptime + 2
+            retryAt = ProcessInfo.processInfo.systemUptime + retryDelay(for: message)
         }
         if guardInterrupted {
             discardPending("input guard or apply interrupted")
@@ -246,6 +246,10 @@ final class BridgeRuntime {
             print("\(stamp()) \(DeskFront.label(preferred: options.bundleID))")
             fflush(stdout)
         }
+    }
+
+    private func retryDelay(for message: String) -> TimeInterval {
+        message.hasPrefix("input guard waiting") ? 0.05 : 2
     }
 
     func run() -> Never {
