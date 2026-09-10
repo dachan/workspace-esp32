@@ -197,6 +197,7 @@ private final class DialController {
 
     private func checkPort() {
         guard wantsBridge else { return }
+        if syncCursorModelsFromApp() { stopBridge() }
         if ports().first != port { stopBridge() }
         startBridge()
     }
@@ -214,7 +215,7 @@ private final class DialController {
             recordBridgeEvent(message!)
             return
         }
-        syncCursorModelsFromApp()
+        _ = syncCursorModelsFromApp()
         let process = Process()
         process.executableURL = executable
         process.arguments = [
@@ -249,9 +250,9 @@ private final class DialController {
         }
     }
 
-    private func syncCursorModelsFromApp() {
+    private func syncCursorModelsFromApp() -> Bool {
         let database = NSHomeDirectory() + "/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
-        guard FileManager.default.fileExists(atPath: database) else { return }
+        guard FileManager.default.fileExists(atPath: database) else { return false }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
         process.arguments = [database, "SELECT CAST(value AS TEXT) FROM ItemTable WHERE key='src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser';"]
@@ -262,14 +263,14 @@ private final class DialController {
             process.waitUntilExit()
             guard process.terminationStatus == 0,
                   let object = try JSONSerialization.jsonObject(with: output.fileHandleForReading.readDataToEndOfFile()) as? [String: Any],
-                  let enabled = findValue("modelOverrideEnabled", in: object) as? [String] else { return }
+                  let enabled = findValue("modelOverrideEnabled", in: object) as? [String] else { return false }
             let enabledIDs = Set(enabled)
             var mask: UInt64 = 1
             for (index, name) in BridgePreferences.cursorModels.enumerated() where index > 0 {
                 if enabledIDs.contains(cursorModelID(name)) { mask |= UInt64(1) << UInt64(index) }
             }
-            preferences.syncCursorModels(mask)
-        } catch { }
+            return preferences.syncCursorModels(mask)
+        } catch { return false }
     }
 
     private func findValue(_ key: String, in value: Any) -> Any? {
