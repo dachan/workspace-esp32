@@ -1,7 +1,5 @@
 #if os(macOS)
 import AppKit
-import Combine
-import CryptoKit
 import Foundation
 import ServiceManagement
 import SwiftUI
@@ -21,8 +19,10 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
     private var statusRow: NSMenuItem!
+    private var bridgeToggleRow: NSMenuItem!
+    private var reconnectRow: NSMenuItem!
+    private var logRows: [NSMenuItem] = []
     private var loginRow: NSMenuItem!
-    private var installRow: NSMenuItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem.button?.image = NSImage(systemSymbolName: "dial.medium", accessibilityDescription: "Model Dial")
@@ -33,12 +33,17 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         statusRow = menu.addItem(withTitle: "", action: nil, keyEquivalent: "")
         statusRow.isEnabled = false
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Reconnect now", action: #selector(reconnect), keyEquivalent: "")
-        loginRow = menu.addItem(withTitle: "Open at login", action: #selector(toggleLogin), keyEquivalent: "")
+        bridgeToggleRow = menu.addItem(withTitle: "", action: #selector(toggleBridge), keyEquivalent: "")
+        reconnectRow = menu.addItem(withTitle: "Reconnect now", action: #selector(reconnect), keyEquivalent: "")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Choose firmware image…", action: #selector(chooseFirmware), keyEquivalent: "")
-        menu.addItem(withTitle: "Choose esptool…", action: #selector(chooseFlasher), keyEquivalent: "")
-        installRow = menu.addItem(withTitle: "Install selected firmware", action: #selector(installFirmware), keyEquivalent: "")
+        menu.addItem(withTitle: "Recent bridge log", action: nil, keyEquivalent: "").isEnabled = false
+        logRows = (0..<10).map { _ in
+            let item = menu.addItem(withTitle: "", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            return item
+        }
+        menu.addItem(.separator())
+        loginRow = menu.addItem(withTitle: "Open at login", action: #selector(toggleLogin), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Model Dial", action: #selector(quit), keyEquivalent: "")
         for item in menu.items { item.target = self }
@@ -49,49 +54,59 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
 
     func menuWillOpen(_ menu: NSMenu) { refreshMenu() }
 
+    @objc private func toggleBridge() { controller.setBridgeEnabled(!controller.bridgeEnabled); refreshMenu() }
     @objc private func reconnect() { controller.reconnect(); refreshMenu() }
     @objc private func toggleLogin() { controller.setStartsAtLogin(!controller.startsAtLogin); refreshMenu() }
-    @objc private func chooseFirmware() { controller.chooseFirmware(); refreshMenu() }
-    @objc private func chooseFlasher() { controller.chooseFlasher(); refreshMenu() }
-    @objc private func installFirmware() { controller.installFirmware(); refreshMenu() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 
     private func refreshMenu() {
-        statusRow.title = "\(controller.status) — \(controller.port ?? "No panel")"
+        if controller.bridgeEnabled {
+            let panel = controller.port.map { " — \($0)" } ?? ""
+            statusRow.title = "Bridge: On — \(controller.status)\(panel)"
+            bridgeToggleRow.title = "Turn bridge off"
+            bridgeToggleRow.state = .on
+        } else {
+            statusRow.title = "Bridge: Off"
+            bridgeToggleRow.title = "Turn bridge on"
+            bridgeToggleRow.state = .off
+        }
+        reconnectRow.isEnabled = controller.bridgeEnabled
         loginRow.state = controller.startsAtLogin ? .on : .off
-        installRow.isEnabled = controller.canInstall
+
+        let entries = controller.recentLogLines
+        for (index, row) in logRows.enumerated() {
+            guard index < entries.count else {
+                row.isHidden = index != 0 || !entries.isEmpty
+                row.title = entries.isEmpty ? "No bridge log entries yet" : ""
+                continue
+            }
+            row.isHidden = false
+            row.title = entries[index]
+            row.toolTip = entries[index]
+        }
     }
 }
 
 @MainActor
-private final class DialController: ObservableObject {
-    @Published var status = "Starting"
-    @Published var port: String?
-    @Published var message: String?
-    @Published var firmwareHash: String?
-    @Published var flashing = false
-    @Published var startsAtLogin: Bool
+private final class DialController {
+    var status = "Starting"
+    var port: String?
+    var message: String?
+    var startsAtLogin: Bool
+    var bridgeEnabled: Bool { wantsBridge }
+    var recentLogLines: [String] { Array(logLines.suffix(10).reversed()) }
+
+    private let bridgeLogURL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Logs/Model Dial/bridge.log")
     private var bridge: Process?
-    private var flasher: Process?
     private var monitor: Timer?
-    private var flashOutput = ""
-    private var firmware: URL?
-    private var flasherURL: URL?
     private var wantsBridge = true
+    private var logLines: [String] = []
 
     init() {
         startsAtLogin = SMAppService.mainApp.status == .enabled
-        firmware = savedURL("firmwarePath") ?? Bundle.main.url(
-            forResource: "ai-model-control-v0.90", withExtension: "bin", subdirectory: "Firmware"
-        )
-        flasherURL = savedURL("flasherPath")
-        refreshHash()
+        logLines = loadLogLines()
     }
-
-    var symbol: String { flashing ? "arrow.triangle.2.circlepath" : bridge == nil ? "exclamationmark.triangle" : "dial.medium" }
-    var firmwareName: String? { firmware?.lastPathComponent }
-    var flasherName: String? { flasherURL?.lastPathComponent }
-    var canInstall: Bool { !flashing && port != nil && firmware != nil && flasherURL != nil }
 
     func start() {
         guard monitor == nil else { return }
@@ -101,6 +116,21 @@ private final class DialController: ObservableObject {
         startBridge()
     }
 
+    func setBridgeEnabled(_ enabled: Bool) {
+        guard enabled != wantsBridge else { return }
+        wantsBridge = enabled
+        if enabled {
+            status = "Starting"
+            recordBridgeEvent("Bridge enabled")
+            startBridge()
+        } else {
+            stopBridge()
+            port = nil
+            status = "Off"
+            recordBridgeEvent("Bridge disabled")
+        }
+    }
+
     func setStartsAtLogin(_ enabled: Bool) {
         do {
             if enabled { try SMAppService.mainApp.register() }
@@ -108,77 +138,19 @@ private final class DialController: ObservableObject {
             startsAtLogin = SMAppService.mainApp.status == .enabled
         } catch {
             message = "Could not change login setting: \(error.localizedDescription)"
-            startsAtLogin = SMAppService.mainApp.status == .enabled
         }
     }
 
-    func reconnect() { stopBridge(); wantsBridge = true; startBridge() }
-
-    func chooseFirmware() {
-        chooseFile(title: "Choose ESP32 firmware") { url in
-            self.firmware = url
-            UserDefaults.standard.set(url.path, forKey: "firmwarePath")
-            self.refreshHash()
-        }
-    }
-
-    func chooseFlasher() {
-        chooseFile(title: "Choose esptool") { url in
-            self.flasherURL = url
-            UserDefaults.standard.set(url.path, forKey: "flasherPath")
-        }
-    }
-
-    func installFirmware() {
-        guard let image = firmware, let tool = flasherURL, let port,
-              FileManager.default.isExecutableFile(atPath: tool.path) else {
-            message = "Choose a firmware image, an executable esptool, and a connected panel."
-            return
-        }
-        wantsBridge = false
-        stopBridge()
-        flashing = true
-        status = "Installing firmware"
-        flashOutput = ""
-        let process = Process()
-        process.executableURL = tool
-        process.arguments = [
-            "--chip", "esp32s3", "--port", port, "--baud", "460800",
-            "--before", "default-reset", "--after", "hard-reset", "write-flash",
-            "--flash-mode", "dio", "--flash-freq", "80m", "--flash-size", "16MB",
-            "0x10000", image.path,
-        ]
-        capture(process) { [weak self] text in self?.flashOutput += text }
-        process.terminationHandler = { [weak self] completed in
-            Task { @MainActor in self?.finishFlash(completed) }
-        }
-        do {
-            flasher = process
-            try process.run()
-            message = "Flashing \(image.lastPathComponent) to \(port)"
-        } catch {
-            flasher = nil
-            flashing = false
-            wantsBridge = true
-            status = "Flash could not start"
-            message = error.localizedDescription
-            startBridge()
-        }
-    }
-
-    private func finishFlash(_ process: Process) {
-        guard flasher === process else { return }
-        let verified = process.terminationStatus == 0 && flashOutput.contains("Hash of data verified")
-        flasher = nil
-        flashing = false
+    func reconnect() {
         wantsBridge = true
-        status = verified ? "Firmware verified; reconnecting" : "Firmware update failed"
-        message = verified ? "Firmware hash verified. Reconnecting to the panel." : lastLine(flashOutput)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.startBridge() }
+        stopBridge()
+        status = "Starting"
+        recordBridgeEvent("Reconnecting")
+        startBridge()
     }
 
     private func checkPort() {
-        guard wantsBridge, !flashing else { return }
+        guard wantsBridge else { return }
         if ports().first != port { stopBridge() }
         startBridge()
     }
@@ -191,20 +163,22 @@ private final class DialController: ObservableObject {
             return
         }
         guard let executable = bridgeExecutable() else {
-            status = "Bridge unavailable"
+            status = "Unavailable"
             message = "The bundled chatgpt-bridge executable is missing."
+            recordBridgeEvent(message!)
             return
         }
         let process = Process()
         process.executableURL = executable
         process.arguments = ["--watch", "--send-serial", "--port", candidate]
-        capture(process) { [weak self] text in self?.message = self?.lastLine(text) }
+        capture(process) { [weak self] text in self?.recordBridgeOutput(text) }
         process.terminationHandler = { [weak self] completed in
             Task { @MainActor in
                 guard let self, self.bridge === completed else { return }
                 self.bridge = nil
-                guard self.wantsBridge, !self.flashing else { return }
-                self.status = "Bridge restarting"
+                guard self.wantsBridge else { return }
+                self.status = "Restarting"
+                self.recordBridgeEvent("Bridge stopped; retrying")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.startBridge() }
             }
         }
@@ -214,11 +188,13 @@ private final class DialController: ObservableObject {
             port = candidate
             status = "Connected"
             message = "Bridge started on \(candidate)"
+            recordBridgeEvent(message!)
         } catch {
             bridge = nil
             port = nil
-            status = "Bridge unavailable"
+            status = "Unavailable"
             message = error.localizedDescription
+            recordBridgeEvent("Bridge could not start: \(message!)")
         }
     }
 
@@ -242,30 +218,45 @@ private final class DialController: ObservableObject {
         process.standardError = stderr
     }
 
+    private func recordBridgeOutput(_ text: String) {
+        message = lastLine(text)
+        appendLogLines(text.split(whereSeparator: \.isNewline).map(String.init))
+    }
+
+    private func recordBridgeEvent(_ text: String) { appendLogLines(["Model Dial: \(text)"]) }
+
+    private func appendLogLines(_ newLines: [String]) {
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let records = newLines.filter { !$0.isEmpty }.map { "\(timestamp) \($0)" }
+        guard !records.isEmpty else { return }
+        logLines.append(contentsOf: records)
+        logLines = Array(logLines.suffix(100))
+        do {
+            let directory = bridgeLogURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            if !FileManager.default.fileExists(atPath: bridgeLogURL.path) {
+                FileManager.default.createFile(atPath: bridgeLogURL.path, contents: nil)
+            }
+            let handle = try FileHandle(forWritingTo: bridgeLogURL)
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data((records.joined(separator: "\n") + "\n").utf8))
+            try handle.close()
+        } catch {
+            message = "Could not write bridge log: \(error.localizedDescription)"
+        }
+    }
+
+    private func loadLogLines() -> [String] {
+        guard let text = try? String(contentsOf: bridgeLogURL, encoding: .utf8) else { return [] }
+        return Array(text.split(whereSeparator: \.isNewline).suffix(100).map(String.init))
+    }
+
     private func bridgeExecutable() -> URL? {
         let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/chatgpt-bridge")
         if FileManager.default.isExecutableFile(atPath: bundled.path) { return bundled }
         let sibling = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
             .appendingPathComponent("chatgpt-bridge")
         return FileManager.default.isExecutableFile(atPath: sibling.path) ? sibling : nil
-    }
-
-    private func chooseFile(title: String, selected: (URL) -> Void) {
-        let panel = NSOpenPanel()
-        panel.title = title
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        if panel.runModal() == .OK, let url = panel.url { selected(url) }
-    }
-
-    private func refreshHash() {
-        guard let firmware else { firmwareHash = nil; return }
-        guard let data = try? Data(contentsOf: firmware) else {
-            firmwareHash = nil
-            message = "Could not read firmware image."
-            return
-        }
-        firmwareHash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     private func lastLine(_ text: String) -> String {
@@ -277,11 +268,6 @@ private final class DialController: ObservableObject {
         let prefixes = ["cu.usbmodem", "cu.usbserial", "cu.wchusbserial", "cu.SLAB_USBtoUART"]
         return names.filter { name in prefixes.contains(where: { name.hasPrefix($0) }) }
             .map { "/dev/\($0)" }.sorted()
-    }
-
-    private func savedURL(_ key: String) -> URL? {
-        guard let path = UserDefaults.standard.string(forKey: key), !path.isEmpty else { return nil }
-        return URL(fileURLWithPath: path)
     }
 }
 #endif
