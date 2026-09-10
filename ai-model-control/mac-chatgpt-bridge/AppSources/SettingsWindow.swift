@@ -222,11 +222,6 @@ struct SettingsView: View {
                     }
                 }
             }
-            Divider()
-            settingsSection(title: "Efforts", detail: "Cursor determines the available effort levels for each selected model.") {
-                Text("Cursor efforts cannot be customized in Model Dial.")
-                    .foregroundStyle(.secondary)
-            }
             resetButton("Reset Cursor Defaults") { preferences.resetCursorModels() }
         }
     }
@@ -239,11 +234,6 @@ struct SettingsView: View {
                         Toggle(model, isOn: .constant(true)).disabled(true)
                     }
                 }
-            }
-            Divider()
-            settingsSection(title: "Efforts", detail: "OpenCode effort synchronization is not supported.") {
-                Text("Efforts cannot be customized in Model Dial.")
-                    .foregroundStyle(.secondary)
             }
         }
     }
