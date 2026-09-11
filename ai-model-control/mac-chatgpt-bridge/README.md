@@ -247,3 +247,5 @@ The event-driven firmware build (still version 0.90) retries
 including after silent USB-preserving resets. Earlier firmware binaries need
 a serial reconnect after such a reset. TIME still refreshes every 30 seconds;
 ENABLED arrives on SYNC or a model-list change.
+
+Cursor model and effort selection uses keyboard input only. Accessibility reads the focused window and live menu row order; it does not click rows. Command-/ opens model search, Down selects the live row, and Return confirms. Effort reopens Command-/, then Left, Up, Right enters the effort list at its first level; Down selects the live effort row, Return confirms, and Escape closes both menus.

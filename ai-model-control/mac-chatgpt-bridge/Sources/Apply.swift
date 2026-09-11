@@ -120,7 +120,7 @@ enum Switcher {
         if CursorPicker.matches(name, focus: focus, effort: false) {
             return .applied(path: "Accessibility already selected model")
         }
-        fputs("chatgpt-bridge: Cursor model via accessibility Model \(name)\n", stderr)
+        fputs("chatgpt-bridge: Cursor model via keyboard \(name)\n", stderr)
         if let stopped = cursorSelectModel(
             name: name, focus: focus, preferred: preferred, pulse: pulse
         ) {
@@ -200,12 +200,9 @@ enum Switcher {
         if CursorPicker.matches(name, focus: focus, effort: true) {
             return .applied(path: "Accessibility already selected effort")
         }
-        fputs("chatgpt-bridge: Cursor effort via accessibility Reasoning \(name)\n", stderr)
-        if !CursorPicker.openEffort(focus: focus, pulse: pulse) {
-            if pulse() { return .interrupted }
-            if let stopped = openCursorPopover(focus: focus, preferred: preferred, pulse: pulse) {
-                return stopped
-            }
+        fputs("chatgpt-bridge: Cursor effort via keyboard \(name)\n", stderr)
+        if let stopped = openCursorPopover(focus: focus, preferred: preferred, pulse: pulse) {
+            return stopped
         }
         let result = CursorPicker.effort(
             name: name, focus: focus, preferred: preferred, pulse: pulse

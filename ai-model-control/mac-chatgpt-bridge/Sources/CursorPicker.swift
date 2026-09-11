@@ -44,47 +44,27 @@ enum CursorPicker {
         })
     }
 
-    static func openEffort(focus: FocusOperation, pulse: @escaping () -> Bool) -> Bool {
-        for name in Catalog.cursorThinking {
-            if let button = control(name, focus: focus, effort: true) {
-                return click(button, pulse: pulse) && Keys.wait(Keys.modelTiming, pulse: pulse)
-            }
-        }
-        return false
-    }
-
     static func model(
         name: String,
         focus: FocusOperation,
         preferred: String?,
         pulse: @escaping () -> Bool
     ) -> Switcher.Result {
-        guard let root = root(for: focus) else {
-            return .failed("Cursor focused window unavailable")
-        }
-        guard let menu = find(in: root, where: {
-            role($0) == "AXMenu" && description($0).caseInsensitiveCompare("Model selection") == .orderedSame
-        }) else {
-            closeMenus(pulse: pulse)
-            return .failed("Cursor model menu unavailable")
-        }
-        guard let choice = find(in: menu, where: {
-            role($0) == "AXMenuItem" && modelName(in: title($0)) == name
-        }) else {
+        guard let root = root(for: focus),
+              let menu = find(in: root, where: {
+                  role($0) == "AXMenu" && description($0) == "Model selection"
+              }) else { return .failed("Cursor model menu unavailable") }
+        // Read the live row order so Cursor settings can reorder enabled models.
+        let rows = menuItems(in: menu)
+        guard let index = rows.firstIndex(where: { modelName(in: title($0)) == name }) else {
             closeMenus(pulse: pulse)
             return .failed("Cursor model \(name) is unavailable")
         }
-        guard click(choice, pulse: pulse), Keys.wait(Keys.modelTiming, pulse: pulse) else {
-            return pulse() ? .interrupted : .failed("could not select Cursor model \(name)")
-        }
-        guard DeskFront.isForeground(preferred: preferred) else {
-            return .failed("\(focus.displayName) is not focused")
-        }
-        // Cursor's current Chromium accessibility tree does not expose the
-        // selected model as an AXPopUpButton after the picker closes. The
-        // successful menu-row click is the available completion signal; do not
-        // discard the paired effort update because model readback is absent.
-        return .applied(path: "Accessibility model \(name)")
+        // Command-/ focuses the empty search field; first Down highlights Auto.
+        guard step(Keys.down, count: index + 1, pulse: pulse),
+              Keys.key(Keys.return, pulse: pulse),
+              Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
+        return .applied(path: "keyboard model \(name)")
     }
 
     static func effort(
@@ -93,61 +73,50 @@ enum CursorPicker {
         preferred: String?,
         pulse: @escaping () -> Bool
     ) -> Switcher.Result {
-        guard let root = root(for: focus) else {
-            return .failed("Cursor focused window unavailable")
-        }
-        if find(in: root, where: {
-            role($0) == "AXMenu" && (description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame || description($0).caseInsensitiveCompare("Effort options") == .orderedSame)
-        }) == nil {
-        guard let parameters = find(in: root, where: {
-            role($0) == "AXMenu" && description($0).lowercased().hasSuffix(" parameters")
-        }), let reasoning = find(in: parameters, where: {
-            role($0) == "AXMenuItem" && (title($0).hasPrefix("Reasoning ") || title($0).hasPrefix("Effort "))
-        }) else {
+        guard step(Keys.left, count: 1, pulse: pulse),
+              step(Keys.up, count: 1, pulse: pulse),
+              step(Keys.right, count: 1, pulse: pulse),
+              Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
+        guard let root = root(for: focus),
+              let menu = find(in: root, where: {
+                  role($0) == "AXMenu" &&
+                      ["effort options", "reasoning options"].contains(description($0).lowercased())
+              }) else {
             closeMenus(pulse: pulse)
-            return .failed("Cursor reasoning menu unavailable")
+            return .failed("Cursor effort menu unavailable")
         }
-        guard click(reasoning, pulse: pulse), Keys.wait(Keys.modelTiming, pulse: pulse) else {
-            return pulse() ? .interrupted : .failed("could not open Cursor reasoning menu")
-        }
-        }
-        guard let menu = find(in: root, where: {
-            role($0) == "AXMenu" && (description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame || description($0).caseInsensitiveCompare("Effort options") == .orderedSame)
-        }), let choice = find(in: menu, where: {
-            role($0) == "AXMenuItem" && title($0).caseInsensitiveCompare(name) == .orderedSame
+        let rows = menuItems(in: menu)
+        guard let index = rows.firstIndex(where: {
+            title($0).caseInsensitiveCompare(name) == .orderedSame
         }) else {
             closeMenus(pulse: pulse)
             return .failed("Cursor effort \(name) is unavailable")
         }
-        guard click(choice, pulse: pulse), Keys.wait(Keys.modelTiming, pulse: pulse) else {
-            return pulse() ? .interrupted : .failed("could not select Cursor effort \(name)")
+        // Right enters at the first level, independently of the saved effort.
+        guard step(Keys.down, count: index, pulse: pulse),
+              Keys.key(Keys.return, pulse: pulse),
+              Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
+        closeMenus(pulse: pulse)
+        guard !pulse() else { return .interrupted }
+        _ = PromptFocus.ensure(pid: focus.pid, kind: .cursor)
+        return .applied(path: "keyboard effort \(name)")
+    }
+
+    private static func step(_ key: UInt16, count: Int, pulse: @escaping () -> Bool) -> Bool {
+        for _ in 0..<count {
+            guard Keys.key(key, pulse: pulse),
+                  Keys.wait(Keys.keystrokeDelay, pulse: pulse) else { return false }
         }
-        guard DeskFront.isForeground(preferred: preferred) else {
-            return .failed("\(focus.displayName) is not focused")
-        }
-        // Cursor can retain the parent parameters menu after choosing an effort.
-        // Only dismiss menus belonging to this picker, and stop if focus changes.
-        for _ in 0..<3 {
-            guard !pulse() else { return .interrupted }
-            guard find(in: root, where: {
-                role($0) == "AXMenu" &&
-                    (description($0).lowercased().hasSuffix(" parameters") ||
-                     (description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame || description($0).caseInsensitiveCompare("Effort options") == .orderedSame))
-            }) != nil else {
-                _ = PromptFocus.ensure(pid: focus.pid, kind: .cursor)
-                for _ in 0..<3 {
-                    guard !pulse() else { return .interrupted }
-                    if matches(name, focus: focus, effort: true) {
-                        return .applied(path: "Accessibility verified effort \(name)")
-                    }
-                    guard Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
-                }
-                return .failed("Cursor effort could not be verified")
-            }
-            guard Keys.key(Keys.escape, pulse: pulse),
-                  Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
-        }
-        return .failed("Cursor effort selected but picker did not close")
+        return !pulse()
+    }
+
+    private static func menuItems(in root: AXUIElement) -> [AXUIElement] {
+        var rows: [AXUIElement] = []
+        _ = find(in: root, where: {
+            if role($0) == "AXMenuItem" { rows.append($0) }
+            return false
+        })
+        return rows
     }
 
     // Model rows can append descriptive text. Resolve the longest catalog name
@@ -186,23 +155,6 @@ enum CursorPicker {
             return nil
         }
         return walk(root)
-    }
-
-    private static func click(_ element: AXUIElement, pulse: @escaping () -> Bool) -> Bool {
-        guard !pulse(),
-              let positionRaw = copy(element, kAXPositionAttribute as String),
-              let sizeRaw = copy(element, kAXSizeAttribute as String)
-        else { return false }
-        let positionValue = positionRaw as! AXValue
-        let sizeValue = sizeRaw as! AXValue
-        var position = CGPoint.zero
-        var size = CGSize.zero
-        AXValueGetValue(positionValue, .cgPoint, &position)
-        AXValueGetValue(sizeValue, .cgSize, &size)
-        return Keys.click(
-            CGPoint(x: position.x + size.width / 2, y: position.y + size.height / 2),
-            pulse: pulse
-        )
     }
 
     private static func closeMenus(pulse: @escaping () -> Bool) {
