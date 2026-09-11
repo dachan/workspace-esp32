@@ -76,6 +76,6 @@ Last inventory pass: 2026-09-09 (v0.90 event-driven serial recovery app-flash)
 - Rotary encoders: same KY-040-style pair using the accessible outer headers — thinking CLK/DT/SW GPIO4/5/6; model CLK/DT/SW GPIO1/2/7; encoder + to 3V3 and grounds to GND. GPIO3 is left unused because it is a boot-strapping pin.
 - Touch: none identified; round profile disables FT6336 initialization and uses the Model Dial helper's Sync command
 - Firmware expected: `ai-model-control/` with `AI_MODEL_PROFILE=supermini`; `sdkconfig.defaults.supermini`; v0.90
-- Mac USB serial: unknown — verify the newly connected `/dev/cu.usbmodem*` before flashing
-- Last verified: 2026-09-10 — source build completed on Hetzner; board flash and live round-panel/encoder behavior still pending physical USB connection
+- Mac USB serial: `/dev/cu.usbmodem21101` (re-verify if the CDC address changes after replug)
+- Last verified: 2026-09-10 — Mac flash of `build-supermini-1000hz` v0.90 to `/dev/cu.usbmodem21101` succeeded (hash verified, ESP32-S3FH4R2 4MB flash + 2MB PSRAM). Live round-panel/encoder UI still needs visual confirm after wiring check.
 - Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
