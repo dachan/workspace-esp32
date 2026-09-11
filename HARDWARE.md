@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-10 (SuperMini GC9A01 hardware 180 app-flash)
+Last inventory pass: 2026-09-11 (Super Mini radar transmitter build)
 
 ## radar-transmitter
 
@@ -65,7 +65,7 @@ Last inventory pass: 2026-09-10 (SuperMini GC9A01 hardware 180 app-flash)
   - MADCTL: `swap_xy(true)`, `mirror(true, true)` — desk 180 in hardware; do not flip only one mirror (glyphs)
   - Software 180 flush: ON via internal-RAM band blit + SPI transfer sync (v 0.22+)
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → OpenAI/Cursor brand lockup at top of glass, MODEL left, version bottom-right
-- Mac serial: `/dev/cu.usbmodem21201` (verify before flash)
+- Mac serial: unknown (not attached this pass; `/dev/cu.usbmodem21201` is currently the second Super Mini)
 - Last verified: 2026-09-10 — application-only reflash, hash-verified, preserving NVS and the **v0.90** version. The panel has no SYNC control; Model Dial owns Sync, ChatGPT effort, and Cursor model enable lists. Build from commit `fd2c5d2`; firmware SHA-256 `f8f31afe5ca9efabd5ee3440dc20769be1c1123da98393fe8577ed1f28d0b612`. Board identity matched the recorded ESP32-S3. Bridge launched with the configured masks; live serial received ENABLED and both state fields after reconnect. Physical touch behavior was not rechecked; the documented model-knob wiring fault remains unresolved.
 - Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
 
@@ -80,5 +80,17 @@ Last inventory pass: 2026-09-10 (SuperMini GC9A01 hardware 180 app-flash)
 - Touch: none identified; round profile disables FT6336 initialization and uses the Model Dial helper's Sync command
 - Firmware expected: `ai-model-control/` with `AI_MODEL_PROFILE=supermini`; `sdkconfig.defaults.supermini`; v0.90
 - Mac USB serial: `/dev/cu.usbmodem21101` (re-verify if the CDC address changes after replug)
-- Last verified: 2026-09-11 — application-only reflash of `build-supermini-1000hz` v0.90 to `/dev/cu.usbmodem21101` (hash verified, NVS preserved). Chip matched ESP32-S3 QFN56 rev v0.2, 4 MB flash + 2 MB PSRAM, MAC `90:da:72:73:5a:64`. Firmware SHA-256 `790532170ee0f70b75415971b82b1c3e8bbbbf06a69a821b17afc56e73fb5a44`. This image uses standard 5×7 thinking text at 2× scale in the same white as the model name, 24 px model-to-thinking spacing, 8 px thinking-bar segments with a 4 px corner radius, and holds the GPIO48 WS2812 data line low after an RGB-off frame.
+- Last verified: 2026-09-11 — application-only reflash of `build-supermini-1000hz` v0.90 to `/dev/cu.usbmodem21101` (hash verified, NVS preserved). Chip matched ESP32-S3 QFN56 rev v0.2, 4 MB flash + 2 MB PSRAM, MAC `90:da:72:73:5a:64`. Firmware SHA-256 `c58ad39d99e8bb6f845b7881c144b311688f1c520d9aabf3bd73599829f56a66`. This image uses a black/grayscale round UI and screensaver, standard 5×7 thinking text at 1× scale in the same white as the model name, 24 px model-to-thinking spacing, 8 px thinking-bar segments with 8 px gaps and a 4 px corner radius, and holds the GPIO48 WS2812 data line low after an RGB-off frame.
 - Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
+
+## radar-transmitter supermini
+
+- MCU: ESP32-S3 (QFN56) rev v0.2 — embedded 4 MB flash (XMC), embedded 2 MB PSRAM (AP_3v3), 40 MHz XTAL; Super Mini class matching ESP32-S3FH4R2
+- MAC: d4:05:92:47:d1:6c
+- Display / role: LD2450 UART sensor + ESP-NOW transmitter; optional WS2812B motion bar on GPIO1
+- LD2450 wiring: 5V→5V, GND→GND, TX→GPIO4 (UART RX), RX→GPIO5 (UART TX); GPIO3 unused
+- Touch: none
+- Firmware: `radar/` with `RADAR_LINK_ROLE=transmitter` and `RADAR_BOARD=supermini`; `sdkconfig.defaults.supermini`
+- Mac USB serial: `/dev/cu.usbmodem21201` (re-verify if the CDC address changes after replug)
+- Last verified: 2026-09-11 — full flash of `build-radar-transmitter-supermini` to `/dev/cu.usbmodem21201` (hash verified). Chip matched ESP32-S3 QFN56 rev v0.2, 4 MB flash + 2 MB PSRAM, MAC `d4:05:92:47:d1:6c`. Firmware SHA-256 `eb56b7f5397b7bd595c860c1bca7c86b062827a329baeffb4ed6358f7df089ce`. Boot log showed `headless LD2450 ESP-NOW transmitter start (Super Mini)` then `ESP_ERR_NOT_FOUND` because the LD2450 was not attached yet.
+- Notes: this board currently enumerates on the CDC path previously used by the 3.5" desk panel. Do not flash the 16 MB transmitter or ST7796 desk image here.

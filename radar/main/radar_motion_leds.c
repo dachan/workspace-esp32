@@ -131,8 +131,22 @@ static void render_green_wave(uint8_t frame[LED_COUNT * 3], TickType_t now)
     }
 }
 
+#if defined(RADAR_BOARD_SUPERMINI)
+static void hold_low(gpio_num_t pin)
+{
+    gpio_reset_pin(pin);
+    gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+    gpio_set_level(pin, 0);
+}
+#endif
+
 esp_err_t radar_motion_leds_init(void)
 {
+#if defined(RADAR_BOARD_SUPERMINI)
+    /* Super Mini RGB is GPIO48; some boards also wire GPIO21 as LED_BUILTIN. */
+    hold_low(GPIO_NUM_48);
+    hold_low(GPIO_NUM_21);
+#endif
     rmt_tx_channel_config_t channel_config = {
         .clk_src = RMT_CLK_SRC_DEFAULT,
         .gpio_num = LED_DATA_GPIO,

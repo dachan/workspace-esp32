@@ -137,6 +137,14 @@ idf.py -B build-radar-transmitter \
   -D RADAR_LINK_ROLE=transmitter build
 ESP_PORT=/dev/ttyUSB0 ./tools/flash-radar.sh transmitter
 
+# Super Mini transmitter (4 MB / quad PSRAM; UART GPIO4/GPIO5)
+idf.py -B build-radar-transmitter-supermini \
+  -D RADAR_LINK_ROLE=transmitter \
+  -D RADAR_BOARD=supermini \
+  -D SDKCONFIG=/absolute/path/to/build-radar-transmitter-supermini/sdkconfig \
+  -D SDKCONFIG_DEFAULTS=sdkconfig.defaults.supermini build
+ESP_PORT=/dev/ttyUSB0 ./tools/flash-radar.sh transmitter-supermini
+
 # Receiver
 idf.py -B build-radar-receiver-accel \
   -D RADAR_LINK_ROLE=receiver build

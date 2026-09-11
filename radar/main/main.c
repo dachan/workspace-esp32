@@ -151,7 +151,11 @@ static int16_t update_motion_acceleration(const ld2450_frame_t *frame,
 
 void app_main(void)
 {
+#if defined(RADAR_BOARD_SUPERMINI)
+    ESP_LOGI(TAG, "headless LD2450 ESP-NOW transmitter start (Super Mini)");
+#else
     ESP_LOGI(TAG, "headless LD2450 ESP-NOW transmitter start");
+#endif
 
     ESP_ERROR_CHECK(ld2450_init());
     ESP_ERROR_CHECK(radar_link_init());

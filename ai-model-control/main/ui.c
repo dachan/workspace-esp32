@@ -65,7 +65,11 @@ static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_lev
         level = max_level;
     }
 
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+    const int gap = 8;
+#else
     const int gap = 4;
+#endif
     const int segs = max_level;
     const int total_gap = gap * (segs - 1);
     int seg_w = (w - total_gap) / segs;
@@ -156,11 +160,11 @@ static void draw_wrapped_centered(int y, int max_w, const char *text, uint16_t f
 
 static esp_err_t ui_render_round(const model_fields_t *fields)
 {
-    const uint16_t bg = display_rgb(24, 28, 42);
-    const uint16_t text = display_rgb(240, 244, 250);
-    const uint16_t thinking_text = display_rgb(240, 244, 250);
-    const uint16_t muted = display_rgb(110, 118, 135);
-    const uint16_t track = display_rgb(40, 46, 62);
+    const uint16_t bg = display_rgb(0, 0, 0);
+    const uint16_t text = display_rgb(240, 240, 240);
+    const uint16_t thinking_text = display_rgb(240, 240, 240);
+    const uint16_t muted = display_rgb(110, 110, 110);
+    const uint16_t track = display_rgb(50, 50, 50);
 
     /* One fill: an inset card shows as a box on the round glass. */
     display_fill(bg);
@@ -207,13 +211,13 @@ esp_err_t ui_render(const model_fields_t *fields)
 #if defined(AI_MODEL_PROFILE_SUPERMINI)
     return ui_render_round(fields);
 #else
-    const uint16_t bg = display_rgb(12, 14, 22);
-    const uint16_t card = display_rgb(24, 28, 42);
-    const uint16_t label = display_rgb(140, 150, 170);
-    const uint16_t text = display_rgb(240, 244, 250);
-    const uint16_t muted = display_rgb(110, 118, 135);
-    const uint16_t clock = display_rgb(160, 168, 182);
-    const uint16_t track = display_rgb(40, 46, 62);
+    const uint16_t bg = display_rgb(0, 0, 0);
+    const uint16_t card = display_rgb(0, 0, 0);
+    const uint16_t label = display_rgb(110, 110, 110);
+    const uint16_t text = display_rgb(240, 240, 240);
+    const uint16_t muted = display_rgb(110, 110, 110);
+    const uint16_t clock = display_rgb(240, 240, 240);
+    const uint16_t track = display_rgb(50, 50, 50);
 
     display_fill(bg);
     display_fill_rect(8, 8, DISPLAY_WIDTH - 16, DISPLAY_HEIGHT - 16, card);
@@ -287,8 +291,13 @@ esp_err_t ui_render(const model_fields_t *fields)
 
 esp_err_t ui_render_screensaver(void)
 {
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+    const uint16_t bg = display_rgb(0, 0, 0);
+    const uint16_t clock = display_rgb(240, 240, 240);
+#else
     const uint16_t bg = display_rgb(12, 14, 22);
-    const uint16_t clock = display_rgb(160, 168, 182);
+    const uint16_t clock = display_rgb(110, 110, 110);
+#endif
 
     display_fill(bg);
 

@@ -8,11 +8,12 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "radar_board.h"
 
 enum {
     LD2450_UART = UART_NUM_1,
-    LD2450_TX_GPIO = 42,
-    LD2450_RX_GPIO = 41,
+    LD2450_TX_GPIO = RADAR_LD2450_TX_GPIO,
+    LD2450_RX_GPIO = RADAR_LD2450_RX_GPIO,
     LD2450_BAUD_RATE = 256000,
     LD2450_FRAME_BYTES = 30,
     LD2450_RX_BUFFER_BYTES = 2048,
