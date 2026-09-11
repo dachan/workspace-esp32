@@ -10,7 +10,7 @@
 		<dict>
 			<key>cdhash</key>
 			<data>
-			s0IRijfib4CxAYBGyrpObcoJBds=
+			vtMrsFyFajUDoJLH8h9tdlPBh54=
 			</data>
 			<key>requirement</key>
 			<string>identifier "chatgpt-bridge" and anchor apple generic and certificate leaf[subject.CN] = "Apple Development: David Chan (LC36N2S64N)" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */</string>
