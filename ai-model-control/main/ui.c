@@ -103,12 +103,6 @@ static void draw_centered(int y, const char *s, uint16_t fg, uint16_t bg, int sc
     font_draw_text((DISPLAY_WIDTH - w) / 2, y, s ? s : "", fg, bg, scale);
 }
 
-static void draw_centered_compact(int y, const char *s, uint16_t fg, uint16_t bg, int scale)
-{
-    const int w = font_text_width_compact(s ? s : "", scale);
-    font_draw_text_compact((DISPLAY_WIDTH - w) / 2, y, s ? s : "", fg, bg, scale);
-}
-
 static void draw_wrapped_centered(int y, int max_w, const char *text, uint16_t fg, uint16_t bg, int scale)
 {
     char line[MODEL_PARSE_MAX];
@@ -164,6 +158,7 @@ static esp_err_t ui_render_round(const model_fields_t *fields)
 {
     const uint16_t bg = display_rgb(24, 28, 42);
     const uint16_t text = display_rgb(240, 244, 250);
+    const uint16_t thinking_text = display_rgb(240, 244, 250);
     const uint16_t muted = display_rgb(110, 118, 135);
     const uint16_t track = display_rgb(40, 46, 62);
 
@@ -176,10 +171,10 @@ static esp_err_t ui_render_round(const model_fields_t *fields)
                        logo->width, logo->height, logo->alpha, text, bg);
 
     const int model_scale = 2;
-    const int think_scale = 2;
+    const int think_scale = 1;
     const int model_h = 7 * model_scale;
-    const int think_h = 6 * think_scale;
-    const int pair_gap = 32;
+    const int think_h = 7 * think_scale;
+    const int pair_gap = 24;
     const int block_h = model_h + pair_gap + think_h;
     const int model_y = (DISPLAY_HEIGHT - block_h) / 2;
     const int thinking_y = model_y + model_h + pair_gap;
@@ -193,9 +188,9 @@ static esp_err_t ui_render_round(const model_fields_t *fields)
     const char *thinking = !fields->has_model ? "-"
         : catalog_thinking_count(fields->model) == 0 ? "UNSUPPORTED"
         : fields->has_thinking ? fields->thinking : "-";
-    draw_centered_compact(thinking_y, thinking, fields->has_model ? text : muted, bg, think_scale);
+    draw_centered(thinking_y, thinking, fields->has_model ? thinking_text : muted, bg, think_scale);
 
-    draw_app_thinking_bar(28, thinking_y + think_h + 12, 184, 12, fields, track, text);
+    draw_app_thinking_bar(28, thinking_y + think_h + 12, 184, 8, fields, track, text);
 
     draw_centered(DISPLAY_HEIGHT - 15, FIRMWARE_BUILD_STRING, muted, bg, 1);
 
@@ -257,7 +252,7 @@ esp_err_t ui_render(const model_fields_t *fields)
     const int thinking_scale = 1;
     const int thinking_value_h = 7 * thinking_scale;
     const int bar_y = thinking_value_y + thinking_value_h + 10;
-    const int bar_h = 12;
+    const int bar_h = 8;
     const int value_w = DISPLAY_WIDTH - 48;
 
     font_draw_text(20, model_label_y, "MODEL", label, card, 1);
