@@ -96,7 +96,20 @@ enum CursorPicker {
         guard step(Keys.down, count: index, pulse: pulse),
               Keys.key(Keys.return, pulse: pulse),
               Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
-        closeMenus(pulse: pulse)
+        // Effort can leave both submenu and parent open. Let each Escape
+        // settle before restoring composer focus, or the second can be lost.
+        for _ in 0..<2 {
+            guard Keys.key(Keys.escape, pulse: pulse),
+                  Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
+        }
+        if let currentRoot = Self.root(for: focus), find(in: currentRoot, where: {
+            guard role($0) == "AXMenu" else { return false }
+            let label = description($0).lowercased()
+            return label == "model selection" || label.hasSuffix(" parameters")
+                || label == "effort options" || label == "reasoning options"
+        }) != nil {
+            return .failed("Cursor effort selected but picker did not close")
+        }
         guard !pulse() else { return .interrupted }
         _ = PromptFocus.ensure(pid: focus.pid, kind: .cursor)
         return .applied(path: "keyboard effort \(name)")
