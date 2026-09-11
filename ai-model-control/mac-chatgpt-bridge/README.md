@@ -104,12 +104,13 @@ last encoder detent before sending a SET line.
 ## Input guard
 
 Model and thinking changes share a temporary input filter for the focused app's
-process, including the waits between menu steps. Keyboard, pointer, click, and
-scroll events to that app are discarded while the bridge's tagged keys pass
-through. Discarded input is not replayed. Other apps and system shortcuts are
-not locked; leaving the target app interrupts the apply.
+process, including the waits between menu steps. New keyboard presses, pointer
+movement, clicks, drags, and scrolling are discarded while the bridge's tagged
+events pass through. Key-up, modifier-state, and mouse-up events also pass so
+input held before the guard starts can be released safely. Discarded input is not
+replayed. Other apps and system shortcuts are not locked; leaving the target app
+interrupts the apply.
 
-The bridge waits for held keys and mouse buttons to be released before starting.
 Escape cancels the transaction. The filter is removed on every exit; an independent
 five-second watchdog disables it even if an Accessibility call stalls. Focus loss,
 Escape, or filter failure/timeout during an apply drops that target; use the dial

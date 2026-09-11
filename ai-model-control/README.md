@@ -239,9 +239,10 @@ effort range.
 
 `InputGuard.swift` protects each complete model/effort apply with a
 process-scoped active event tap. Keep bridge keys tagged in `Keys.swift`; user
-input is discarded, never queued. Do not post keys if the filter cannot start.
-Wait for held keys/buttons before acquisition, preserve serial supersession,
-and release on every exit. Escape, focus loss, disabled taps, and the
+presses, pointer movement, drags, and scrolling are discarded, never queued.
+Release-side events pass through so input held before acquisition cannot become
+stuck in the target app. Do not post keys if the filter cannot start. Preserve
+serial supersession and release the filter on every exit. Escape, focus loss, disabled taps, and the
 independent five-second watchdog cancel the target. The `--check-input-guard`
 diagnostic acquires/releases without posting keys. A build or availability
 check does not verify physical input suppression. See also
