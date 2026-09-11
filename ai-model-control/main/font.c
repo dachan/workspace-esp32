@@ -152,3 +152,38 @@ void font_draw_text(int x, int y, const char *text, uint16_t fg, uint16_t bg, in
         text++;
     }
 }
+
+int font_text_width_compact(const char *text, int scale)
+{
+    if (scale < 1) {
+        scale = 1;
+    }
+    int n = 0;
+    while (text && *text) {
+        n++;
+        text++;
+    }
+    return n ? n * 5 * scale - scale : 0;
+}
+
+void font_draw_text_compact(int x, int y, const char *text, uint16_t fg, uint16_t bg, int scale)
+{
+    if (scale < 1) {
+        scale = 1;
+    }
+    static const uint8_t columns[] = {0, 1, 3, 4};
+    static const uint8_t rows[] = {0, 1, 2, 3, 5, 6};
+
+    int cx = x;
+    while (text && *text) {
+        const uint8_t *g = glyph(*text++);
+        for (int col = 0; col < 4; col++) {
+            const uint8_t bits = g[columns[col]];
+            for (int row = 0; row < 6; row++) {
+                const uint16_t colour = (bits & (1u << rows[row])) ? fg : bg;
+                display_fill_rect(cx + col * scale, y + row * scale, scale, scale, colour);
+            }
+        }
+        cx += 5 * scale;
+    }
+}

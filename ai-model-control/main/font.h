@@ -8,3 +8,7 @@
 void font_draw_char(int x, int y, char c, uint16_t fg, uint16_t bg, int scale);
 void font_draw_text(int x, int y, const char *text, uint16_t fg, uint16_t bg, int scale);
 int font_text_width(const char *text, int scale);
+
+/* 4x6 cells (5x7 with one column and one row dropped), drawn at `scale`. */
+void font_draw_text_compact(int x, int y, const char *text, uint16_t fg, uint16_t bg, int scale);
+int font_text_width_compact(const char *text, int scale);

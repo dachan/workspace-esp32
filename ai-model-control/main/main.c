@@ -14,6 +14,7 @@
 #include "model_nvs.h"
 #include "serial_model.h"
 #include "serial_sync.h"
+#include "status_led.h"
 #include "touch.h"
 #include "ui.h"
 
@@ -114,6 +115,7 @@ void app_main(void)
     ESP_ERROR_CHECK(model_nvs_init());
     ESP_ERROR_CHECK(display_init());
     ESP_ERROR_CHECK(display_set_backlight(80));
+    status_led_off();
     ESP_ERROR_CHECK(serial_model_init());
     ESP_ERROR_CHECK(encoder_init());
 #if defined(AI_MODEL_PROFILE_SUPERMINI)
