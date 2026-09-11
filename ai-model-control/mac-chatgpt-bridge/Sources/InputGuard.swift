@@ -27,8 +27,9 @@ final class InputGuard {
             guard current.focus.pid == focus.pid, current.isValid else { return .interrupted }
             return body(current)
         }
-        // This process runs in the login session, whose combined state is refreshed by
-        // normal app input. Bridge events use a private state table and cannot hold it.
+        // Consult physical HID state only. The bridge's Control-Shift shortcuts may
+        // leave modifier flags in the combined session table after their key-up event.
+        // Private event sources avoid changing this hardware-only snapshot.
         // Starting with a physical press would hide its release from the target app.
         if let held = heldInput() { return .failed("input guard waiting for \(held) to release") }
         let guardInput = InputGuard(focus: focus)
@@ -45,7 +46,7 @@ final class InputGuard {
     }
 
     private static func heldInput() -> String? {
-        let state = CGEventSourceStateID.combinedSessionState
+        let state = CGEventSourceStateID.hidSystemState
         if let key = (0..<128).first(where: {
             CGEventSource.keyState(state, key: CGKeyCode($0))
         }) {
