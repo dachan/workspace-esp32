@@ -72,9 +72,13 @@ enum Switcher {
                 }
                 return chatGPTThinking(target: target, name: name, focus: focus, preferred: preferredBundleID, pulse: pulse)
             case .cursor:
-                guard let model, let levels = Catalog.cursorEfforts(for: model) else {
-                    return .failed("Cursor effort needs a known model; select a model with the dial first")
+                // Thinking-only updates must work before this process has applied
+                // a model, and after the user changes models directly in Cursor.
+                guard let currentModel = CursorPicker.selectedModel(focus: focus) ?? model,
+                      let levels = Catalog.cursorEfforts(for: currentModel) else {
+                    return .failed("Cursor selected model could not be read for effort control")
                 }
+                let model = currentModel
                 if levels.isEmpty { return .applied(path: "effort unsupported for \(model); skipped") }
                 guard let effort = Catalog.cursorEffort(raw, model: model) else {
                     return .failed("unknown thinking \(raw)")

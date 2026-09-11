@@ -10,6 +10,23 @@ enum CursorPicker {
         control(name, focus: focus, effort: effort) != nil
     }
 
+    static func selectedModel(focus: FocusOperation) -> String? {
+        guard let root = root(for: focus) else { return nil }
+        var selected: String?
+        _ = find(in: root, where: {
+            guard role($0) == "AXPopUpButton" else { return false }
+            let label = title($0).isEmpty ? description($0) : title($0)
+            selected = Catalog.cursorModels.first { model in
+                label.caseInsensitiveCompare(model) == .orderedSame ||
+                    Catalog.cursorEfforts(for: model)?.contains {
+                        label.caseInsensitiveCompare(model + " " + $0) == .orderedSame
+                    } == true
+            }
+            return selected != nil
+        })
+        return selected
+    }
+
     private static func control(_ name: String, focus: FocusOperation, effort: Bool) -> AXUIElement? {
         guard let root = root(for: focus) else { return nil }
         return find(in: root, where: {
