@@ -101,12 +101,12 @@ enum CursorPicker {
             return .failed("Cursor focused window unavailable")
         }
         if find(in: root, where: {
-            role($0) == "AXMenu" && description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame
+            role($0) == "AXMenu" && (description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame || description($0).caseInsensitiveCompare("Effort options") == .orderedSame)
         }) == nil {
         guard let parameters = find(in: root, where: {
             role($0) == "AXMenu" && description($0).lowercased().hasSuffix(" parameters")
         }), let reasoning = find(in: parameters, where: {
-            role($0) == "AXMenuItem" && title($0).hasPrefix("Reasoning ")
+            role($0) == "AXMenuItem" && (title($0).hasPrefix("Reasoning ") || title($0).hasPrefix("Effort "))
         }) else {
             closeMenus(pulse: pulse)
             return .failed("Cursor reasoning menu unavailable")
@@ -116,7 +116,7 @@ enum CursorPicker {
         }
         }
         guard let menu = find(in: root, where: {
-            role($0) == "AXMenu" && description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame
+            role($0) == "AXMenu" && (description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame || description($0).caseInsensitiveCompare("Effort options") == .orderedSame)
         }), let choice = find(in: menu, where: {
             role($0) == "AXMenuItem" && title($0).caseInsensitiveCompare(name) == .orderedSame
         }) else {
@@ -136,7 +136,7 @@ enum CursorPicker {
             guard find(in: root, where: {
                 role($0) == "AXMenu" &&
                     (description($0).lowercased().hasSuffix(" parameters") ||
-                     description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame)
+                     (description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame || description($0).caseInsensitiveCompare("Effort options") == .orderedSame))
             }) != nil else {
                 _ = PromptFocus.ensure(pid: focus.pid, kind: .cursor)
                 for _ in 0..<3 {

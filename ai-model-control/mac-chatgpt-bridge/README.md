@@ -40,6 +40,7 @@ model and thinking state instead of holding it for later.
      enabled picker order; Return selects. A ChatGPT-only name still on
      the panel (e.g. GPT-6 Astra) is skipped, not retried, so effort can
      still apply.
+   - Cursor effort accepts both Reasoning and Effort menu labels in the focused window.
    - Cursor effort: Command-/ (reopened after selecting a model when
      both changed), then Left, Up, Right directly into Reasoning, Down to
      the level, and Return once, then Escape twice to close the menus. An effort-only change skips model selection.
