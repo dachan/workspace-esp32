@@ -14,7 +14,15 @@ enum PromptFocus {
     static func ensure(pid: pid_t, kind: DeskKind) -> Outcome {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.4)
-        guard let field = findField(in: app, kind: kind) else {
+        let root: AXUIElement
+        if kind == .cursor {
+            guard let window = copy(app, kAXFocusedWindowAttribute as String),
+                  CFGetTypeID(window) == AXUIElementGetTypeID() else { return .missing }
+            root = window as! AXUIElement
+        } else {
+            root = app
+        }
+        guard let field = findField(in: root, kind: kind) else {
             return .missing
         }
         _ = AXUIElementSetAttributeValue(

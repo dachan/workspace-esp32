@@ -24,6 +24,7 @@ final class BridgeRuntime {
     private var retryAt: TimeInterval = 0
     private var settleAt: TimeInterval = 0
     private var lastFailure: String?
+    private var cursorFailures = 0
     private var receivedModel: String?
     private var receivedThinking: String?
     private var lastApplied: [Int32: [SettingKind: String]] = [:]
@@ -80,6 +81,7 @@ final class BridgeRuntime {
     }
 
     private func acceptTarget() {
+        cursorFailures = 0
         if targetFocus?.isCurrent != true {
             discardPending("target app changed")
             targetFocus = FocusOperation(preferred: options.bundleID)
@@ -95,6 +97,7 @@ final class BridgeRuntime {
             print("\(stamp()) dropped target (\(reason))")
             fflush(stdout)
         }
+        cursorFailures = 0
         desired.removeAll()
         targetFocus = nil
         generation &+= 1
@@ -221,9 +224,12 @@ final class BridgeRuntime {
                     return .interrupted
                 case .failed(let message):
                     if focus.kind == .cursor {
-                        fputs("chatgpt-bridge: \(message); stopped until a new dial update or Sync\n", stderr)
-                        discardPending("Cursor apply could not be verified")
-                        return .failed(message)
+                        cursorFailures += 1
+                        if cursorFailures >= 3 {
+                            fputs("chatgpt-bridge: \(message); stopped after 3 attempts until a new dial update or Sync\n", stderr)
+                            discardPending("Cursor apply could not be verified")
+                            return .failed(message)
+                        }
                     }
                     if message != lastFailure {
                         fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)

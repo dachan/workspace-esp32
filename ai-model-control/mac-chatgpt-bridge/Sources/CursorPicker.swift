@@ -11,7 +11,8 @@ enum CursorPicker {
     }
 
     private static func control(_ name: String, focus: FocusOperation, effort: Bool) -> AXUIElement? {
-        find(in: root(for: focus), where: {
+        guard let root = root(for: focus) else { return nil }
+        return find(in: root, where: {
             guard role($0) == "AXPopUpButton" else { return false }
             let label = title($0).isEmpty ? description($0) : title($0)
             if label.caseInsensitiveCompare(name) == .orderedSame { return true }
@@ -41,7 +42,9 @@ enum CursorPicker {
         preferred: String?,
         pulse: @escaping () -> Bool
     ) -> Switcher.Result {
-        let root = root(for: focus)
+        guard let root = root(for: focus) else {
+            return .failed("Cursor focused window unavailable")
+        }
         guard let menu = find(in: root, where: {
             role($0) == "AXMenu" && description($0).caseInsensitiveCompare("Model selection") == .orderedSame
         }) else {
@@ -49,7 +52,7 @@ enum CursorPicker {
             return .failed("Cursor model menu unavailable")
         }
         guard let choice = find(in: menu, where: {
-            role($0) == "AXMenuItem" && title($0).hasPrefix(name)
+            role($0) == "AXMenuItem" && modelName(in: title($0)) == name
         }) else {
             closeMenus(pulse: pulse)
             return .failed("Cursor model \(name) is unavailable")
@@ -60,7 +63,15 @@ enum CursorPicker {
         guard DeskFront.isForeground(preferred: preferred) else {
             return .failed("\(focus.displayName) is not focused")
         }
-        return .applied(path: "Accessibility model \(name)")
+        for _ in 0..<3 {
+            guard !pulse() else { return .interrupted }
+            if matches(name, focus: focus, effort: false) {
+                return .applied(path: "Accessibility verified model \(name)")
+            }
+            guard Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
+        }
+        closeMenus(pulse: pulse)
+        return .failed("Cursor model could not be verified")
     }
 
     static func effort(
@@ -69,7 +80,9 @@ enum CursorPicker {
         preferred: String?,
         pulse: @escaping () -> Bool
     ) -> Switcher.Result {
-        let root = root(for: focus)
+        guard let root = root(for: focus) else {
+            return .failed("Cursor focused window unavailable")
+        }
         if find(in: root, where: {
             role($0) == "AXMenu" && description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame
         }) == nil {
@@ -109,9 +122,14 @@ enum CursorPicker {
                      description($0).caseInsensitiveCompare("Reasoning options") == .orderedSame)
             }) != nil else {
                 _ = PromptFocus.ensure(pid: focus.pid, kind: .cursor)
-                return matches(name, focus: focus, effort: true)
-                    ? .applied(path: "Accessibility verified effort \(name)")
-                    : .failed("Cursor effort could not be verified")
+                for _ in 0..<3 {
+                    guard !pulse() else { return .interrupted }
+                    if matches(name, focus: focus, effort: true) {
+                        return .applied(path: "Accessibility verified effort \(name)")
+                    }
+                    guard Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
+                }
+                return .failed("Cursor effort could not be verified")
             }
             guard Keys.key(Keys.escape, pulse: pulse),
                   Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
@@ -119,10 +137,22 @@ enum CursorPicker {
         return .failed("Cursor effort selected but picker did not close")
     }
 
-    private static func root(for focus: FocusOperation) -> AXUIElement {
-        let root = AXUIElementCreateApplication(focus.pid)
-        AXUIElementSetMessagingTimeout(root, 0.4)
-        return root
+    // Model rows can append descriptive text. Resolve the longest catalog name
+    // first so GPT-5.4 Mini cannot be selected for GPT-5.4.
+    private static func modelName(in label: String) -> String? {
+        Catalog.cursorModels.sorted { $0.count > $1.count }.first {
+            label.caseInsensitiveCompare($0) == .orderedSame ||
+                label.lowercased().hasPrefix($0.lowercased() + " ") ||
+                label.lowercased().hasPrefix($0.lowercased() + "\n")
+        }
+    }
+
+    private static func root(for focus: FocusOperation) -> AXUIElement? {
+        let app = AXUIElementCreateApplication(focus.pid)
+        AXUIElementSetMessagingTimeout(app, 0.4)
+        guard let window = copy(app, kAXFocusedWindowAttribute as String),
+              CFGetTypeID(window) == AXUIElementGetTypeID() else { return nil }
+        return (window as! AXUIElement)
     }
 
     private static func find(
