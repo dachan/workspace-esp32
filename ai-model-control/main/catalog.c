@@ -397,6 +397,35 @@ int catalog_thinking_count_in(bool cursor, const char *model)
     return count;
 }
 
+int catalog_thinking_bar_count(const char *model)
+{
+    if (front_title_is_cursor()) {
+        return catalog_thinking_count(model);
+    }
+    return COUNT(chatgpt_thinking);
+}
+
+int catalog_thinking_bar_level(const char *model, const char *name)
+{
+    if (!name || !name[0]) {
+        return 0;
+    }
+    if (front_title_is_cursor()) {
+        return catalog_thinking_level(model, name);
+    }
+    int index = table_count(chatgpt_thinking, COUNT(chatgpt_thinking), name);
+    if (index >= 0) {
+        return index + 1;
+    }
+    int local = catalog_thinking_level(model, name);
+    if (local <= 0) {
+        return 0;
+    }
+    index = table_count(chatgpt_thinking, COUNT(chatgpt_thinking),
+                        catalog_thinking_name(model, local));
+    return index >= 0 ? index + 1 : 0;
+}
+
 int catalog_thinking_level(const char *model, const char *name)
 {
     if (!name || !name[0]) {

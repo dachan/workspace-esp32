@@ -194,7 +194,8 @@ esp_err_t display_init(void)
     ESP_RETURN_ON_ERROR(esp_lcd_panel_init(s_panel), TAG, "init");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(s_panel, true), TAG, "invert");
 #if defined(AI_MODEL_PROFILE_SUPERMINI)
-    /* The GC9A01 module is used in its native square orientation. */
+    /* Native square MADCTL. Horizontal un-mirror is the row reverse in
+     * display_flush — MX+MY is a 180 and left this module's glyphs backwards. */
     ESP_RETURN_ON_ERROR(esp_lcd_panel_swap_xy(s_panel, false), TAG, "swap_xy");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel, false, false), TAG, "mirror");
 #else
@@ -234,13 +235,6 @@ esp_err_t display_init(void)
 
 esp_err_t display_flush(void)
 {
-#if defined(AI_MODEL_PROFILE_SUPERMINI)
-    /* GC9A01 is native 240x240. Copy strips to internal DMA RAM so the
-     * PSRAM framebuffer is never owned by the SPI DMA engine. */
-#else
-    /* Desk pose still needs soft 180 on top of MADCTL. Blit through an
-     * internal-RAM band so SPI DMA never reads PSRAM (that snowed an edge). */
-#endif
     const int w = DISPLAY_WIDTH;
     const int h = DISPLAY_HEIGHT;
     esp_err_t err = ESP_OK;
@@ -252,19 +246,19 @@ esp_err_t display_flush(void)
         for (int row = 0; row < band_h; row++) {
             const int panel_y = y + row;
 #if defined(AI_MODEL_PROFILE_SUPERMINI)
+            /* Row reverse un-mirrors GC9A01 glyphs. Do not also invert Y:
+             * that is a 180 and keeps letters backwards. */
             const int src_y = panel_y;
 #else
+            /* Desk pose still needs soft 180 on top of MADCTL. Blit through
+             * an internal-RAM band so SPI DMA never reads PSRAM. */
             const int src_y = h - 1 - panel_y;
 #endif
             const uint16_t *src = s_fb + (size_t)src_y * (size_t)w;
             uint16_t *dst = s_band + (size_t)row * (size_t)w;
-#if defined(AI_MODEL_PROFILE_SUPERMINI)
-            memcpy(dst, src, (size_t)w * sizeof(*dst));
-#else
             for (int x = 0; x < w; x++) {
                 dst[x] = src[w - 1 - x];
             }
-#endif
         }
         s_flush_pending = true;
         err = esp_lcd_panel_draw_bitmap(s_panel, 0, y, w, y + band_h, s_band);

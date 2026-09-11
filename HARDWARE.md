@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-09 (v0.90 event-driven serial recovery app-flash)
+Last inventory pass: 2026-09-10 (SuperMini GC9A01 hardware 180 app-flash)
 
 ## radar-transmitter
 
@@ -72,10 +72,12 @@ Last inventory pass: 2026-09-09 (v0.90 event-driven serial recovery app-flash)
 ## ai-model-control supermini target (round model / thinking display)
 
 - MCU: ESP32-S3FH4R2 Super Mini — 4 MB in-package quad flash, 2 MB in-package quad PSRAM; single-core board variant per supplier listing
+- MAC: 90:da:72:73:5a:64
 - Display: **1.28-inch round 240x240 GC9A01 SPI** — VCC 3V3, GND GND, SCK GPIO12, MOSI GPIO8, CS GPIO11, DC GPIO9, RST GPIO10; no MISO or separate BL connection
-- Rotary encoders: same KY-040-style pair using the accessible outer headers — thinking CLK/DT/SW GPIO4/5/6; model CLK/DT/SW GPIO1/2/7; encoder + to 3V3 and grounds to GND. GPIO3 is left unused because it is a boot-strapping pin.
+- Display settings: GC9A01 native 240×240, SPI 26 MHz, `invert_color(true)`, RGB; MADCTL `swap_xy(false)`, `mirror(false, false)`; software row reverse in `display_flush()` so glyphs read LTR (hardware 180 left letters backwards)
+- Rotary encoders: same KY-040-style pair using the accessible outer headers — thinking CLK/DT/SW GPIO4/5/6; model CLK/DT/SW GPIO1/2/7; encoder + to 3V3 and grounds to GND. GPIO3 is left unused because it is a boot-strapping pin. Both knobs use PCNT (sampled on a 1 ms task) so the round-panel SPI flush cannot drop detents.
 - Touch: none identified; round profile disables FT6336 initialization and uses the Model Dial helper's Sync command
 - Firmware expected: `ai-model-control/` with `AI_MODEL_PROFILE=supermini`; `sdkconfig.defaults.supermini`; v0.90
 - Mac USB serial: `/dev/cu.usbmodem21101` (re-verify if the CDC address changes after replug)
-- Last verified: 2026-09-10 — Mac flash of `build-supermini-1000hz` v0.90 to `/dev/cu.usbmodem21101` succeeded (hash verified, ESP32-S3FH4R2 4MB flash + 2MB PSRAM). Live round-panel/encoder UI still needs visual confirm after wiring check.
+- Last verified: 2026-09-10 — application-only reflash of `build-supermini-1000hz` v0.90 to `/dev/cu.usbmodem21101` (hash verified, NVS preserved). Chip matched ESP32-S3 QFN56 rev v0.2, 4 MB flash + 2 MB PSRAM, MAC `90:da:72:73:5a:64`. Firmware SHA-256 `499b5713e0b1619776f5ace5161bd7ffeac0d1786bc84fa277a49b4a1645aedc`. Hardware 180 left glyphs mirrored; this image uses a software row reverse so letters read LTR, removes the round inset card, places v0.90 at the bottom edge, reverses model-encoder direction, moves the version label up 8 px total, and moves the thinking segments 8 px closer to the label.
 - Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac

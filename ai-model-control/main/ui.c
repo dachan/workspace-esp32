@@ -10,6 +10,7 @@
 #include "front_title.h"
 #include "logo.h"
 
+#if !defined(AI_MODEL_PROFILE_SUPERMINI)
 static void draw_wrapped(int x, int y, int max_w, const char *text, uint16_t fg, uint16_t bg, int scale)
 {
     // Word-wrap on spaces; canvas clipping handles overlong tokens.
@@ -48,6 +49,7 @@ static void draw_wrapped(int x, int y, int max_w, const char *text, uint16_t fg,
         }
     }
 }
+#endif
 
 static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_level,
                               uint16_t track, uint16_t fill)
@@ -82,47 +84,108 @@ static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_lev
     }
 }
 
+static void draw_app_thinking_bar(int x, int y, int w, int h, const model_fields_t *fields,
+                                  uint16_t track, uint16_t fill)
+{
+    const char *model = fields->has_model ? fields->model : NULL;
+    const int segs = catalog_thinking_bar_count(model);
+    int level = 0;
+    if (fields->has_model && fields->has_thinking && segs > 0) {
+        level = catalog_thinking_bar_level(model, fields->thinking);
+    }
+    draw_thinking_bar(x, y, w, h, level, segs > 0 ? segs : 1, track, fill);
+}
+
 #if defined(AI_MODEL_PROFILE_SUPERMINI)
+static void draw_centered(int y, const char *s, uint16_t fg, uint16_t bg, int scale)
+{
+    const int w = font_text_width(s ? s : "", scale);
+    font_draw_text((DISPLAY_WIDTH - w) / 2, y, s ? s : "", fg, bg, scale);
+}
+
+static void draw_wrapped_centered(int y, int max_w, const char *text, uint16_t fg, uint16_t bg, int scale)
+{
+    char line[MODEL_PARSE_MAX];
+    int line_len = 0;
+    int line_w = 0;
+    int cy = y;
+    const int line_h = 8 * scale;
+    const char *p = text ? text : "";
+
+    while (*p) {
+        while (*p == ' ') {
+            p++;
+        }
+        if (!*p) {
+            break;
+        }
+        size_t wi = 0;
+        char word[MODEL_PARSE_MAX];
+        while (p[wi] && p[wi] != ' ' && wi + 1 < sizeof(word)) {
+            word[wi] = p[wi];
+            wi++;
+        }
+        word[wi] = '\0';
+        p += wi;
+
+        const int ww = font_text_width(word, scale);
+        const int space = line_len > 0 ? 6 * scale : 0;
+        if (line_len > 0 && line_w + space + ww > max_w) {
+            line[line_len] = '\0';
+            draw_centered(cy, line, fg, bg, scale);
+            cy += line_h + scale;
+            line_len = 0;
+            line_w = 0;
+        }
+        if (line_len + (line_len > 0 ? 1 : 0) + (int)wi + 1 >= (int)sizeof(line)) {
+            continue;
+        }
+        if (line_len > 0) {
+            line[line_len++] = ' ';
+            line_w += 6 * scale;
+        }
+        memcpy(line + line_len, word, wi);
+        line_len += (int)wi;
+        line_w += ww;
+    }
+    if (line_len > 0) {
+        line[line_len] = '\0';
+        draw_centered(cy, line, fg, bg, scale);
+    }
+}
+
 static esp_err_t ui_render_round(const model_fields_t *fields)
 {
-    const uint16_t bg = display_rgb(8, 10, 17);
-    const uint16_t card = display_rgb(24, 28, 42);
+    const uint16_t bg = display_rgb(24, 28, 42);
     const uint16_t label = display_rgb(140, 150, 170);
     const uint16_t text = display_rgb(240, 244, 250);
     const uint16_t muted = display_rgb(110, 118, 135);
     const uint16_t clock = display_rgb(160, 168, 182);
     const uint16_t track = display_rgb(40, 46, 62);
 
+    /* One fill: an inset card shows as a box on the round glass. */
     display_fill(bg);
-    /* Leave a circular-safe margin; the glass masks the corners. */
-    display_fill_rect(12, 12, 216, 216, card);
 
     const char *app = front_title_app() == DESK_OPENCODE ? "OPENCODE"
         : front_title_is_cursor() ? "CURSOR" : "CHATGPT";
-    const int app_w = font_text_width(app, 1);
-    font_draw_text((DISPLAY_WIDTH - app_w) / 2, 20, app, clock, card, 1);
+    draw_centered(20, app, clock, bg, 1);
 
-    font_draw_text(28, 50, "MODEL", label, card, 1);
+    draw_centered(58, "MODEL", label, bg, 1);
     if (!fields->has_model) {
-        font_draw_text(28, 66, "WAITING", muted, card, 2);
+        draw_centered(74, "WAITING", muted, bg, 2);
     } else {
-        draw_wrapped(28, 66, 184, fields->model, text, card, 2);
+        draw_wrapped_centered(74, 184, fields->model, text, bg, 2);
     }
 
-    font_draw_text(28, 112, "THINKING", label, card, 1);
+    draw_centered(120, "THINKING", label, bg, 1);
     const char *thinking = !fields->has_model ? "-"
         : catalog_thinking_count(fields->model) == 0 ? "UNSUPPORTED"
         : fields->has_thinking ? fields->thinking : "-";
-    draw_wrapped(28, 128, 184, thinking, fields->has_model ? text : muted, card, 2);
+    draw_wrapped_centered(136, 184, thinking, fields->has_model ? text : muted, bg, 2);
 
-    const int levels = fields->has_model ? catalog_thinking_count(fields->model) : 0;
-    const int level = levels > 0 && fields->has_thinking
-        ? catalog_thinking_level(fields->model, thinking) : 0;
-    draw_thinking_bar(28, 166, 184, 8, level, levels > 0 ? levels : 1, track, text);
+    draw_app_thinking_bar(28, 162, 184, 8, fields, track, text);
 
-    const char *build = FIRMWARE_BUILD_STRING;
-    const int bw = font_text_width(build, 1);
-    font_draw_text((DISPLAY_WIDTH - bw) / 2, 202, build, muted, card, 1);
+    draw_centered(DISPLAY_HEIGHT - 15, FIRMWARE_BUILD_STRING, muted, bg, 1);
 
     esp_err_t err = display_flush();
     if (err == ESP_OK) {
@@ -190,16 +253,13 @@ esp_err_t ui_render(const model_fields_t *fields)
     if (!fields->has_model) {
         font_draw_text(20, model_value_y, "Waiting for bridge...", muted, card, 2);
         font_draw_text(20, thinking_value_y, "-", muted, card, 2);
-        draw_thinking_bar(20, bar_y, value_w, bar_h, 0, 1, track, text);
+        draw_app_thinking_bar(20, bar_y, value_w, bar_h, fields, track, text);
     } else {
         draw_wrapped(20, model_value_y, value_w, fields->model, text, card, 2);
         const char *thinking = catalog_thinking_count(fields->model) == 0
             ? "Unsupported" : (fields->has_thinking ? fields->thinking : "-");
-        const int levels = catalog_thinking_count(fields->model);
-        const int level = (levels > 0 && fields->has_thinking)
-            ? catalog_thinking_level(fields->model, thinking) : 0;
         draw_wrapped(20, thinking_value_y, value_w, thinking, text, card, 2);
-        draw_thinking_bar(20, bar_y, value_w, bar_h, level, levels > 0 ? levels : 1, track, text);
+        draw_app_thinking_bar(20, bar_y, value_w, bar_h, fields, track, text);
     }
 
     /* Version bottom-right. */

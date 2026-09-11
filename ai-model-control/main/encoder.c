@@ -5,6 +5,8 @@
 #include "driver/rtc_io.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 /*
  * Two KY-040-style encoders on Lonely Binary N16R8 (see s3-n16r8.jpeg).
@@ -57,8 +59,8 @@ static int s_sw_armed[ENCODER_COUNT];
 #define MODEL_PCNT_RESET 500
 #define MODEL_COUNTS_PER_STEP 8
 #define MODEL_EMIT_US 160000
-/* +1 counterclockwise → GPT-5.5. Flip to -1 if the two directions land swapped. */
-#define MODEL_SIGN 1
+/* Reverse the model knob's physical direction in the catalog. */
+#define MODEL_SIGN -1
 
 static pcnt_unit_handle_t s_model_unit;
 static int s_model_prev_count;
@@ -66,14 +68,26 @@ static int s_model_acc;
 static int s_model_sign;
 static int64_t s_model_emit_us;
 
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+static pcnt_unit_handle_t s_think_unit;
+static int s_think_prev_count;
+static int s_think_acc;
+static int s_think_sign;
+static int64_t s_think_last_us;
+static volatile int s_pending_delta[ENCODER_COUNT];
+static volatile int s_pending_sw[ENCODER_COUNT];
+static volatile int s_thinking_hold;
+static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
+static void encoder_task(void *arg);
+#endif
 
-static esp_err_t model_pcnt_init(void)
+static esp_err_t pcnt_setup(int clk, int dt, pcnt_unit_handle_t *unit)
 {
     pcnt_unit_config_t unit_cfg = {
         .low_limit = -MODEL_PCNT_LIMIT,
         .high_limit = MODEL_PCNT_LIMIT,
     };
-    esp_err_t err = pcnt_new_unit(&unit_cfg, &s_model_unit);
+    esp_err_t err = pcnt_new_unit(&unit_cfg, unit);
     if (err != ESP_OK) {
         return err;
     }
@@ -81,26 +95,26 @@ static esp_err_t model_pcnt_init(void)
     pcnt_glitch_filter_config_t filter_cfg = {
         .max_glitch_ns = 1000,
     };
-    err = pcnt_unit_set_glitch_filter(s_model_unit, &filter_cfg);
+    err = pcnt_unit_set_glitch_filter(*unit, &filter_cfg);
     if (err != ESP_OK) {
         return err;
     }
 
     pcnt_chan_config_t chan_a_cfg = {
-        .edge_gpio_num = s_clk[ENCODER_MODEL],
-        .level_gpio_num = s_dt[ENCODER_MODEL],
+        .edge_gpio_num = clk,
+        .level_gpio_num = dt,
     };
     pcnt_channel_handle_t chan_a = NULL;
-    err = pcnt_new_channel(s_model_unit, &chan_a_cfg, &chan_a);
+    err = pcnt_new_channel(*unit, &chan_a_cfg, &chan_a);
     if (err != ESP_OK) {
         return err;
     }
     pcnt_chan_config_t chan_b_cfg = {
-        .edge_gpio_num = s_dt[ENCODER_MODEL],
-        .level_gpio_num = s_clk[ENCODER_MODEL],
+        .edge_gpio_num = dt,
+        .level_gpio_num = clk,
     };
     pcnt_channel_handle_t chan_b = NULL;
-    err = pcnt_new_channel(s_model_unit, &chan_b_cfg, &chan_b);
+    err = pcnt_new_channel(*unit, &chan_b_cfg, &chan_b);
     if (err != ESP_OK) {
         return err;
     }
@@ -127,23 +141,31 @@ static esp_err_t model_pcnt_init(void)
         return err;
     }
 
-    err = pcnt_unit_enable(s_model_unit);
+    err = pcnt_unit_enable(*unit);
     if (err != ESP_OK) {
         return err;
     }
-    err = pcnt_unit_clear_count(s_model_unit);
+    err = pcnt_unit_clear_count(*unit);
     if (err != ESP_OK) {
         return err;
     }
-    err = pcnt_unit_start(s_model_unit);
+    err = pcnt_unit_start(*unit);
     if (err != ESP_OK) {
         return err;
     }
 
     /* PCNT reconfigures its pins, so re-arm the module pull-ups afterwards. */
-    gpio_set_pull_mode(s_clk[ENCODER_MODEL], GPIO_PULLUP_ONLY);
-    gpio_set_pull_mode(s_dt[ENCODER_MODEL], GPIO_PULLUP_ONLY);
+    gpio_set_pull_mode(clk, GPIO_PULLUP_ONLY);
+    gpio_set_pull_mode(dt, GPIO_PULLUP_ONLY);
+    return ESP_OK;
+}
 
+static esp_err_t model_pcnt_init(void)
+{
+    esp_err_t err = pcnt_setup(s_clk[ENCODER_MODEL], s_dt[ENCODER_MODEL], &s_model_unit);
+    if (err != ESP_OK) {
+        return err;
+    }
     s_model_prev_count = 0;
     s_model_acc = 0;
     s_model_sign = 0;
@@ -191,6 +213,29 @@ esp_err_t encoder_init(void)
         ESP_LOGE(TAG, "model PCNT init failed: %s", esp_err_to_name(err));
         return err;
     }
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+    err = pcnt_setup(s_clk[ENCODER_THINKING], s_dt[ENCODER_THINKING], &s_think_unit);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "thinking PCNT init failed: %s", esp_err_to_name(err));
+        return err;
+    }
+    s_think_prev_count = 0;
+    s_think_acc = 0;
+    s_think_sign = 0;
+    s_think_last_us = 0;
+    ESP_LOGI(TAG, "thinking CLK%d=%d DT%d=%d SW%d=%d",
+             s_clk[ENCODER_THINKING], gpio_get_level(s_clk[ENCODER_THINKING]),
+             s_dt[ENCODER_THINKING], gpio_get_level(s_dt[ENCODER_THINKING]),
+             s_sw[ENCODER_THINKING], gpio_get_level(s_sw[ENCODER_THINKING]));
+    ESP_LOGI(TAG, "model CLK%d=%d DT%d=%d SW%d=%d",
+             s_clk[ENCODER_MODEL], gpio_get_level(s_clk[ENCODER_MODEL]),
+             s_dt[ENCODER_MODEL], gpio_get_level(s_dt[ENCODER_MODEL]),
+             s_sw[ENCODER_MODEL], gpio_get_level(s_sw[ENCODER_MODEL]));
+    if (xTaskCreate(encoder_task, "enc", 2048, NULL, 5, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "encoder task");
+        return ESP_ERR_NO_MEM;
+    }
+#endif
     return ESP_OK;
 }
 
@@ -239,63 +284,53 @@ static int model_delta(void)
     return 0;
 }
 
-int encoder_delta(encoder_id_t id)
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+static int thinking_delta(void)
 {
-    if (id < 0 || id >= ENCODER_COUNT) {
+    if (s_think_unit == NULL) {
         return 0;
     }
-    if (id == ENCODER_MODEL) {
-        return model_delta();
+    int count = 0;
+    if (pcnt_unit_get_count(s_think_unit, &count) != ESP_OK) {
+        return 0;
     }
-
-    int clk = gpio_get_level(s_clk[id]);
-    int dt = gpio_get_level(s_dt[id]);
-    int delta = 0;
-    if (s_last_clk[id] == 1 && clk == 0) {
-        delta = (dt == 1) ? 1 : -1;
-    }
-    s_last_clk[id] = clk;
-    int64_t now = esp_timer_get_time();
-    bool accepted = delta != 0 && now - s_last_step_us[id] >= MIN_STEP_US;
-    if (s_last_dir[id] != 0 && delta != s_last_dir[id]
-        && now - s_last_step_us[id] < DIR_LOCK_US) {
-        accepted = false;
-    }
-    if (accepted) {
-        s_last_dir[id] = delta;
-        s_last_step_us[id] = now;
-        if (delta != s_sign[id]) {
-            s_sign[id] = delta;
-            s_pulses[id] = 0;
+    int delta_counts = count - s_think_prev_count;
+    s_think_prev_count = count;
+    if (count > MODEL_PCNT_RESET || count < -MODEL_PCNT_RESET) {
+        if (pcnt_unit_clear_count(s_think_unit) == ESP_OK) {
+            s_think_prev_count = 0;
         }
-        s_pulses[id]++;
     }
-
-    if (s_pulses[id] < THINKING_PULSES_PER_STEP
-        || now - s_last_step_us[id] < THINKING_BURST_IDLE_US) {
+    int64_t now = esp_timer_get_time();
+    if (delta_counts != 0) {
+        s_think_last_us = now;
+        int sign = delta_counts > 0 ? 1 : -1;
+        if (sign != s_think_sign) {
+            s_think_sign = sign;
+            s_think_acc = delta_counts;
+        } else {
+            s_think_acc += delta_counts;
+        }
+    }
+    s_thinking_hold = s_think_acc != 0
+        && (now - s_think_last_us) < THINKING_BURST_IDLE_US;
+    if (s_think_acc == 0 || now - s_think_last_us < THINKING_BURST_IDLE_US) {
         return 0;
     }
-    int steps = s_pulses[id] / THINKING_PULSES_PER_STEP;
-    s_pulses[id] %= THINKING_PULSES_PER_STEP;
-    int sign = s_sign[id];
-    s_last_dir[id] = 0;
-    return sign * steps;
+    int steps = 0;
+    if (s_think_acc >= MODEL_COUNTS_PER_STEP) {
+        steps = s_think_acc / MODEL_COUNTS_PER_STEP;
+        s_think_acc %= MODEL_COUNTS_PER_STEP;
+    } else if (s_think_acc <= -MODEL_COUNTS_PER_STEP) {
+        steps = -((-s_think_acc) / MODEL_COUNTS_PER_STEP);
+        s_think_acc %= MODEL_COUNTS_PER_STEP;
+    }
+    return steps;
 }
+#endif
 
-int encoder_hold_paint(void)
+static int poll_sw(encoder_id_t id)
 {
-    if (s_pulses[ENCODER_THINKING] == 0) {
-        return 0;
-    }
-    return (esp_timer_get_time() - s_last_step_us[ENCODER_THINKING])
-        < THINKING_BURST_IDLE_US;
-}
-
-int encoder_button_pressed(encoder_id_t id)
-{
-    if (id < 0 || id >= ENCODER_COUNT) {
-        return 0;
-    }
     int sw = gpio_get_level(s_sw[id]);
     int64_t now = esp_timer_get_time();
     int pressed = 0;
@@ -311,4 +346,118 @@ int encoder_button_pressed(encoder_id_t id)
     }
     s_last_sw[id] = sw;
     return pressed;
+}
+
+#if !defined(AI_MODEL_PROFILE_SUPERMINI)
+static int poll_thinking_gpio(void)
+{
+    int clk = gpio_get_level(s_clk[ENCODER_THINKING]);
+    int dt = gpio_get_level(s_dt[ENCODER_THINKING]);
+    int delta = 0;
+    if (s_last_clk[ENCODER_THINKING] == 1 && clk == 0) {
+        delta = (dt == 1) ? 1 : -1;
+    }
+    s_last_clk[ENCODER_THINKING] = clk;
+    int64_t now = esp_timer_get_time();
+    bool accepted = delta != 0 && now - s_last_step_us[ENCODER_THINKING] >= MIN_STEP_US;
+    if (s_last_dir[ENCODER_THINKING] != 0 && delta != s_last_dir[ENCODER_THINKING]
+        && now - s_last_step_us[ENCODER_THINKING] < DIR_LOCK_US) {
+        accepted = false;
+    }
+    if (accepted) {
+        s_last_dir[ENCODER_THINKING] = delta;
+        s_last_step_us[ENCODER_THINKING] = now;
+        if (delta != s_sign[ENCODER_THINKING]) {
+            s_sign[ENCODER_THINKING] = delta;
+            s_pulses[ENCODER_THINKING] = 0;
+        }
+        s_pulses[ENCODER_THINKING]++;
+    }
+
+    if (s_pulses[ENCODER_THINKING] < THINKING_PULSES_PER_STEP
+        || now - s_last_step_us[ENCODER_THINKING] < THINKING_BURST_IDLE_US) {
+        return 0;
+    }
+    int steps = s_pulses[ENCODER_THINKING] / THINKING_PULSES_PER_STEP;
+    s_pulses[ENCODER_THINKING] %= THINKING_PULSES_PER_STEP;
+    int sign = s_sign[ENCODER_THINKING];
+    s_last_dir[ENCODER_THINKING] = 0;
+    return sign * steps;
+}
+#endif
+
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+static void encoder_task(void *arg)
+{
+    (void)arg;
+    while (1) {
+        int thinking = thinking_delta();
+        int model = model_delta();
+        int think_sw = poll_sw(ENCODER_THINKING);
+        int model_sw = poll_sw(ENCODER_MODEL);
+        if (thinking || model || think_sw || model_sw) {
+            ESP_LOGI(TAG, "step think=%+d model=%+d sw=%d/%d",
+                     thinking, model, think_sw, model_sw);
+        }
+        portENTER_CRITICAL(&s_lock);
+        s_pending_delta[ENCODER_THINKING] += thinking;
+        s_pending_delta[ENCODER_MODEL] += model;
+        if (think_sw) {
+            s_pending_sw[ENCODER_THINKING] = 1;
+        }
+        if (model_sw) {
+            s_pending_sw[ENCODER_MODEL] = 1;
+        }
+        portEXIT_CRITICAL(&s_lock);
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+}
+#endif
+
+int encoder_delta(encoder_id_t id)
+{
+    if (id < 0 || id >= ENCODER_COUNT) {
+        return 0;
+    }
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+    portENTER_CRITICAL(&s_lock);
+    int delta = s_pending_delta[id];
+    s_pending_delta[id] = 0;
+    portEXIT_CRITICAL(&s_lock);
+    return delta;
+#else
+    if (id == ENCODER_MODEL) {
+        return model_delta();
+    }
+    return poll_thinking_gpio();
+#endif
+}
+
+int encoder_hold_paint(void)
+{
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+    return s_thinking_hold;
+#else
+    if (s_pulses[ENCODER_THINKING] == 0) {
+        return 0;
+    }
+    return (esp_timer_get_time() - s_last_step_us[ENCODER_THINKING])
+        < THINKING_BURST_IDLE_US;
+#endif
+}
+
+int encoder_button_pressed(encoder_id_t id)
+{
+    if (id < 0 || id >= ENCODER_COUNT) {
+        return 0;
+    }
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+    portENTER_CRITICAL(&s_lock);
+    int pressed = s_pending_sw[id];
+    s_pending_sw[id] = 0;
+    portEXIT_CRITICAL(&s_lock);
+    return pressed;
+#else
+    return poll_sw(id);
+#endif
 }

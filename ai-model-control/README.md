@@ -150,8 +150,11 @@ left unused because it is a boot-strapping pin; GPIO18 and GPIO39-42 are only
 available on this board's small underside pads.
 
 The round module has no MISO or separate backlight control in this wiring;
-leave MISO unconnected and power its VCC from 3V3. Build it in its own output
-directory so the legacy 480x320 profile remains intact:
+leave MISO unconnected and power its VCC from 3V3. Desk pose keeps native
+MADCTL (`swap_xy(false)`, `mirror(false, false)`) and un-mirrors glyphs with
+a horizontal row reverse in `display_flush()`. Do not use MADCTL `mirror(true,
+true)` on this module — that 180 left letters backwards. Build it in its own
+output directory so the legacy 480x320 profile remains intact:
 
 ```sh
 export IDF_PATH=/path/to/esp-idf
