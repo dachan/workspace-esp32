@@ -78,6 +78,10 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         refreshMenu()
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        controller.shutdown()
+    }
+
     func menuWillOpen(_ menu: NSMenu) { refreshMenu() }
 
     @objc private func toggleBridge(_ sender: MenuToggle) {
@@ -146,6 +150,13 @@ private final class DialController {
             Task { @MainActor in self?.checkPort() }
         }
         startBridge()
+    }
+
+    func shutdown() {
+        wantsBridge = false
+        monitor?.invalidate()
+        monitor = nil
+        stopBridge()
     }
 
     func setBridgeEnabled(_ enabled: Bool) {
