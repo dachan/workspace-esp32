@@ -33,19 +33,26 @@ class Logo:
     source: str
     # Fraction of the cropped width holding a glyph that sits on the baseline
     # without a descender or an oversized mark, used to align all logos to the
-    # panel's text baseline.
-    baseline_cols: tuple[float, float]
+    # panel's text baseline. None means the mask is an icon with no baseline.
+    baseline_cols: tuple[float, float] | None
+    height: int
+    invert: bool = False
 
 
-# Every logo renders at this box height so the header footprint stays identical
-# whichever app is focused. 24 px keeps the Cursor lettering legible without the
-# OpenAI wordmark crowding the clock.
+# Every lockup renders at this box height so the 3.5" header footprint stays
+# identical whichever app is focused. 24 px keeps the Cursor lettering legible
+# without the OpenAI wordmark crowding the clock.
 LOGO_HEIGHT = 24
+# Round Super Mini icons sit above MODEL; 36 px leaves a gap to the label.
+ICON_HEIGHT = 36
 
 LOGOS = (
-    Logo("cursor", "cursor-lockup-white.png", (0.30, 1.0)),
-    Logo("openai", "openai-wordmark-white.png", (0.0, 0.17)),
-    Logo("opencode", "opencode-wordmark-dark.svg", (0.0, 0.10)),
+    Logo("cursor", "cursor-lockup-white.png", (0.30, 1.0), LOGO_HEIGHT),
+    Logo("openai", "openai-wordmark-white.png", (0.0, 0.17), LOGO_HEIGHT),
+    Logo("opencode", "opencode-wordmark-dark.svg", (0.0, 0.10), LOGO_HEIGHT),
+    Logo("cursor_icon", "cursor-cube-dark.png", None, ICON_HEIGHT),
+    Logo("openai_icon", "openai-blossom-white.png", None, ICON_HEIGHT),
+    Logo("opencode_icon", "opencode-logo-dark.png", None, ICON_HEIGHT, invert=True),
 )
 
 
@@ -67,17 +74,23 @@ def build(logo: Logo) -> tuple[Image.Image, int]:
     pixels = mask.load()
     for y in range(image.height):
         for x in range(image.width):
-            pixels[x, y] = luma[x, y] * alpha[x, y] // 255
+            coverage = luma[x, y] * alpha[x, y] // 255
+            if logo.invert:
+                coverage = (255 - luma[x, y]) * alpha[x, y] // 255
+            pixels[x, y] = coverage
 
-    lo = int(round(logo.baseline_cols[0] * image.width))
-    hi = int(round(logo.baseline_cols[1] * image.width))
-    box = mask.crop((lo, 0, hi, image.height)).point(lambda v: 255 if v > 32 else 0).getbbox()
-    if box is None:
-        raise SystemExit(f"{logo.name}: baseline column range is empty")
-    baseline = round(box[3] * LOGO_HEIGHT / image.height)
+    if logo.baseline_cols is None:
+        baseline = logo.height
+    else:
+        lo = int(round(logo.baseline_cols[0] * image.width))
+        hi = int(round(logo.baseline_cols[1] * image.width))
+        box = mask.crop((lo, 0, hi, image.height)).point(lambda v: 255 if v > 32 else 0).getbbox()
+        if box is None:
+            raise SystemExit(f"{logo.name}: baseline column range is empty")
+        baseline = round(box[3] * logo.height / image.height)
 
-    width = max(1, round(image.width * LOGO_HEIGHT / image.height))
-    return mask.resize((width, LOGO_HEIGHT), Image.LANCZOS), baseline
+    width = max(1, round(image.width * logo.height / image.height))
+    return mask.resize((width, logo.height), Image.LANCZOS), baseline
 
 
 def emit(handle, logo: Logo, mask: Image.Image, baseline: int) -> None:

@@ -79,7 +79,7 @@ static void draw_thinking_bar(int x, int y, int w, int h, int level, int max_lev
     for (int i = 0; i < segs; i++) {
         int sw = seg_w + (i == segs - 1 ? leftover : 0);
         uint16_t col = (i < level) ? fill : track;
-        display_fill_rect(cx, y, sw, h, col);
+        display_fill_round_rect(cx, y, sw, h, h / 2, col);
         cx += sw + gap;
     }
 }
@@ -157,33 +157,39 @@ static void draw_wrapped_centered(int y, int max_w, const char *text, uint16_t f
 static esp_err_t ui_render_round(const model_fields_t *fields)
 {
     const uint16_t bg = display_rgb(24, 28, 42);
-    const uint16_t label = display_rgb(140, 150, 170);
     const uint16_t text = display_rgb(240, 244, 250);
     const uint16_t muted = display_rgb(110, 118, 135);
-    const uint16_t clock = display_rgb(160, 168, 182);
     const uint16_t track = display_rgb(40, 46, 62);
 
     /* One fill: an inset card shows as a box on the round glass. */
     display_fill(bg);
 
-    const char *app = front_title_app() == DESK_OPENCODE ? "OPENCODE"
-        : front_title_is_cursor() ? "CURSOR" : "CHATGPT";
-    draw_centered(20, app, clock, bg, 1);
+    const logo_t *logo = front_title_app() == DESK_OPENCODE ? &logo_opencode_icon
+        : front_title_is_cursor() ? &logo_cursor_icon : &logo_openai_icon;
+    display_blit_alpha((DISPLAY_WIDTH - logo->width) / 2, 12,
+                       logo->width, logo->height, logo->alpha, text, bg);
 
-    draw_centered(58, "MODEL", label, bg, 1);
+    const int model_scale = 2;
+    const int think_scale = 1;
+    const int model_h = 7 * model_scale;
+    const int think_h = 7 * think_scale;
+    const int pair_gap = 32;
+    const int block_h = model_h + pair_gap + think_h;
+    const int model_y = (DISPLAY_HEIGHT - block_h) / 2;
+    const int thinking_y = model_y + model_h + pair_gap;
+
     if (!fields->has_model) {
-        draw_centered(74, "WAITING", muted, bg, 2);
+        draw_centered(model_y, "WAITING", muted, bg, model_scale);
     } else {
-        draw_wrapped_centered(74, 184, fields->model, text, bg, 2);
+        draw_wrapped_centered(model_y, 184, fields->model, text, bg, model_scale);
     }
 
-    draw_centered(120, "THINKING", label, bg, 1);
     const char *thinking = !fields->has_model ? "-"
         : catalog_thinking_count(fields->model) == 0 ? "UNSUPPORTED"
         : fields->has_thinking ? fields->thinking : "-";
-    draw_wrapped_centered(136, 184, thinking, fields->has_model ? text : muted, bg, 2);
+    draw_wrapped_centered(thinking_y, 184, thinking, fields->has_model ? text : muted, bg, think_scale);
 
-    draw_app_thinking_bar(28, 162, 184, 8, fields, track, text);
+    draw_app_thinking_bar(28, thinking_y + think_h + 12, 184, 8, fields, track, text);
 
     draw_centered(DISPLAY_HEIGHT - 15, FIRMWARE_BUILD_STRING, muted, bg, 1);
 
@@ -242,7 +248,8 @@ esp_err_t ui_render(const model_fields_t *fields)
     const int model_value_h = 7 * 2;
     const int thinking_label_y = model_value_y + model_value_h + 32;
     const int thinking_value_y = thinking_label_y + row_gap;
-    const int thinking_value_h = 7 * 2;
+    const int thinking_scale = 1;
+    const int thinking_value_h = 7 * thinking_scale;
     const int bar_y = thinking_value_y + thinking_value_h + 10;
     const int bar_h = 10;
     const int value_w = DISPLAY_WIDTH - 48;
@@ -252,13 +259,13 @@ esp_err_t ui_render(const model_fields_t *fields)
 
     if (!fields->has_model) {
         font_draw_text(20, model_value_y, "Waiting for bridge...", muted, card, 2);
-        font_draw_text(20, thinking_value_y, "-", muted, card, 2);
+        font_draw_text(20, thinking_value_y, "-", muted, card, thinking_scale);
         draw_app_thinking_bar(20, bar_y, value_w, bar_h, fields, track, text);
     } else {
         draw_wrapped(20, model_value_y, value_w, fields->model, text, card, 2);
         const char *thinking = catalog_thinking_count(fields->model) == 0
             ? "Unsupported" : (fields->has_thinking ? fields->thinking : "-");
-        draw_wrapped(20, thinking_value_y, value_w, thinking, text, card, 2);
+        draw_wrapped(20, thinking_value_y, value_w, thinking, text, card, thinking_scale);
         draw_app_thinking_bar(20, bar_y, value_w, bar_h, fields, track, text);
     }
 
@@ -290,7 +297,7 @@ esp_err_t ui_render_screensaver(void)
         && clock_format_date(date_text, sizeof(date_text))) {
 #if defined(AI_MODEL_PROFILE_SUPERMINI)
         const int time_scale = 3;
-        const int date_scale = 1;
+        const int date_scale = 2;
         const int time_h = 7 * time_scale;
         const int date_h = 7 * date_scale;
         const int gap = 10;

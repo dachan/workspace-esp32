@@ -226,6 +226,10 @@ static const char *const *thinking_table(bool cursor, const char *model, int *co
 
 static const char *const *active_thinking(const char *model, int *count)
 {
+    if (front_title_app() == DESK_OPENCODE) {
+        *count = 0;
+        return chatgpt_thinking;
+    }
     return thinking_table(front_title_is_cursor(), model, count);
 }
 
@@ -387,6 +391,9 @@ int catalog_thinking_count(const char *model)
 
 int catalog_thinking_count_for(desk_app_t app, const char *model)
 {
+    if (app == DESK_OPENCODE) {
+        return 0;
+    }
     return catalog_thinking_count_in(app == DESK_CURSOR, model);
 }
 
@@ -468,6 +475,9 @@ const char *catalog_default_thinking(const char *model)
 
 const char *catalog_default_thinking_for(desk_app_t app, const char *model)
 {
+    if (app == DESK_OPENCODE) {
+        return "Unsupported";
+    }
     return catalog_default_thinking_in(app == DESK_CURSOR, model);
 }
 

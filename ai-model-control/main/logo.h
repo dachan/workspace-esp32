@@ -15,3 +15,6 @@ typedef struct {
 extern const logo_t logo_cursor;
 extern const logo_t logo_openai;
 extern const logo_t logo_opencode;
+extern const logo_t logo_cursor_icon;
+extern const logo_t logo_openai_icon;
+extern const logo_t logo_opencode_icon;
