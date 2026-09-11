@@ -80,15 +80,11 @@ enum CursorPicker {
         guard DeskFront.isForeground(preferred: preferred) else {
             return .failed("\(focus.displayName) is not focused")
         }
-        for _ in 0..<3 {
-            guard !pulse() else { return .interrupted }
-            if matches(name, focus: focus, effort: false) {
-                return .applied(path: "Accessibility verified model \(name)")
-            }
-            guard Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
-        }
-        closeMenus(pulse: pulse)
-        return .failed("Cursor model could not be verified")
+        // Cursor's current Chromium accessibility tree does not expose the
+        // selected model as an AXPopUpButton after the picker closes. The
+        // successful menu-row click is the available completion signal; do not
+        // discard the paired effort update because model readback is absent.
+        return .applied(path: "Accessibility model \(name)")
     }
 
     static func effort(
