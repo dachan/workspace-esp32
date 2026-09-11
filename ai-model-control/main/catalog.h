@@ -35,9 +35,6 @@ void catalog_chatgpt_set_thinking_mask(uint64_t mask);
 
 int catalog_thinking_count(const char *model);
 int catalog_thinking_count_in(bool cursor, const char *model);
-/* Segment bar: this model's full thinking list (ChatGPT/OpenCode always 6, not the enable mask). */
-int catalog_thinking_bar_count(const char *model);
-int catalog_thinking_bar_level(const char *model, const char *name);
 // UI levels are 1..count; zero means missing or unknown.
 int catalog_thinking_level(const char *model, const char *name);
 const char *catalog_thinking_name(const char *model, int level);

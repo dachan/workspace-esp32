@@ -62,7 +62,9 @@ func run() -> Int32 {
         if !options.watch && !options.listen { return 0 }
     }
     if options.watch || options.listen {
-        _ = AXTrust.isTrusted(prompt: true)
+        // Watch mode only needs AX when posting keys. Prompting here repeats the
+        // system sheet on every Model Dial helper restart (settings, Sync, rebuild).
+        _ = AXTrust.isTrusted(prompt: false)
         return runWatch(options: options)
     }
 

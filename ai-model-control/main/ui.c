@@ -88,10 +88,10 @@ static void draw_app_thinking_bar(int x, int y, int w, int h, const model_fields
                                   uint16_t track, uint16_t fill)
 {
     const char *model = fields->has_model ? fields->model : NULL;
-    const int segs = catalog_thinking_bar_count(model);
+    const int segs = catalog_thinking_count(model);
     int level = 0;
     if (fields->has_model && fields->has_thinking && segs > 0) {
-        level = catalog_thinking_bar_level(model, fields->thinking);
+        level = catalog_thinking_level(model, fields->thinking);
     }
     draw_thinking_bar(x, y, w, h, level, segs > 0 ? segs : 1, track, fill);
 }

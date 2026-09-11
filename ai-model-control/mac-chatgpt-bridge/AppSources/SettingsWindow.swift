@@ -20,7 +20,6 @@ struct CursorModelGroup: Identifiable {
 
 final class BridgePreferences: ObservableObject {
     static let chatGPTEfforts = ["Light", "Medium", "High", "Extra High", "Max", "Ultra"]
-    static let chatGPTModels = ["GPT-6 Astra", "GPT-5.6 Sol", "GPT-5.6 Terra", "GPT-5.6 Luna", "GPT-5.5"]
     static let openCodeModels = ["GPT-6 Astra", "GPT-5.6 Terra", "GPT-5.6 Sol", "GPT-5.6 Luna"]
     static let cursorModels = [
         "Auto", "Cursor Grok 4.6", "Composer 2.5", "Claude Opus 5", "GPT-5.6 Sol",
@@ -135,7 +134,6 @@ final class BridgePreferences: ObservableObject {
         Binding(get: { self.isCursorModelEnabled(index) }, set: { self.setCursorModelEnabled($0, index: index) })
     }
 
-    func resetChatGPTEfforts() { updateChatGPTMask(Self.defaultChatGPTThinkingMask) }
     func resetCursorModels() { updateCursorMask(Self.defaultCursorModelMask) }
 
     @discardableResult
@@ -199,64 +197,16 @@ struct SettingsView: View {
     @ObservedObject var preferences: BridgePreferences
 
     var body: some View {
-        TabView {
-            chatGPTTab.tabItem { Text("ChatGPT") }
-            cursorTab.tabItem { Text("Cursor") }
-            openCodeTab.tabItem { Text("OpenCode") }
-        }
-        .frame(minWidth: 600, minHeight: 620)
-    }
-
-    private var chatGPTTab: some View {
         settingsScroll {
-            settingsSection(title: "Models", detail: "ChatGPT model availability is fixed and cannot be changed here.") {
-                twoColumnGrid {
-                    ForEach(BridgePreferences.chatGPTModels, id: \.self) { model in
-                        Toggle(model, isOn: .constant(true)).disabled(true)
-                    }
-                }
-            }
-            Divider()
-            settingsSection(title: "Efforts", detail: "Enabled levels are available on the ESP32 effort dial.") {
+            settingsSection(title: "ChatGPT", detail: "Enabled thinking levels are available on the ESP32 effort dial.") {
                 twoColumnGrid {
                     ForEach(Array(BridgePreferences.chatGPTEfforts.enumerated()), id: \.offset) { index, effort in
                         Toggle(effort, isOn: preferences.effortBinding(index: index))
                     }
                 }
             }
-            resetButton("Reset ChatGPT Defaults") { preferences.resetChatGPTEfforts() }
         }
-    }
-
-    private var cursorTab: some View {
-        settingsScroll {
-            settingsSection(title: "Models", detail: "Enabled models are available on the ESP32 model dial.") {
-                ForEach(BridgePreferences.cursorModelGroups) { group in
-                    Text(group.provider)
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.top, group.provider == "Automatic" ? 0 : 8)
-                    twoColumnGrid {
-                        ForEach(group.models) { model in
-                            Toggle(model.name, isOn: preferences.cursorModelBinding(index: model.index))
-                                .disabled(model.index == 0)
-                        }
-                    }
-                }
-            }
-            resetButton("Reset Cursor Defaults") { preferences.resetCursorModels() }
-        }
-    }
-
-    private var openCodeTab: some View {
-        settingsScroll {
-            settingsSection(title: "Models", detail: "OpenCode's supported model list is fixed in the bridge.") {
-                twoColumnGrid {
-                    ForEach(BridgePreferences.openCodeModels, id: \.self) { model in
-                        Toggle(model, isOn: .constant(true)).disabled(true)
-                    }
-                }
-            }
-        }
+        .frame(minWidth: 420, minHeight: 240)
     }
 
     private func settingsScroll<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -285,28 +235,20 @@ struct SettingsView: View {
             content()
         }
     }
-
-    private func resetButton(_ title: String, action: @escaping () -> Void) -> some View {
-        HStack {
-            Spacer()
-            Button(title, action: action)
-            Spacer()
-        }
-    }
 }
 
 final class SettingsWindowController: NSWindowController {
     init(preferences: BridgePreferences, onChange: @escaping () -> Void) {
         let hosting = NSHostingView(rootView: SettingsView(preferences: preferences))
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 680, height: 720),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Model Dial Settings"
         window.contentView = hosting
-        window.contentMinSize = NSSize(width: 600, height: 620)
+        window.contentMinSize = NSSize(width: 420, height: 240)
         window.isReleasedWhenClosed = false
         preferences.onChange = onChange
         super.init(window: window)
