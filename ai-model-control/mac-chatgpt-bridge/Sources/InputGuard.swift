@@ -27,11 +27,10 @@ final class InputGuard {
             guard current.focus.pid == focus.pid, current.isValid else { return .interrupted }
             return body(current)
         }
-        // Check hardware state only: synthetic bridge events must not hold acquisition.
-        // Starting with a physical press would hide its release from the app.
-        guard !(0..<128).contains(where: { CGEventSource.keyState(.hidSystemState, key: CGKeyCode($0)) }),
-              !(0..<3).contains(where: { CGEventSource.buttonState(.hidSystemState, button: CGMouseButton(rawValue: UInt32($0))!) })
-        else { return .failed("input guard waiting for held keys or mouse buttons to release") }
+        // This process runs in the login session, whose combined state is refreshed by
+        // normal app input. Bridge events use a private state table and cannot hold it.
+        // Starting with a physical press would hide its release from the target app.
+        if let held = heldInput() { return .failed("input guard waiting for \(held) to release") }
         let guardInput = InputGuard(focus: focus)
         guard guardInput.start() else {
             guardInput.stop()
@@ -43,6 +42,21 @@ final class InputGuard {
             current = nil
         }
         return body(guardInput)
+    }
+
+    private static func heldInput() -> String? {
+        let state = CGEventSourceStateID.combinedSessionState
+        if let key = (0..<128).first(where: {
+            CGEventSource.keyState(state, key: CGKeyCode($0))
+        }) {
+            return "key code \(key)"
+        }
+        let buttonNames = ["left mouse button", "right mouse button", "other mouse button"]
+        for (rawValue, name) in buttonNames.enumerated() {
+            let button = CGMouseButton(rawValue: UInt32(rawValue))!
+            if CGEventSource.buttonState(state, button: button) { return name }
+        }
+        return nil
     }
 
     private func start() -> Bool {
