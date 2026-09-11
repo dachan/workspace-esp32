@@ -31,7 +31,7 @@ static const char *TAG = "display";
 #define PIN_DC     9
 #define PIN_RST    10
 #define PIN_CS     11
-#define PIN_SCK    18
+#define PIN_SCK    12
 #define LCD_PIXEL_CLK (26 * 1000 * 1000)
 #else
 /* Lonely Binary / radar-class ESP32-S3 + 3.5" TFT SPI 480x320 v1 (ST7796U). */

@@ -134,16 +134,20 @@ Round-panel wiring:
 
 | Signal | GPIO / rail |
 |---|---:|
-| GC9A01 SCL/SCK | 18 |
+| GC9A01 SCL/SCK | 12 |
 | GC9A01 SDA/MOSI | 8 |
 | GC9A01 CS | 11 |
 | GC9A01 DC | 9 |
 | GC9A01 RST | 10 |
 | GC9A01 VCC | 3V3 |
 | GC9A01 GND | GND |
-| Thinking encoder CLK / DT / SW | 41 / 40 / 39 |
-| Model encoder CLK / DT / SW | 1 / 2 / 42 |
+| Thinking encoder CLK / DT / SW | 4 / 5 / 6 |
+| Model encoder CLK / DT / SW | 1 / 2 / 7 |
 | Encoder + / GND | 3V3 / GND |
+
+These assignments use only the outer through-hole headers. GPIO3 is deliberately
+left unused because it is a boot-strapping pin; GPIO18 and GPIO39-42 are only
+available on this board's small underside pads.
 
 The round module has no MISO or separate backlight control in this wiring;
 leave MISO unconnected and power its VCC from 3V3. Build it in its own output

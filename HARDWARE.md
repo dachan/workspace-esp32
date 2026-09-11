@@ -72,8 +72,8 @@ Last inventory pass: 2026-09-09 (v0.90 event-driven serial recovery app-flash)
 ## ai-model-control supermini target (round model / thinking display)
 
 - MCU: ESP32-S3FH4R2 Super Mini — 4 MB in-package quad flash, 2 MB in-package quad PSRAM; single-core board variant per supplier listing
-- Display: **1.28-inch round 240x240 GC9A01 SPI** — VCC 3V3, GND GND, SCK GPIO18, MOSI GPIO8, CS GPIO11, DC GPIO9, RST GPIO10; no MISO or separate BL connection
-- Rotary encoders: same KY-040-style pair and GPIOs as the desk target — thinking CLK/DT/SW GPIO41/40/39; model CLK/DT/SW GPIO1/2/42; encoder + to 3V3 and grounds to GND
+- Display: **1.28-inch round 240x240 GC9A01 SPI** — VCC 3V3, GND GND, SCK GPIO12, MOSI GPIO8, CS GPIO11, DC GPIO9, RST GPIO10; no MISO or separate BL connection
+- Rotary encoders: same KY-040-style pair using the accessible outer headers — thinking CLK/DT/SW GPIO4/5/6; model CLK/DT/SW GPIO1/2/7; encoder + to 3V3 and grounds to GND. GPIO3 is left unused because it is a boot-strapping pin.
 - Touch: none identified; round profile disables FT6336 initialization and uses the Model Dial helper's Sync command
 - Firmware expected: `ai-model-control/` with `AI_MODEL_PROFILE=supermini`; `sdkconfig.defaults.supermini`; v0.90
 - Mac USB serial: unknown — verify the newly connected `/dev/cu.usbmodem*` before flashing

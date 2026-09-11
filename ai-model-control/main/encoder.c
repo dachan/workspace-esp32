@@ -25,9 +25,15 @@
  * step so the dial is less twitchy; the list clamps at the ends of the
  * active catalog (ChatGPT or Cursor).
  */
+#if defined(AI_MODEL_PROFILE_SUPERMINI)
+static const int s_clk[ENCODER_COUNT] = {4, 1};
+static const int s_dt[ENCODER_COUNT] = {5, 2};
+static const int s_sw[ENCODER_COUNT] = {6, 7};
+#else
 static const int s_clk[ENCODER_COUNT] = {41, 1};
 static const int s_dt[ENCODER_COUNT] = {40, 2};
 static const int s_sw[ENCODER_COUNT] = {39, 42};
+#endif
 
 static const char *TAG = "encoder";
 
