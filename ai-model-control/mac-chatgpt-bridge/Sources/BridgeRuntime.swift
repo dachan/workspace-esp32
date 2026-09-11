@@ -267,9 +267,7 @@ final class BridgeRuntime {
         }
     }
 
-    private func retryDelay(for message: String) -> TimeInterval {
-        message.hasPrefix("input guard waiting") ? 0.05 : 2
-    }
+    private func retryDelay(for _: String) -> TimeInterval { 2 }
 
     func run() -> Never {
         print("watching ChatGPT / Cursor foreground\(session.map { "; listening on \($0.port)" } ?? "") (Ctrl+C to stop)")
