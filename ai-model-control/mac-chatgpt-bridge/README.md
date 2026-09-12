@@ -54,8 +54,9 @@ model and thinking state instead of holding it for later.
 Shortcut sequences stay bound to the process that was focused when they began.
 Losing focus, including switching between ChatGPT, Codex, Cursor, and OpenCode,
 interrupts the sequence and discards the setting. A superseded sequence, or one
-that failed while the app stayed focused, is retried for as long as that app
-remains frontmost. Interrupted pickers are dismissed before retrying in that process, tracking
+that failed while the app stayed focused, is retried at two-second intervals while that app remains frontmost, up to
+three failed attempts per target. This limit applies to all apps and input-filter
+creation failures; another dial update or Sync starts a fresh attempt budget. Interrupted pickers are dismissed before retrying in that process, tracking
 both Cursor menu layers and each Escape already posted. ChatGPT thinking retries
 start from the absolute Light clamp. Logs say “posted” when the current generation's
 key sequence completes; the helper does not read back the app's selected value.
@@ -68,6 +69,9 @@ queued `PUSH` frames from a disabled bridge cannot replay after reconnecting.
 Open, configuration, read, and write failures are logged and the configured
 port is retried every two seconds, including when missing at startup. The helper
 claims exclusive access to prevent another helper or monitor opening the port.
+A connection change cancels the in-flight target and clears received revisions
+and applied-value caches, so the reconnect snapshot is accepted even when its
+revision is unchanged. Frames from a poll that ended in a disconnect are discarded.
 Current firmware retransmits until ACK and answers SYNC with its state, so a
 bridge restart or device reset recovers the panel state without another knob
 movement; whether it is applied still depends on ChatGPT, Cursor, or OpenCode being
@@ -180,26 +184,44 @@ the previous helper and relaunch it from the same Accessibility-authorized app.
 
 ## Model Dial app
 
-\`model-dial\` is the macOS menu-bar wrapper for this bridge. It starts and
-supervises \`chatgpt-bridge\`, finds a supported USB serial path, reconnects when
-the device path changes, and can register itself to start at login. The bridge
+`model-dial` is the macOS menu-bar wrapper for this bridge. It starts and
+supervises `chatgpt-bridge`, remembers a selected USB serial path, and can register itself to start at login. The bridge
 still reconnects independently when a device temporarily disappears at the same
-path.
+path. The **Device** menu lets you choose among connected serial devices. With
+no saved choice, a single candidate is selected automatically; multiple candidates
+require a selection. A saved but disconnected device is retained, so connecting
+another ESP32 does not silently move the bridge to it. A changed USB path requires
+selecting the new path. Device paths alone do not identify a board's firmware.
+
+The menu shows whether the helper is connecting, waiting for a panel response,
+receiving panel state, or unable to apply a change. **Panel responding** means
+valid dial state arrived, not that the target app's selected value was verified.
+Missing Accessibility permission has a direct **Accessibility Settings…** action.
+Bridge and login controls use native menu items with keyboard navigation and
+checkmarks. Login registration failures are surfaced, including macOS approval.
+
+Restarts retain ownership of the old helper until it exits; an unresponsive child
+is killed after one second. Quitting also releases the owned helper. Output from
+an old helper cannot overwrite the replacement's status. Sync reads only Cursor's
+model catalog and overrides in the background, with a three-second timeout; it
+retains saved choices if the read fails or preferences changed while it ran.
 
 Build an unsigned local app bundle, optionally with the firmware app binary:
 
-\`\`\`sh
+```sh
 cd ai-model-control/mac-chatgpt-bridge
 ./scripts/package-app.sh --firmware ../build-v0.90-event-sync/ai-model-control.bin
 open "dist/Model Dial.app"
-\`\`\`
+```
 
 The app needs Accessibility permission to post app shortcuts. Its **Open at
 login** control registers the app with macOS. The app must run in the logged-in
 desktop session; a system daemon cannot inspect or control the foreground app.
 The menu's **Settings…** item opens the tabbed ChatGPT, Cursor, and OpenCode
-settings. The **Open Log** item runs \`tail -F\` on the persistent log at
-\`~/Library/Logs/Model Dial/bridge.log\`.
+settings. The **Open Log** item runs `tail -F` on the persistent log at
+`~/Library/Logs/Model Dial/bridge.log`. Logs rotate at 2 MiB and retain one
+previous file (`bridge.log.1`). Pipe reads are assembled into complete UTF-8 lines;
+oversized lines are discarded and EOF removes the reader callback.
 
 ### Cursor effort ranges
 

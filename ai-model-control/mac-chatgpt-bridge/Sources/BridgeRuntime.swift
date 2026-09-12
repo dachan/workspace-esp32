@@ -24,12 +24,13 @@ final class BridgeRuntime {
     private var retryAt: TimeInterval = 0
     private var settleAt: TimeInterval = 0
     private var lastFailure: String?
-    private var cursorFailures = 0
+    private var applyFailures = 0
     private var receivedModel: String?
     private var receivedThinking: String?
     private var lastApplied: [Int32: [SettingKind: String]] = [:]
     private var forceApply = false
     private var bootID: UInt64?
+    private var connectionGeneration: UInt64 = 0
 
     init(options: Options) {
         self.options = options
@@ -65,8 +66,8 @@ final class BridgeRuntime {
         // Changes are never deferred: without focus the dial state lives on the panel only.
         guard DeskFront.isForeground(preferred: options.bundleID) else {
             forceApply = false
-            discardPending("ChatGPT/Cursor is not focused")
-            print("\(stamp()) ignored \(update.kind.rawValue) \(value) (ChatGPT/Cursor is not focused)")
+            discardPending("no supported app is focused")
+            print("\(stamp()) ignored \(update.kind.rawValue) \(value) (no supported app is focused)")
             fflush(stdout)
             return
         }
@@ -81,7 +82,7 @@ final class BridgeRuntime {
     }
 
     private func acceptTarget() {
-        cursorFailures = 0
+        applyFailures = 0
         if targetFocus?.isCurrent != true {
             discardPending("target app changed")
             targetFocus = FocusOperation(preferred: options.bundleID)
@@ -97,7 +98,7 @@ final class BridgeRuntime {
             print("\(stamp()) dropped target (\(reason))")
             fflush(stdout)
         }
-        cursorFailures = 0
+        applyFailures = 0
         desired.removeAll()
         targetFocus = nil
         generation &+= 1
@@ -108,7 +109,9 @@ final class BridgeRuntime {
 
     private func drainSerial() {
         guard let session else { return }
-        for raw in session.readLines() {
+        let lines = session.readLines()
+        resetConnectionIfNeeded(session)
+        for raw in lines {
             if raw.hasPrefix("READY ") {
                 let hex = raw.dropFirst("READY ".count)
                 guard hex.count == 16, let id = UInt64(hex, radix: 16) else { continue }
@@ -118,6 +121,7 @@ final class BridgeRuntime {
                     receivedRevisions.removeAll()
                     receivedModel = nil
                     receivedThinking = nil
+                    lastApplied.removeAll()
                     print("\(stamp()) rx READY \(hex)")
                     fflush(stdout)
                 }
@@ -151,6 +155,18 @@ final class BridgeRuntime {
         }
         session.setPanelFront(DeskFront.panelTitle(preferred: options.bundleID))
         session.flushWrites()
+        resetConnectionIfNeeded(session)
+    }
+
+    private func resetConnectionIfNeeded(_ session: SerialSession) {
+        guard connectionGeneration != session.connectionGeneration else { return }
+        connectionGeneration = session.connectionGeneration
+        discardPending("serial connection changed")
+        receivedRevisions.removeAll()
+        receivedModel = nil
+        receivedThinking = nil
+        bootID = nil
+        lastApplied.removeAll()
     }
 
     private func applyPending() {
@@ -223,30 +239,25 @@ final class BridgeRuntime {
                 case .interrupted:
                     return .interrupted
                 case .failed(let message):
-                    if focus.kind == .cursor {
-                        cursorFailures += 1
-                        if cursorFailures >= 3 {
-                            fputs("chatgpt-bridge: \(message); stopped after 3 attempts until a new dial update or Sync\n", stderr)
-                            discardPending("Cursor apply could not be verified")
-                            return .failed(message)
-                        }
-                    }
-                    if message != lastFailure {
-                        fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)
-                    }
-                    lastFailure = message
-                    retryAt = ProcessInfo.processInfo.systemUptime + retryDelay(for: message)
                     return .failed(message)
                 }
             }
             return inputGuard.isValid ? .applied(path: "guarded transaction") : .interrupted
         }
-        if case .failed(let message) = guardedResult {
-            if message != lastFailure { fputs("chatgpt-bridge: \(message)\n", stderr) }
-            lastFailure = message
-            retryAt = ProcessInfo.processInfo.systemUptime + retryDelay(for: message)
+        if case .failed(let message) = guardedResult, generation == revision {
+            applyFailures += 1
+            if applyFailures >= 3 {
+                fputs("chatgpt-bridge: \(message); stopped after 3 attempts until a new dial update or Sync\n", stderr)
+                discardPending("\(focus.displayName) apply failed")
+            } else {
+                if message != lastFailure {
+                    fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)
+                }
+                lastFailure = message
+                retryAt = ProcessInfo.processInfo.systemUptime + 2
+            }
         }
-        if guardInterrupted {
+        if guardInterrupted, targetFocus === focus {
             discardPending("input guard or apply interrupted")
         }
         if !focus.isCurrent, targetFocus === focus {
@@ -267,10 +278,8 @@ final class BridgeRuntime {
         }
     }
 
-    private func retryDelay(for _: String) -> TimeInterval { 2 }
-
     func run() -> Never {
-        print("watching ChatGPT / Cursor foreground\(session.map { "; listening on \($0.port)" } ?? "") (Ctrl+C to stop)")
+        print("watching ChatGPT / Cursor / OpenCode foreground\(session.map { "; listening on \($0.port)" } ?? "") (Ctrl+C to stop)")
         fflush(stdout)
         while true {
             drainSerial()

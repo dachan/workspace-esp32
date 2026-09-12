@@ -14,6 +14,8 @@ final class SerialSession {
     private let chatGPTThinkingMask: UInt64
     private let cursorModelMask: UInt64
     private var fd: Int32 = -1
+    private(set) var connectionGeneration: UInt64 = 0
+    var isConnected: Bool { fd >= 0 }
     private var pending: [UInt8] = []
     private var discardLine = false
     private var reconnectAt: TimeInterval = 0
@@ -57,6 +59,7 @@ final class SerialSession {
             throw error
         }
         fd = opened
+        connectionGeneration &+= 1
         requestSync()
         nextTimeAt = 0
         panelFrontSent = nil
@@ -68,6 +71,7 @@ final class SerialSession {
         if fd >= 0 {
             Darwin.close(fd)
             fd = -1
+            connectionGeneration &+= 1
         }
         pending.removeAll(keepingCapacity: true)
         discardLine = false
@@ -121,7 +125,8 @@ final class SerialSession {
                 }
             }
         }
-        return lines
+        // A disconnect invalidates even complete frames collected earlier in this poll.
+        return isConnected ? lines : []
     }
 
     // Called only after the value was validated and accepted into the runtime queue.
