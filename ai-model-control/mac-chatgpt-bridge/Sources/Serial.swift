@@ -65,6 +65,8 @@ final class SerialSession {
         panelFrontSent = nil
         lastConnectionError = nil
         fputs("chatgpt-bridge: serial connected; requesting current dial state\n", stderr)
+        print("BRIDGE_STATUS SERIAL_CONNECTED")
+        fflush(stdout)
     }
 
     func close() {
@@ -204,6 +206,8 @@ final class SerialSession {
         if message != lastConnectionError {
             fputs("chatgpt-bridge: \(message); retrying configured port every 2 seconds\n", stderr)
             lastConnectionError = message
+            print("BRIDGE_STATUS SERIAL_UNAVAILABLE")
+            fflush(stdout)
         }
     }
 

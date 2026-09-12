@@ -254,12 +254,12 @@ final class DialController {
 
     private func recordBridgeOutput(_ text: String) {
         message = lastLine(text)
-        if text.contains("serial connected;") { status = "Waiting for panel response" }
+        if text == "BRIDGE_STATUS SERIAL_CONNECTED" { status = "Waiting for panel response" }
         if text.contains(" rx MODEL ") || text.contains(" rx THINKING ")
             || text.contains(" ignored MODEL ") || text.contains(" ignored THINKING ") {
             status = "Panel responding"
         }
-        if text.contains("retrying configured port") { status = "Serial unavailable — retrying" }
+        if text == "BRIDGE_STATUS SERIAL_UNAVAILABLE" { status = "Serial unavailable — retrying" }
         if text.contains("input guard unavailable") { status = "Input permission needed — see log" }
         if text.contains("stopped after 3 attempts") { status = "Apply failed — turn dial or Sync" }
         if text.contains(" posted ") { status = "Panel responding" }

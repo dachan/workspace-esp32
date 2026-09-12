@@ -86,12 +86,19 @@ enum ChatGPTPicker {
               let positionRaw = copy(element, kAXPositionAttribute as String),
               let sizeRaw = copy(element, kAXSizeAttribute as String)
         else { return false }
+        guard CFGetTypeID(positionRaw) == AXValueGetTypeID(),
+              CFGetTypeID(sizeRaw) == AXValueGetTypeID() else { return false }
         let positionValue = positionRaw as! AXValue
         let sizeValue = sizeRaw as! AXValue
+        guard AXValueGetType(positionValue) == .cgPoint,
+              AXValueGetType(sizeValue) == .cgSize else { return false }
         var position = CGPoint.zero
         var size = CGSize.zero
-        AXValueGetValue(positionValue, .cgPoint, &position)
-        AXValueGetValue(sizeValue, .cgSize, &size)
+        guard AXValueGetValue(positionValue, .cgPoint, &position),
+              AXValueGetValue(sizeValue, .cgSize, &size),
+              position.x.isFinite, position.y.isFinite,
+              size.width.isFinite, size.height.isFinite,
+              size.width > 0, size.height > 0 else { return false }
         return Keys.click(
             CGPoint(x: position.x + size.width / 2, y: position.y + size.height / 2),
             pulse: pulse
