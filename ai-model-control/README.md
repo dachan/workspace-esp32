@@ -130,17 +130,19 @@ The alternate `supermini` profile targets the ESP32-S3FH4R2 (4 MB quad flash,
 hardware inventory. It keeps the same rotary-encoder GPIOs and serial protocol
 as the desk target, but uses a compact circular layout and disables touch.
 
-Round-panel wiring:
+Round-panel wiring follows the display header in the supplied photo, from
+top to bottom. On this SPI panel, `SDA` is the MOSI data line and `SCL` is the
+SPI clock; do not reorder the connections by numeric GPIO value.
 
-| Signal | GPIO / rail |
+| Display pin | Connect to ESP32-S3 SuperMini |
 |---|---:|
-| GC9A01 SCL/SCK | 12 |
-| GC9A01 SDA/MOSI | 8 |
-| GC9A01 CS | 11 |
-| GC9A01 DC | 9 |
-| GC9A01 RST | 10 |
-| GC9A01 VCC | 3V3 |
-| GC9A01 GND | GND |
+| RST | GPIO10 |
+| CS | GPIO11 |
+| DC | GPIO9 |
+| SDA (MOSI) | GPIO8 |
+| SCL (SCK) | GPIO12 |
+| GND | GND |
+| VCC | 3V3 |
 | Thinking encoder CLK / DT / SW | 4 / 5 / 6 |
 | Model encoder CLK / DT / SW | 1 / 2 / 7 |
 | Encoder + / GND | 3V3 / GND |

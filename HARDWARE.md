@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-11 (Super Mini radar transmitter build)
+Last inventory pass: 2026-09-13 (SuperMini display header photo)
 
 ## radar-transmitter
 
@@ -73,7 +73,7 @@ Last inventory pass: 2026-09-11 (Super Mini radar transmitter build)
 
 - MCU: ESP32-S3FH4R2 Super Mini — 4 MB in-package quad flash, 2 MB in-package quad PSRAM; single-core board variant per supplier listing
 - MAC: 90:da:72:73:5a:64
-- Display: **1.28-inch round 240x240 GC9A01 SPI** — VCC 3V3, GND GND, SCK GPIO12, MOSI GPIO8, CS GPIO11, DC GPIO9, RST GPIO10; no MISO or separate BL connection
+- Display: **1.28-inch round 240x240 GC9A01 SPI** — display-header order is `RST → CS → DC → SDA → SCL → GND → VCC`, wired to GPIO10 → GPIO11 → GPIO9 → GPIO8 (MOSI) → GPIO12 (SCK) → GND → 3V3; no MISO or separate BL connection
 - Onboard indicator: GPIO48 WS2812 RGB LED; firmware sends an all-zero frame at boot and holds GPIO48 (and GPIO21) low so the data line cannot float
 - Display settings: GC9A01 native 240×240, SPI 26 MHz, `invert_color(true)`, RGB; MADCTL `swap_xy(false)`, `mirror(false, false)`; software row reverse in `display_flush()` so glyphs read LTR (hardware 180 left letters backwards)
 - Rotary encoders: same KY-040-style pair using the accessible outer headers — thinking CLK/DT/SW GPIO4/5/6; model CLK/DT/SW GPIO1/2/7; encoder + to 3V3 and grounds to GND. GPIO3 is left unused because it is a boot-strapping pin. Both knobs use PCNT (sampled on a 1 ms task) so the round-panel SPI flush cannot drop detents.
@@ -86,7 +86,8 @@ Last inventory pass: 2026-09-11 (Super Mini radar transmitter build)
 ## ai-model-control supermini target (new board)
 
 - MCU: ESP32-S3 QFN56 rev v0.2 — embedded 4 MB flash, embedded 2 MB PSRAM, dual core, 40 MHz XTAL
-- Display / peripherals: **unknown**; the flashed firmware expects the 1.28-inch round GC9A01 panel and two rotary encoders documented in `ai-model-control/README.md`, but this board's external wiring has not been verified
+- Display / peripherals: external round SPI panel photographed; controller/model is not marked in the photo. The flashed firmware expects the 1.28-inch round GC9A01 panel and two rotary encoders documented in `ai-model-control/README.md`.
+- Display header order from the supplied photo (top to bottom): `RST → CS → DC → SDA → SCL → GND → 3V3`; expected SuperMini connections are GPIO10 → GPIO11 → GPIO9 → GPIO8 → GPIO12 → GND → 3V3. Physical connection to this board remains unverified.
 - Firmware: `ai-model-control/` with `AI_MODEL_PROFILE=supermini`; v0.90
 - Mac USB serial: `/dev/cu.usbmodem21101` (re-verify after replug)
 - Last verified: 2026-09-13 — full SuperMini-profile flash from commit `ab3f29d`, independent bootloader/partition/application readback verification, 2 MB PSRAM test OK, and sustained `READY` announcements with no watchdog reset
