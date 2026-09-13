@@ -87,7 +87,7 @@ Last inventory pass: 2026-09-13 (SuperMini display header photo)
 
 - MCU: ESP32-S3 QFN56 rev v0.2 — embedded 4 MB flash, embedded 2 MB PSRAM, dual core, 40 MHz XTAL
 - Display / peripherals: external round SPI panel photographed; controller/model is not marked in the photo. The flashed firmware expects the 1.28-inch round GC9A01 panel and two rotary encoders documented in `ai-model-control/README.md`.
-- Display header order from the supplied photo (top to bottom): `RST → CS → DC → SDA → SCL → GND → 3V3`; expected SuperMini connections are GPIO10 → GPIO11 → GPIO9 → GPIO8 → GPIO12 → GND → 3V3. Physical connection to this board remains unverified.
+- Display header order from the supplied photo (top to bottom): `RST → CS → DC → SDA → SCL → GND → 3V3`; expected SuperMini connections for the new build are GPIO8 → GPIO9 → GPIO10 → GPIO11 → GPIO12 → GND → 3V3. Physical connection to this board remains unverified.
 - Firmware: `ai-model-control/` with `AI_MODEL_PROFILE=supermini`; v0.90
 - Mac USB serial: `/dev/cu.usbmodem21101` (re-verify after replug)
 - Last verified: 2026-09-13 — full SuperMini-profile flash from commit `ab3f29d`, independent bootloader/partition/application readback verification, 2 MB PSRAM test OK, and sustained `READY` announcements with no watchdog reset

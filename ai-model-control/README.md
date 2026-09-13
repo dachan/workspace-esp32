@@ -132,14 +132,15 @@ as the desk target, but uses a compact circular layout and disables touch.
 
 Round-panel wiring follows the display header in the supplied photo, from
 top to bottom. On this SPI panel, `SDA` is the MOSI data line and `SCL` is the
-SPI clock; do not reorder the connections by numeric GPIO value.
+SPI clock. The new SuperMini build maps the display header straight across to
+GPIO8 through GPIO12 in the same physical order.
 
 | Display pin | Connect to ESP32-S3 SuperMini |
 |---|---:|
-| RST | GPIO10 |
-| CS | GPIO11 |
-| DC | GPIO9 |
-| SDA (MOSI) | GPIO8 |
+| RST | GPIO8 |
+| CS | GPIO9 |
+| DC | GPIO10 |
+| SDA (MOSI) | GPIO11 |
 | SCL (SCK) | GPIO12 |
 | GND | GND |
 | VCC | 3V3 |

@@ -27,10 +27,10 @@ static const char *TAG = "display";
 #if defined(AI_MODEL_PROFILE_SUPERMINI)
 /* ESP32S3SuperMini + 1.28" 240x240 GC9A01. The round module has no MISO
  * or separately controlled backlight pin; its VCC/LED is a 3.3 V load. */
-#define PIN_MOSI   8
-#define PIN_DC     9
-#define PIN_RST    10
-#define PIN_CS     11
+#define PIN_RST    8
+#define PIN_CS     9
+#define PIN_DC     10
+#define PIN_MOSI   11
 #define PIN_SCK    12
 #define LCD_PIXEL_CLK (26 * 1000 * 1000)
 #else
