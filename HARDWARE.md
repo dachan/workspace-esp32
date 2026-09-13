@@ -3,7 +3,19 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-13 (SuperMini display header photo)
+Last inventory pass: 2026-09-13 (ESP32 device-to-build matching)
+
+## ESP32 device/build matching
+
+Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS can renumber after replug. Match the live board by MAC/chip and visible wiring first, then flash the matching build:
+
+| Board | Stable identity | Correct build | Do not confuse with |
+|---|---|---|---|
+| 3.5-inch ai-model-control desk panel | MAC `28:84:85:44:1b:5c`, 16 MB / 8 MB PSRAM class, ST7796U panel | `ai-model-control/` legacy profile | SuperMini 4 MB images |
+| Original round ai-model-control SuperMini | MAC `90:da:72:73:5a:64`, old round-display wiring `RST/CS/DC/SDA/SCL -> GPIO10/11/9/8/12` | `ai-model-control/build-supermini-1000hz` | New ordered-pin build |
+| New round ai-model-control SuperMini | ESP32-S3 QFN56 rev v0.2, 4 MB flash / 2 MB PSRAM, display wired `RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12` | `ai-model-control/build-supermini-new-order` | Original round build |
+| Radar transmitter SuperMini | MAC `d4:05:92:47:d1:6c`, LD2450 UART on GPIO4/GPIO5 | `radar/build-radar-transmitter-supermini` | ai-model-control SuperMini images |
+
 
 ## radar-transmitter
 
@@ -78,7 +90,7 @@ Last inventory pass: 2026-09-13 (SuperMini display header photo)
 - Display settings: GC9A01 native 240×240, SPI 26 MHz, `invert_color(true)`, RGB; MADCTL `swap_xy(false)`, `mirror(false, false)`; software row reverse in `display_flush()` so glyphs read LTR (hardware 180 left letters backwards)
 - Rotary encoders: same KY-040-style pair using the accessible outer headers — thinking CLK/DT/SW GPIO4/5/6; model CLK/DT/SW GPIO1/2/7; encoder + to 3V3 and grounds to GND. GPIO3 is left unused because it is a boot-strapping pin. Both knobs use PCNT (sampled on a 1 ms task) so the round-panel SPI flush cannot drop detents.
 - Touch: none identified; round profile disables FT6336 initialization and uses the Model Dial helper's Sync command
-- Firmware expected: `ai-model-control/` with `AI_MODEL_PROFILE=supermini`; `sdkconfig.defaults.supermini`; v0.90
+- Firmware expected: original round-display image from `ai-model-control/build-supermini-1000hz` (old display order); do not flash `build-supermini-new-order` unless this board is rewired to RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12.
 - Mac USB serial: `/dev/cu.usbmodem21101` (re-verify if the CDC address changes after replug)
 - Last verified: 2026-09-11 — application-only reflash of `build-supermini-1000hz` v0.90 to `/dev/cu.usbmodem21101` (hash verified, NVS preserved). Chip matched ESP32-S3 QFN56 rev v0.2, 4 MB flash + 2 MB PSRAM, MAC `90:da:72:73:5a:64`. Firmware SHA-256 `c58ad39d99e8bb6f845b7881c144b311688f1c520d9aabf3bd73599829f56a66`. This image uses a black/grayscale round UI and screensaver, standard 5×7 thinking text at 1× scale in the same white as the model name, 24 px model-to-thinking spacing, 8 px thinking-bar segments with 8 px gaps and a 4 px corner radius, and holds the GPIO48 WS2812 data line low after an RGB-off frame.
 - Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
@@ -88,7 +100,7 @@ Last inventory pass: 2026-09-13 (SuperMini display header photo)
 - MCU: ESP32-S3 QFN56 rev v0.2 — embedded 4 MB flash, embedded 2 MB PSRAM, dual core, 40 MHz XTAL
 - Display / peripherals: external round SPI panel photographed; controller/model is not marked in the photo. The flashed firmware expects the 1.28-inch round GC9A01 panel and two rotary encoders documented in `ai-model-control/README.md`.
 - Display header order from the supplied photo (top to bottom): `RST → CS → DC → SDA → SCL → GND → 3V3`; expected SuperMini connections for the new build are GPIO8 → GPIO9 → GPIO10 → GPIO11 → GPIO12 → GND → 3V3. Physical connection to this board remains unverified.
-- Firmware: `ai-model-control/` with `AI_MODEL_PROFILE=supermini`; v0.90
+- Firmware: new ordered-pin image from `ai-model-control/build-supermini-new-order` (commit `6e72c2b`); display order RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12.
 - Mac USB serial: `/dev/cu.usbmodem21101` (re-verify after replug)
 - Last verified: 2026-09-13 — full SuperMini-profile flash from commit `ab3f29d`, independent bootloader/partition/application readback verification, 2 MB PSRAM test OK, and sustained `READY` announcements with no watchdog reset
 - Notes: USB Serial/JTAG board newly identified on this date. Do not assume it is wired like an older SuperMini; verify every external connection before applying the documented GC9A01/encoder map.
@@ -100,7 +112,7 @@ Last inventory pass: 2026-09-13 (SuperMini display header photo)
 - Display / role: LD2450 UART sensor + ESP-NOW transmitter; optional WS2812B motion bar on GPIO1
 - LD2450 wiring: 5V→5V, GND→GND, TX→GPIO4 (UART RX), RX→GPIO5 (UART TX); GPIO3 unused
 - Touch: none
-- Firmware: `radar/` with `RADAR_LINK_ROLE=transmitter` and `RADAR_BOARD=supermini`; `sdkconfig.defaults.supermini`
+- Firmware: `radar/build-radar-transmitter-supermini`; `RADAR_LINK_ROLE=transmitter`, `RADAR_BOARD=supermini`, `sdkconfig.defaults.supermini`
 - Mac USB serial: `/dev/cu.usbmodem21201` (re-verify if the CDC address changes after replug)
 - Last verified: 2026-09-11 — full flash of `build-radar-transmitter-supermini` to `/dev/cu.usbmodem21201` (hash verified). Chip matched ESP32-S3 QFN56 rev v0.2, 4 MB flash + 2 MB PSRAM, MAC `d4:05:92:47:d1:6c`. Firmware SHA-256 `eb56b7f5397b7bd595c860c1bca7c86b062827a329baeffb4ed6358f7df089ce`. Boot log showed `headless LD2450 ESP-NOW transmitter start (Super Mini)` then `ESP_ERR_NOT_FOUND` because the LD2450 was not attached yet.
 - Notes: this board currently enumerates on the CDC path previously used by the 3.5" desk panel. Do not flash the 16 MB transmitter or ST7796 desk image here.
