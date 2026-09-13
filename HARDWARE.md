@@ -83,6 +83,15 @@ Last inventory pass: 2026-09-11 (Super Mini radar transmitter build)
 - Last verified: 2026-09-11 — application-only reflash of `build-supermini-1000hz` v0.90 to `/dev/cu.usbmodem21101` (hash verified, NVS preserved). Chip matched ESP32-S3 QFN56 rev v0.2, 4 MB flash + 2 MB PSRAM, MAC `90:da:72:73:5a:64`. Firmware SHA-256 `c58ad39d99e8bb6f845b7881c144b311688f1c520d9aabf3bd73599829f56a66`. This image uses a black/grayscale round UI and screensaver, standard 5×7 thinking text at 1× scale in the same white as the model name, 24 px model-to-thinking spacing, 8 px thinking-bar segments with 8 px gaps and a 4 px corner radius, and holds the GPIO48 WS2812 data line low after an RGB-off frame.
 - Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
 
+## ai-model-control supermini target (new board)
+
+- MCU: ESP32-S3 QFN56 rev v0.2 — embedded 4 MB flash, embedded 2 MB PSRAM, dual core, 40 MHz XTAL
+- Display / peripherals: **unknown**; the flashed firmware expects the 1.28-inch round GC9A01 panel and two rotary encoders documented in `ai-model-control/README.md`, but this board's external wiring has not been verified
+- Firmware: `ai-model-control/` with `AI_MODEL_PROFILE=supermini`; v0.90
+- Mac USB serial: `/dev/cu.usbmodem21101` (re-verify after replug)
+- Last verified: 2026-09-13 — full SuperMini-profile flash from commit `ab3f29d`, independent bootloader/partition/application readback verification, 2 MB PSRAM test OK, and sustained `READY` announcements with no watchdog reset
+- Notes: USB Serial/JTAG board newly identified on this date. Do not assume it is wired like an older SuperMini; verify every external connection before applying the documented GC9A01/encoder map.
+
 ## radar-transmitter supermini
 
 - MCU: ESP32-S3 (QFN56) rev v0.2 — embedded 4 MB flash (XMC), embedded 2 MB PSRAM (AP_3v3), 40 MHz XTAL; Super Mini class matching ESP32-S3FH4R2
