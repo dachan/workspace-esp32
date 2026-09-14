@@ -72,6 +72,13 @@ static uint8_t scale_channel(uint8_t value, uint8_t brightness)
     return ((uint16_t)value * brightness) / 255;
 }
 
+static uint8_t pastel_channel(uint8_t value, uint8_t brightness)
+{
+    const uint8_t white_mix = 150;
+    uint8_t shaded = scale_channel(value, brightness);
+    return white_mix + ((uint16_t)(255 - white_mix) * shaded) / 255;
+}
+
 static void initialize_fluid_sine(void)
 {
     if (s_fluid_sine_ready) {
@@ -90,20 +97,23 @@ static uint16_t rainbow_color(uint8_t position, uint8_t brightness)
     uint8_t green;
     uint8_t blue;
     if (position < 85) {
-        red = scale_channel(255 - position * 3, brightness);
-        green = scale_channel(position * 3, brightness);
+        red = 255 - position * 3;
+        green = position * 3;
         blue = 0;
     } else if (position < 170) {
         position -= 85;
         red = 0;
-        green = scale_channel(255 - position * 3, brightness);
-        blue = scale_channel(position * 3, brightness);
+        green = 255 - position * 3;
+        blue = position * 3;
     } else {
         position -= 170;
-        red = scale_channel(position * 3, brightness);
+        red = position * 3;
         green = 0;
-        blue = scale_channel(255 - position * 3, brightness);
+        blue = 255 - position * 3;
     }
+    red = pastel_channel(red, brightness);
+    green = pastel_channel(green, brightness);
+    blue = pastel_channel(blue, brightness);
     return ((uint16_t)(red & 0xf8) << 8) |
            ((uint16_t)(green & 0xfc) << 3) |
            (blue >> 3);
