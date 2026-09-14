@@ -46,6 +46,9 @@ static bool s_fluid_palette_ready;
 static TickType_t s_fps_window_start;
 static uint16_t s_frames_since_fps_update;
 static uint8_t s_frames_per_second;
+static TickType_t s_last_color_ticks;
+static TickType_t s_last_blur_ticks;
+static TickType_t s_last_transfer_ticks;
 
 static esp_err_t write_bytes(const void *data, size_t length, bool command)
 {
@@ -305,7 +308,11 @@ static void update_fps_counter(void)
     if (elapsed_ticks >= pdMS_TO_TICKS(1000)) {
         s_frames_per_second = ((uint32_t)s_frames_since_fps_update * configTICK_RATE_HZ) /
                               elapsed_ticks;
-        ESP_LOGI(TAG, "screensaver FPS: %u", (unsigned)s_frames_per_second);
+        ESP_LOGI(TAG, "screensaver FPS: %u (color=%u ms blur=%u ms transfer=%u ms)",
+                 (unsigned)s_frames_per_second,
+                 (unsigned)pdTICKS_TO_MS(s_last_color_ticks),
+                 (unsigned)pdTICKS_TO_MS(s_last_blur_ticks),
+                 (unsigned)pdTICKS_TO_MS(s_last_transfer_ticks));
         s_frames_since_fps_update = 0;
         s_fps_window_start = now;
     }
@@ -410,14 +417,21 @@ esp_err_t st7735_render_screensaver(uint8_t phase)
     }
     initialize_fluid_sine();
     initialize_fluid_palette();
+    TickType_t color_start = xTaskGetTickCount();
     for (int y = 0; y < TFT_HEIGHT; ++y) {
         for (int x = 0; x < TFT_WIDTH; ++x) {
             s_framebuffer[y * TFT_WIDTH + x] = fluid_color(x, y, phase);
         }
     }
+    TickType_t blur_start = xTaskGetTickCount();
     apply_gaussian_blur();
+    TickType_t transfer_start = xTaskGetTickCount();
     draw_fps_counter();
     esp_err_t err = flush_framebuffer();
+    TickType_t transfer_end = xTaskGetTickCount();
+    s_last_color_ticks = blur_start - color_start;
+    s_last_blur_ticks = transfer_start - blur_start;
+    s_last_transfer_ticks = transfer_end - transfer_start;
     if (err == ESP_OK) {
         update_fps_counter();
     }
