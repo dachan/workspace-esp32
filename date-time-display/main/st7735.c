@@ -8,6 +8,7 @@
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -23,6 +24,10 @@ static const char *TAG = "st7735";
 #define TFT_SPI_HZ (26 * 1000 * 1000)
 #define TFT_TRANSFER_ROWS 16
 #define FLUID_TABLE_SIZE 256
+#define FPS_GLYPH_WIDTH 3
+#define FPS_GLYPH_HEIGHT 5
+#define FPS_GLYPH_SCALE 2
+#define FPS_GLYPH_SPACING 2
 
 static spi_device_handle_t s_spi;
 static uint16_t *s_framebuffer;
@@ -30,6 +35,9 @@ static uint8_t s_fluid_sine[FLUID_TABLE_SIZE];
 static uint16_t s_blur_previous[TFT_WIDTH];
 static uint16_t s_blur_current[TFT_WIDTH];
 static bool s_fluid_sine_ready;
+static int64_t s_fps_window_start_us;
+static uint16_t s_frames_since_fps_update;
+static uint8_t s_frames_per_second;
 
 static esp_err_t write_bytes(const void *data, size_t length, bool command)
 {
@@ -170,6 +178,104 @@ static void apply_gaussian_blur(void)
     }
 }
 
+typedef struct {
+    char character;
+    uint8_t rows[FPS_GLYPH_HEIGHT];
+} fps_glyph_t;
+
+static const fps_glyph_t s_fps_glyphs[] = {
+    {'F', {0x7, 0x4, 0x6, 0x4, 0x4}},
+    {'P', {0x6, 0x5, 0x6, 0x4, 0x4}},
+    {'S', {0x3, 0x4, 0x2, 0x1, 0x6}},
+    {'0', {0x7, 0x5, 0x5, 0x5, 0x7}},
+    {'1', {0x2, 0x6, 0x2, 0x2, 0x7}},
+    {'2', {0x6, 0x1, 0x2, 0x4, 0x7}},
+    {'3', {0x6, 0x1, 0x2, 0x1, 0x6}},
+    {'4', {0x5, 0x5, 0x7, 0x1, 0x1}},
+    {'5', {0x7, 0x4, 0x6, 0x1, 0x6}},
+    {'6', {0x3, 0x4, 0x7, 0x5, 0x7}},
+    {'7', {0x7, 0x1, 0x2, 0x2, 0x2}},
+    {'8', {0x7, 0x5, 0x7, 0x5, 0x7}},
+    {'9', {0x7, 0x5, 0x7, 0x1, 0x6}},
+};
+
+static const uint8_t *fps_glyph_rows(char character)
+{
+    for (size_t index = 0; index < sizeof(s_fps_glyphs) / sizeof(s_fps_glyphs[0]); ++index) {
+        if (s_fps_glyphs[index].character == character) {
+            return s_fps_glyphs[index].rows;
+        }
+    }
+    return NULL;
+}
+
+static uint16_t dim_color(uint16_t color)
+{
+    return (color >> 1) & 0x7bef;
+}
+
+static void draw_fps_glyph(char character, int origin_x, int origin_y)
+{
+    const uint8_t *rows = fps_glyph_rows(character);
+    if (rows == NULL) {
+        return;
+    }
+    for (int row = 0; row < FPS_GLYPH_HEIGHT; ++row) {
+        for (int column = 0; column < FPS_GLYPH_WIDTH; ++column) {
+            if ((rows[row] & (1 << (FPS_GLYPH_WIDTH - column - 1))) == 0) {
+                continue;
+            }
+            for (int y = 0; y < FPS_GLYPH_SCALE; ++y) {
+                for (int x = 0; x < FPS_GLYPH_SCALE; ++x) {
+                    int pixel_x = origin_x + column * FPS_GLYPH_SCALE + x;
+                    int pixel_y = origin_y + row * FPS_GLYPH_SCALE + y;
+                    s_framebuffer[pixel_y * TFT_WIDTH + pixel_x] = 0xffff;
+                }
+            }
+        }
+    }
+}
+
+static void draw_fps_counter(void)
+{
+    enum {
+        text_length = 6,
+        glyph_advance = FPS_GLYPH_WIDTH * FPS_GLYPH_SCALE + FPS_GLYPH_SPACING,
+        panel_width = text_length * glyph_advance - FPS_GLYPH_SPACING + 4,
+        panel_height = FPS_GLYPH_HEIGHT * FPS_GLYPH_SCALE + 4,
+        panel_x = TFT_WIDTH - panel_width - 2,
+        panel_y = TFT_HEIGHT - panel_height - 2,
+    };
+    uint8_t displayed_fps = s_frames_per_second > 99 ? 99 : s_frames_per_second;
+    char text[] = {'F', 'P', 'S', ' ', '0' + displayed_fps / 10,
+                   '0' + displayed_fps % 10};
+
+    for (int y = panel_y; y < panel_y + panel_height; ++y) {
+        for (int x = panel_x; x < panel_x + panel_width; ++x) {
+            int pixel_index = y * TFT_WIDTH + x;
+            s_framebuffer[pixel_index] = dim_color(dim_color(s_framebuffer[pixel_index]));
+        }
+    }
+    for (int index = 0; index < text_length; ++index) {
+        draw_fps_glyph(text[index], panel_x + 2 + index * glyph_advance, panel_y + 2);
+    }
+}
+
+static void update_fps_counter(void)
+{
+    int64_t now = esp_timer_get_time();
+    if (s_fps_window_start_us == 0) {
+        s_fps_window_start_us = now;
+    }
+    ++s_frames_since_fps_update;
+    int64_t elapsed_us = now - s_fps_window_start_us;
+    if (elapsed_us >= 1000000) {
+        s_frames_per_second = ((uint64_t)s_frames_since_fps_update * 1000000) / elapsed_us;
+        s_frames_since_fps_update = 0;
+        s_fps_window_start_us = now;
+    }
+}
+
 static esp_err_t flush_framebuffer(void)
 {
     ESP_RETURN_ON_ERROR(set_window(0, 0, TFT_WIDTH - 1, TFT_HEIGHT - 1), TAG,
@@ -274,5 +380,10 @@ esp_err_t st7735_render_screensaver(uint8_t phase)
         }
     }
     apply_gaussian_blur();
-    return flush_framebuffer();
+    draw_fps_counter();
+    esp_err_t err = flush_framebuffer();
+    if (err == ESP_OK) {
+        update_fps_counter();
+    }
+    return err;
 }
