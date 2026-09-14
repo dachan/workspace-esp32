@@ -1,9 +1,11 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
 
+#include "driver/usb_serial_jtag.h"
 #include "esp_log.h"
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -75,6 +77,18 @@ static time_t load_time(void)
     return build_time();
 }
 
+static bool s_usb_serial_ready;
+
+static void serial_write(const char *text)
+{
+    if (s_usb_serial_ready) {
+        usb_serial_jtag_write_bytes(text, strlen(text), 0);
+    } else {
+        fputs(text, stdout);
+        fflush(stdout);
+    }
+}
+
 static void print_current_time(void)
 {
     time_t now = time(NULL);
@@ -84,15 +98,49 @@ static void print_current_time(void)
     char clock_text[16];
     strftime(date, sizeof(date), "%Y-%m-%d", &local);
     strftime(clock_text, sizeof(clock_text), "%H:%M:%S", &local);
-    printf("TIME %s %s\n", date, clock_text);
-    fflush(stdout);
+    char line[48];
+    snprintf(line, sizeof(line), "TIME %s %s\n", date, clock_text);
+    serial_write(line);
 }
 
 static void serial_task(void *arg)
 {
     (void)arg;
+    usb_serial_jtag_driver_config_t config = {
+        .rx_buffer_size = 1024,
+        .tx_buffer_size = 1024,
+    };
+    esp_err_t driver_err = usb_serial_jtag_driver_install(&config);
+    if (driver_err != ESP_OK) {
+        ESP_LOGW(TAG, "USB Serial/JTAG input unavailable: %s", esp_err_to_name(driver_err));
+        vTaskDelete(NULL);
+        return;
+    }
+    s_usb_serial_ready = true;
+    ESP_LOGI(TAG, "USB Serial/JTAG clock input ready");
+
     char line[64];
-    while (fgets(line, sizeof(line), stdin) != NULL) {
+    size_t line_length = 0;
+    uint8_t chunk[64];
+    while (true) {
+        int count = usb_serial_jtag_read_bytes(chunk, sizeof(chunk), pdMS_TO_TICKS(20));
+        if (count <= 0) {
+            continue;
+        }
+        for (int index = 0; index < count; ++index) {
+            char c = (char)chunk[index];
+            if (c == '\r') {
+                continue;
+            }
+            if (c != '\n') {
+                if (line_length + 1 < sizeof(line)) {
+                    line[line_length++] = c;
+                }
+                continue;
+            }
+            line[line_length] = '\0';
+            line_length = 0;
+
         int year, month, day, hour, minute, second;
         if (sscanf(line, "TIME %d-%d-%d %d:%d:%d",
                    &year, &month, &day, &hour, &minute, &second) == 6) {
@@ -109,17 +157,17 @@ static void serial_task(void *arg)
             struct timeval tv = {.tv_sec = epoch, .tv_usec = 0};
             settimeofday(&tv, NULL);
             persist_time(epoch);
-            printf("TIME SET %04d-%02d-%02d %02d:%02d:%02d\n",
-                   year, month, day, hour, minute, second);
-            fflush(stdout);
+            char response[48];
+            snprintf(response, sizeof(response), "TIME SET %04d-%02d-%02d %02d:%02d:%02d\n",
+                     year, month, day, hour, minute, second);
+            serial_write(response);
         } else if (strncmp(line, "TIME", 4) == 0) {
             print_current_time();
         } else {
-            printf("Commands: TIME YYYY-MM-DD HH:MM:SS | TIME\n");
-            fflush(stdout);
+            serial_write("Commands: TIME YYYY-MM-DD HH:MM:SS | TIME\n");
+        }
         }
     }
-    vTaskDelete(NULL);
 }
 
 void app_main(void)
