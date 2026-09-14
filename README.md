@@ -3,6 +3,11 @@
 ESP32-S3 firmware for radar displays, shared peripherals, addressable LEDs, and
 a portable virtual pet.
 
+Device labels use `<MCU>-<DISPLAY>-<PROGRAM>`, for example
+`ESP32_S3-128_tft_240x240-AI_Model_Control`. See `AGENTS.md` for the canonical
+MCU, display, and program tokens; source directories and build paths retain
+their technical names.
+
 ## Projects
 
 - `radar/` — 3.5-inch LD2450 sensor/transmitter and 2.8-inch ESP-NOW receiver

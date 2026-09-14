@@ -9,15 +9,15 @@ Last inventory pass: 2026-09-13 (ESP32 device-to-build matching)
 
 Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS can renumber after replug. Match the live board by MAC/chip and visible wiring first, then flash the matching build:
 
-| Board | Stable identity | Correct build | Do not confuse with |
+| Canonical device label | Stable identity | Correct build | Do not confuse with |
 |---|---|---|---|
-| 3.5-inch ai-model-control desk panel | MAC `28:84:85:44:1b:5c`, 16 MB / 8 MB PSRAM class, ST7796U panel | `ai-model-control/` legacy profile | SuperMini 4 MB images |
-| Original round ai-model-control SuperMini | MAC `90:da:72:73:5a:64`, old round-display wiring `RST/CS/DC/SDA/SCL -> GPIO10/11/9/8/12` | `ai-model-control/build-supermini-1000hz` | New ordered-pin build |
-| New round ai-model-control SuperMini | MAC `d4:05:92:47:d5:1c`, ESP32-S3 QFN56 rev v0.2, 4 MB flash / 2 MB PSRAM, display wired `RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12` | `ai-model-control/build-supermini-new-order-rotated` | Original round build |
-| Radar transmitter SuperMini | MAC `d4:05:92:47:d1:6c`, LD2450 UART on GPIO4/GPIO5 | `radar/build-radar-transmitter-supermini` | ai-model-control SuperMini images |
+| `ESP32_S3-35_tft__touch_480x320-AI_Model_Control` | MAC `28:84:85:44:1b:5c`, 16 MB / 8 MB PSRAM class, ST7796U panel | `ai-model-control/` legacy profile | Mini 4 MB images |
+| `ESP32_MINI-128_tft_240x240-AI_Model_Control-Original` | MAC `90:da:72:73:5a:64`, old round-display wiring `RST/CS/DC/SDA/SCL -> GPIO10/11/9/8/12` | `ai-model-control/build-supermini-1000hz` | New ordered-pin build |
+| `ESP32_MINI-128_tft_240x240-AI_Model_Control-New` | MAC `d4:05:92:47:d5:1c`, ESP32-S3 QFN56 rev v0.2, 4 MB flash / 2 MB PSRAM, display wired `RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12` | `ai-model-control/build-supermini-new-order-rotated` | Original round build |
+| `ESP32_MINI-no_display-Radar_Sensor` | MAC `d4:05:92:47:d1:6c`, LD2450 UART on GPIO4/GPIO5 | `radar/build-radar-transmitter-supermini` | AI Model Control Mini images |
 
 
-## radar-transmitter
+## ESP32_MINI-no_display-Radar_Sensor
 
 - MCU: ESP32-S3 (radar project)
 - Display / role: LD2450 UART sensor + ESP-NOW transmitter; external WS2812B motion bar (GPIO1)
@@ -26,7 +26,7 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 - Mac serial: unknown
 - Notes: See radar docs; LD2450 is 5 V power / 3.3 V UART
 
-## radar-receiver
+## ESP32_S3-28_tft__touch_320x240-Radar_Receiver
 
 - MCU: ESP32-S3 (radar project)
 - Display: radar UI panel (2.8-inch class per README); SPI display
@@ -35,21 +35,21 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 - Mac serial: unknown
 - Notes: SLEEP / POWER OFF deep-sleep behavior documented in AGENTS.md
 
-## rainbow-wave
+## ESP32_S3-no_display-Rainbow_Wave
 
 - MCU: ESP32-S3
 - Peripherals: WS2812B bar on GPIO1
 - Firmware: `rainbow-wave/`
 - Mac serial: unknown
 
-## super-tamagotchi
+## ESP32_S3-28_tft__touch_320x240-Super_Tamitgotchi
 
 - MCU: ESP32-S3 portable virtual pet
 - Display / touch / audio: see [super-tamagotchi/WIRING.md](super-tamagotchi/WIRING.md)
 - Firmware: `super-tamagotchi/`
 - Mac serial: unknown
 
-## ai-model-control target (model / thinking display)
+## ESP32_S3-35_tft__touch_480x320-AI_Model_Control
 
 - MCU: ESP32-S3 (QFN56) rev v0.2, embedded 8MB PSRAM (AP_3v3), 40MHz XTAL — Lonely Binary N16R8-class
 - MAC: 28:84:85:44:1b:5c
@@ -81,7 +81,7 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 - Last verified: 2026-09-10 — application-only reflash, hash-verified, preserving NVS and the **v0.90** version. The panel has no SYNC control; Model Dial owns Sync, ChatGPT effort, and Cursor model enable lists. Build from commit `fd2c5d2`; firmware SHA-256 `f8f31afe5ca9efabd5ee3440dc20769be1c1123da98393fe8577ed1f28d0b612`. Board identity matched the recorded ESP32-S3. Bridge launched with the configured masks; live serial received ENABLED and both state fields after reconnect. Physical touch behavior was not rechecked; the documented model-knob wiring fault remains unresolved.
 - Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
 
-## ai-model-control supermini target (round model / thinking display)
+## ESP32_MINI-128_tft_240x240-AI_Model_Control-Original
 
 - MCU: ESP32-S3FH4R2 Super Mini — 4 MB in-package quad flash, 2 MB in-package quad PSRAM; single-core board variant per supplier listing
 - MAC: 90:da:72:73:5a:64
@@ -95,7 +95,7 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 - Last verified: 2026-09-11 — application-only reflash of `build-supermini-1000hz` v0.90 to `/dev/cu.usbmodem21101` (hash verified, NVS preserved). Chip matched ESP32-S3 QFN56 rev v0.2, 4 MB flash + 2 MB PSRAM, MAC `90:da:72:73:5a:64`. Firmware SHA-256 `c58ad39d99e8bb6f845b7881c144b311688f1c520d9aabf3bd73599829f56a66`. This image uses a black/grayscale round UI and screensaver, standard 5×7 thinking text at 1× scale in the same white as the model name, 24 px model-to-thinking spacing, 8 px thinking-bar segments with 8 px gaps and a 4 px corner radius, and holds the GPIO48 WS2812 data line low after an RGB-off frame.
 - Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
 
-## ai-model-control supermini target (new board)
+## ESP32_MINI-128_tft_240x240-AI_Model_Control-New
 
 - MCU: ESP32-S3 QFN56 rev v0.2 — embedded 4 MB flash, embedded 2 MB PSRAM, dual core, 40 MHz XTAL
 - MAC: d4:05:92:47:d5:1c
@@ -106,7 +106,7 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 - Last verified: 2026-09-13 — full reflash of `ai-model-control/build-supermini-new-order-rotated` from commit `dc976c3` to `/dev/cu.usbmodem21201` (bootloader, partition table, and application digests matched in a separate esptool verify). Chip matched ESP32-S3 QFN56 rev v0.2 with embedded 4 MB flash + 2 MB PSRAM, MAC `d4:05:92:47:d5:1c`. Firmware SHA-256 `c5262171c04939de9890d4baf3182b029eb87fc076fb15ed64e31e4f48dc03d8`. Boot serial repeated `READY 5ede18f6378879c1` after reset.
 - Notes: USB Serial/JTAG board newly identified on this date. Do not assume it is wired like an older SuperMini; verify every external connection before applying the documented GC9A01/encoder map.
 
-## radar-transmitter supermini
+## ESP32_MINI-no_display-Radar_Sensor (verified hardware)
 
 - MCU: ESP32-S3 (QFN56) rev v0.2 — embedded 4 MB flash (XMC), embedded 2 MB PSRAM (AP_3v3), 40 MHz XTAL; Super Mini class matching ESP32-S3FH4R2
 - MAC: d4:05:92:47:d1:6c

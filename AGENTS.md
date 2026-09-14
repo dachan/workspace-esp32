@@ -10,6 +10,21 @@ is in `radar/`; shared non-radar drivers in `hardware-test/`; the LED demo in
 Read the relevant project README and `super-tamagotchi/WIRING.md` before
 changing firmware or connecting hardware.
 
+## Canonical device naming
+
+Use `<MCU>-<DISPLAY>-<PROGRAM>` for every new device label in hardware
+inventories, flash notes, and user-facing device lists. Use `ESP32_S3` for a
+full-size ESP32-S3 board and `ESP32_MINI` for an ESP32-S3 Mini/SuperMini.
+Display tokens are `35_tft__touch_480x320`, `128_tft_240x240`,
+`28_tft__touch_320x240`, or `no_display`; the 2.8-inch token covers the
+documented ILI9341/FT6336 320x240 panels. Program tokens are
+`Radar_Sensor`, `Radar_Receiver`, `Super_Tamitgotchi`, `AI_Model_Control`, and
+the existing `Rainbow_Wave` LED demo. For duplicate hardware, append a short
+variant such as `-Original` or `-New` after the canonical label. Keep source
+directories and technical build paths unchanged unless explicitly requested.
+
+Example: `ESP32_S3-128_tft_240x240-AI_Model_Control`.
+
 ## Agent workflow (Hetzner edit, Mac flash)
 
 Hard lanes for this repo:
