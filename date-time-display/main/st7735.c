@@ -1,7 +1,5 @@
 #include "st7735.h"
 
-#include <string.h>
-
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_check.h"
@@ -9,7 +7,6 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "font5x7.h"
 
 static const char *TAG = "st7735";
 
@@ -65,41 +62,64 @@ static esp_err_t set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
     return write_command(0x2c);
 }
 
-static void fill(uint16_t color)
+static uint8_t scale_channel(uint8_t value, uint8_t brightness)
 {
-    for (size_t i = 0; i < (size_t)TFT_WIDTH * TFT_HEIGHT; ++i) {
-        s_framebuffer[i] = color;
-    }
+    return ((uint16_t)value * brightness) / 255;
 }
 
-static void draw_text(const char *text, int x, int y, int scale, uint16_t color)
+static uint8_t wave_brightness(uint8_t position, uint8_t phase)
 {
-    for (const char *cursor = text; *cursor != '\0'; ++cursor) {
-        const uint8_t *glyph = date_time_glyph(*cursor);
-        for (int column = 0; column < 5; ++column) {
-            for (int row = 0; row < 7; ++row) {
-                if ((glyph[column] & (1u << row)) == 0) {
-                    continue;
-                }
-                for (int dx = 0; dx < scale; ++dx) {
-                    for (int dy = 0; dy < scale; ++dy) {
-                        int px = x + column * scale + dx;
-                        int py = y + row * scale + dy;
-                        if (px >= 0 && px < TFT_WIDTH && py >= 0 && py < TFT_HEIGHT) {
-                            s_framebuffer[py * TFT_WIDTH + px] = color;
-                        }
-                    }
-                }
-            }
+    uint8_t distance = position - phase;
+    uint8_t folded = distance > 127 ? 255 - distance : distance;
+    uint8_t wave = 255 - (folded * 2);
+    return 48 + ((uint16_t)wave * (255 - 48) / 255);
+}
+
+static uint16_t rainbow_color(uint8_t position, uint8_t brightness)
+{
+    uint8_t red;
+    uint8_t green;
+    uint8_t blue;
+    if (position < 85) {
+        red = scale_channel(255 - position * 3, brightness);
+        green = scale_channel(position * 3, brightness);
+        blue = 0;
+    } else if (position < 170) {
+        position -= 85;
+        red = 0;
+        green = scale_channel(255 - position * 3, brightness);
+        blue = scale_channel(position * 3, brightness);
+    } else {
+        position -= 170;
+        red = scale_channel(position * 3, brightness);
+        green = 0;
+        blue = scale_channel(255 - position * 3, brightness);
+    }
+    return ((uint16_t)(red & 0xf8) << 8) |
+           ((uint16_t)(green & 0xfc) << 3) |
+           (blue >> 3);
+}
+
+static esp_err_t flush_framebuffer(void)
+{
+    ESP_RETURN_ON_ERROR(set_window(0, 0, TFT_WIDTH - 1, TFT_HEIGHT - 1), TAG,
+                        "set address window");
+    gpio_set_level(TFT_PIN_DC, 1);
+    for (int row = 0; row < TFT_HEIGHT; row += TFT_TRANSFER_ROWS) {
+        int rows = TFT_HEIGHT - row;
+        if (rows > TFT_TRANSFER_ROWS) {
+            rows = TFT_TRANSFER_ROWS;
         }
-        x += 6 * scale;
+        spi_transaction_t transaction = {
+            .length = (size_t)TFT_WIDTH * rows * 16,
+            .tx_buffer = &s_framebuffer[row * TFT_WIDTH],
+        };
+        esp_err_t err = spi_device_transmit(s_spi, &transaction);
+        if (err != ESP_OK) {
+            return err;
+        }
     }
-}
-
-static int text_width(const char *text, int scale)
-{
-    size_t length = strlen(text);
-    return length == 0 ? 0 : (int)(length * 6 * scale - scale);
+    return ESP_OK;
 }
 
 esp_err_t st7735_init(void)
@@ -172,35 +192,18 @@ esp_err_t st7735_init(void)
     return ESP_OK;
 }
 
-esp_err_t st7735_render(const char *date, const char *time_text)
+esp_err_t st7735_render_rainbow(uint8_t phase)
 {
     if (s_framebuffer == NULL) {
         return ESP_ERR_INVALID_STATE;
     }
-    fill(0x0000);
-    int date_scale = 3;
-    int time_scale = 4;
-    draw_text(date, (TFT_WIDTH - text_width(date, date_scale)) / 2, 65,
-              date_scale, 0xffe0);
-    draw_text(time_text, (TFT_WIDTH - text_width(time_text, time_scale)) / 2, 125,
-              time_scale, 0xffff);
-
-    ESP_RETURN_ON_ERROR(set_window(0, 0, TFT_WIDTH - 1, TFT_HEIGHT - 1), TAG,
-                        "set address window");
-    gpio_set_level(TFT_PIN_DC, 1);
-    for (int row = 0; row < TFT_HEIGHT; row += TFT_TRANSFER_ROWS) {
-        int rows = TFT_HEIGHT - row;
-        if (rows > TFT_TRANSFER_ROWS) {
-            rows = TFT_TRANSFER_ROWS;
-        }
-        spi_transaction_t transaction = {
-            .length = (size_t)TFT_WIDTH * rows * 16,
-            .tx_buffer = &s_framebuffer[row * TFT_WIDTH],
-        };
-        esp_err_t err = spi_device_transmit(s_spi, &transaction);
-        if (err != ESP_OK) {
-            return err;
+    for (int x = 0; x < TFT_WIDTH; ++x) {
+        uint8_t position = (uint8_t)(x * 255 / (TFT_WIDTH - 1));
+        uint16_t color = rainbow_color(position - phase,
+                                       wave_brightness(position, phase));
+        for (int y = 0; y < TFT_HEIGHT; ++y) {
+            s_framebuffer[y * TFT_WIDTH + x] = color;
         }
     }
-    return ESP_OK;
+    return flush_framebuffer();
 }

@@ -115,5 +115,6 @@ idf.py -B ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time \
 
 After flashing, send `TIME YYYY-MM-DD HH:MM:SS` over the 115200-baud USB
 serial console, or use the joystick controls above. The value is saved in NVS
-and both displays update once per second. The firmware starts from its compile
-timestamp until a clock value is received.
+and the OLED shows the centered date above the centered time, updating once per
+second. The TFT independently shows a left-to-right animated rainbow wave. The
+firmware starts from its compile timestamp until a clock value is received.

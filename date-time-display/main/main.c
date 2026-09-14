@@ -18,6 +18,10 @@
 
 static const char *TAG = "date-time";
 
+enum {
+    RAINBOW_FRAME_INTERVAL_MS = 35,
+};
+
 static int month_number(const char *month)
 {
     static const char *names[] = {
@@ -305,16 +309,18 @@ void app_main(void)
     ESP_LOGI(TAG, "dual display date/time ready; joystick SEL edits, MID saves, RST cancels");
 
     TickType_t last_wake = xTaskGetTickCount();
-    time_t last_render_second = (time_t)-1;
+    TickType_t last_tft_frame = 0;
+    time_t last_oled_second = (time_t)-1;
     bool edit_mode = false;
     struct tm edit_time = {0};
     int edit_field = 0;
-    bool force_render = true;
+    bool force_oled_render = true;
+    uint8_t rainbow_phase = 0;
     while (true) {
         joystick_action_t action = joystick_poll();
         if (action != JOYSTICK_NONE) {
             handle_joystick_action(action, &edit_mode, &edit_time, &edit_field);
-            force_render = true;
+            force_oled_render = true;
         }
         time_t now = time(NULL);
         struct tm local;
@@ -327,16 +333,25 @@ void app_main(void)
         char clock_text[16];
         strftime(date, sizeof(date), "%Y-%m-%d", &local);
         strftime(clock_text, sizeof(clock_text), "%H:%M:%S", &local);
-        bool second_changed = now != last_render_second;
-        if (force_render || (!edit_mode && second_changed)) {
-            esp_err_t tft_err = st7735_render(date, clock_text);
-            esp_err_t oled_err = oled_ready ? ssd1306_render(date, clock_text) : ESP_ERR_INVALID_STATE;
-            if (tft_err != ESP_OK || oled_err != ESP_OK) {
-                ESP_LOGW(TAG, "render failed: TFT=%s OLED=%s",
-                         esp_err_to_name(tft_err), esp_err_to_name(oled_err));
+        TickType_t current_tick = xTaskGetTickCount();
+        if (last_tft_frame == 0 ||
+            current_tick - last_tft_frame >= pdMS_TO_TICKS(RAINBOW_FRAME_INTERVAL_MS)) {
+            esp_err_t tft_err = st7735_render_rainbow(rainbow_phase);
+            if (tft_err != ESP_OK) {
+                ESP_LOGW(TAG, "rainbow render failed: TFT=%s", esp_err_to_name(tft_err));
             }
-            last_render_second = now;
-            force_render = false;
+            rainbow_phase += 3;
+            last_tft_frame = current_tick;
+        }
+
+        bool second_changed = now != last_oled_second;
+        if (force_oled_render || (!edit_mode && second_changed)) {
+            esp_err_t oled_err = oled_ready ? ssd1306_render(date, clock_text) : ESP_ERR_INVALID_STATE;
+            if (oled_err != ESP_OK) {
+                ESP_LOGW(TAG, "date/time render failed: OLED=%s", esp_err_to_name(oled_err));
+            }
+            last_oled_second = now;
+            force_oled_render = false;
         }
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(20));
     }

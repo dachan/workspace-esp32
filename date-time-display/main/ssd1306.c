@@ -73,6 +73,12 @@ static void draw_text(const char *text, int x, int y, int scale)
     }
 }
 
+static int text_width(const char *text, int scale)
+{
+    size_t length = strlen(text);
+    return length == 0 ? 0 : (int)(length * 6 * scale - scale);
+}
+
 static esp_err_t refresh(void)
 {
     uint8_t page_data[1 + OLED_WIDTH];
@@ -151,8 +157,17 @@ esp_err_t ssd1306_render(const char *date, const char *time_text)
     if (!s_ready) {
         return ESP_ERR_INVALID_STATE;
     }
+    const int date_scale = 1;
+    const int time_scale = 2;
+    const int line_gap = 6;
+    const int group_height = 7 * date_scale + line_gap + 7 * time_scale;
+    const int date_y = (OLED_HEIGHT - group_height) / 2;
+    const int time_y = date_y + 7 * date_scale + line_gap;
+
     clear_buffer();
-    draw_text(date, 2, 2, 1);
-    draw_text(time_text, 2, 26, 2);
+    draw_text(date, (OLED_WIDTH - text_width(date, date_scale)) / 2,
+              date_y, date_scale);
+    draw_text(time_text, (OLED_WIDTH - text_width(time_text, time_scale)) / 2,
+              time_y, time_scale);
     return refresh();
 }
