@@ -45,8 +45,6 @@ static uint16_t s_fluid_field[FLUID_FIELD_WIDTH * FLUID_FIELD_HEIGHT];
 static uint16_t s_blur_previous[FLUID_FIELD_WIDTH];
 static uint16_t s_blur_current[FLUID_FIELD_WIDTH];
 static uint16_t s_blur_next[FLUID_FIELD_WIDTH];
-static uint16_t s_upscale_current[TFT_WIDTH];
-static uint16_t s_upscale_next[TFT_WIDTH];
 static bool s_fluid_sine_ready;
 static bool s_fluid_palette_ready;
 static TickType_t s_fps_window_start;
@@ -219,47 +217,21 @@ static void apply_gaussian_blur(void)
     }
 }
 
-static uint16_t interpolate_rgb565(uint16_t first, uint16_t second, uint8_t first_weight)
-{
-    uint8_t second_weight = FLUID_SCALE - first_weight;
-    uint16_t red = (((first >> 11) * first_weight) + ((second >> 11) * second_weight) +
-                    FLUID_SCALE / 2) / FLUID_SCALE;
-    uint16_t green = ((((first >> 5) & 0x3f) * first_weight) +
-                      (((second >> 5) & 0x3f) * second_weight) + FLUID_SCALE / 2) /
-                     FLUID_SCALE;
-    uint16_t blue = (((first & 0x1f) * first_weight) + ((second & 0x1f) * second_weight) +
-                     FLUID_SCALE / 2) / FLUID_SCALE;
-    return (red << 11) | (green << 5) | blue;
-}
-
-static void expand_fluid_line(const uint16_t *source, uint16_t *destination)
-{
-    for (int x = 0; x < FLUID_FIELD_WIDTH; ++x) {
-        uint16_t current = source[x];
-        uint16_t next = source[x + 1 < FLUID_FIELD_WIDTH ? x + 1 : x];
-        int destination_x = x * FLUID_SCALE;
-        destination[destination_x] = current;
-        destination[destination_x + 1] =
-            interpolate_rgb565(current, next, FLUID_SCALE - 1);
-        destination[destination_x + 2] = interpolate_rgb565(current, next, 1);
-    }
-}
-
 static void upscale_fluid_field(void)
 {
     for (int y = 0; y < FLUID_FIELD_HEIGHT; ++y) {
         const uint16_t *source = &s_fluid_field[y * FLUID_FIELD_WIDTH];
-        const uint16_t *next_source =
-            &s_fluid_field[(y + 1 < FLUID_FIELD_HEIGHT ? y + 1 : y) * FLUID_FIELD_WIDTH];
         uint16_t *destination = &s_framebuffer[y * FLUID_SCALE * TFT_WIDTH];
-        expand_fluid_line(source, s_upscale_current);
-        expand_fluid_line(next_source, s_upscale_next);
-        memcpy(destination, s_upscale_current, TFT_WIDTH * sizeof(*destination));
-        for (int x = 0; x < TFT_WIDTH; ++x) {
-            destination[TFT_WIDTH + x] =
-                interpolate_rgb565(s_upscale_current[x], s_upscale_next[x], FLUID_SCALE - 1);
-            destination[2 * TFT_WIDTH + x] =
-                interpolate_rgb565(s_upscale_current[x], s_upscale_next[x], 1);
+        for (int x = 0; x < FLUID_FIELD_WIDTH; ++x) {
+            uint16_t color = source[x];
+            int destination_x = x * FLUID_SCALE;
+            for (int scaled_x = 0; scaled_x < FLUID_SCALE; ++scaled_x) {
+                destination[destination_x + scaled_x] = color;
+            }
+        }
+        for (int scaled_y = 1; scaled_y < FLUID_SCALE; ++scaled_y) {
+            memcpy(destination + scaled_y * TFT_WIDTH, destination,
+                   TFT_WIDTH * sizeof(*destination));
         }
     }
 }
@@ -358,7 +330,6 @@ static void update_fps_counter(void)
     if (elapsed_ticks >= pdMS_TO_TICKS(1000)) {
         s_frames_per_second = ((uint32_t)s_frames_since_fps_update * configTICK_RATE_HZ) /
                               elapsed_ticks;
-        ESP_LOGI(TAG, "screensaver FPS: %u", (unsigned)s_frames_per_second);
         s_frames_since_fps_update = 0;
         s_fps_window_start = now;
     }
