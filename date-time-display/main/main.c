@@ -11,6 +11,7 @@
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "indicator_led.h"
 #include "ssd1306.h"
 #include "st7735.h"
 
@@ -187,6 +188,7 @@ void app_main(void)
     struct timeval tv = {.tv_sec = initial, .tv_usec = 0};
     settimeofday(&tv, NULL);
 
+    indicator_leds_off();
     ESP_ERROR_CHECK(st7735_init());
     bool oled_ready = ssd1306_init() == ESP_OK;
     if (!oled_ready) {
