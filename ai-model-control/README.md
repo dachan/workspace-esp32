@@ -302,8 +302,8 @@ Activate the local ESP-IDF environment and set `ESP_PORT` to the verified device
 From this project directory:
 
 ```sh
-idf.py -B ESP32_S3-35_tft__touch_480x320-AI_Model_Control build
-idf.py -B ESP32_S3-35_tft__touch_480x320-AI_Model_Control -p "$ESP_PORT" flash monitor
+idf.py -B ESP32_S3-35_tft_touch_480x320-AI_Model_Control build
+idf.py -B ESP32_S3-35_tft_touch_480x320-AI_Model_Control -p "$ESP_PORT" flash monitor
 ```
 
 Verify the intended board and port before flashing. Use `--list-ports` on the

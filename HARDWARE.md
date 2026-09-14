@@ -11,7 +11,7 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 
 | Canonical device label | Stable identity | Correct build | Do not confuse with |
 |---|---|---|---|
-| `ESP32_S3-35_tft__touch_480x320-AI_Model_Control` | MAC `28:84:85:44:1b:5c`, 16 MB / 8 MB PSRAM class, ST7796U panel | `ai-model-control/ESP32_S3-35_tft__touch_480x320-AI_Model_Control` | Mini 4 MB images |
+| `ESP32_S3-35_tft_touch_480x320-AI_Model_Control` | MAC `28:84:85:44:1b:5c`, 16 MB / 8 MB PSRAM class, ST7796U panel | `ai-model-control/ESP32_S3-35_tft_touch_480x320-AI_Model_Control` | Mini 4 MB images |
 | `ESP32_MINI-128_tft_240x240-AI_Model_Control-Original` | MAC `90:da:72:73:5a:64`, old round-display wiring `RST/CS/DC/SDA/SCL -> GPIO10/11/9/8/12` | `ai-model-control/ESP32_MINI-128_tft_240x240-AI_Model_Control-Original` | New ordered-pin build |
 | `ESP32_MINI-128_tft_240x240-AI_Model_Control-New` | MAC `d4:05:92:47:d5:1c`, ESP32-S3 QFN56 rev v0.2, 4 MB flash / 2 MB PSRAM, display wired `RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12` | `ai-model-control/ESP32_MINI-128_tft_240x240-AI_Model_Control-New` | Original round build |
 | `ESP32_MINI-no_display-Radar_Sensor` | MAC `d4:05:92:47:d1:6c`, LD2450 UART on GPIO4/GPIO5 | `radar/ESP32_MINI-no_display-Radar_Sensor` | AI Model Control Mini images |
@@ -49,7 +49,7 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 - Firmware: `super-tamagotchi/`
 - Mac serial: unknown
 
-## ESP32_S3-35_tft__touch_480x320-AI_Model_Control
+## ESP32_S3-35_tft_touch_480x320-AI_Model_Control
 
 - MCU: ESP32-S3 (QFN56) rev v0.2, embedded 8MB PSRAM (AP_3v3), 40MHz XTAL — Lonely Binary N16R8-class
 - MAC: 28:84:85:44:1b:5c

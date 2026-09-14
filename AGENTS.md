@@ -15,7 +15,7 @@ changing firmware or connecting hardware.
 Use `<MCU>-<DISPLAY>-<PROGRAM>` for every new device label in hardware
 inventories, flash notes, and user-facing device lists. Use `ESP32_S3` for a
 full-size ESP32-S3 board and `ESP32_MINI` for an ESP32-S3 Mini/SuperMini.
-Display tokens are `35_tft__touch_480x320`, `128_tft_240x240`,
+Display tokens are `35_tft_touch_480x320`, `128_tft_240x240`,
 `28_tft__touch_320x240`, or `no_display`; the 2.8-inch token covers the
 documented ILI9341/FT6336 320x240 panels. Program tokens are
 `Radar_Sensor`, `Radar_Receiver`, `Super_Tamitgotchi`, `AI_Model_Control`, and
