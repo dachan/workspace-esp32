@@ -28,7 +28,8 @@ There is no exposed `CS` pin on this module; its chip select is hard-wired on
 the board, and the firmware leaves the ESP32 CS output disabled. `BLK` is the
 backlight supply and should be connected to 3V3 for always-on brightness. On
 this display, `SDA` means SPI serial data/MOSI and `SCK` means SPI clock; neither
-is the OLED's I2C signal.
+is the OLED's I2C signal. Because CS is hard-wired on this variant, the firmware
+uses SPI mode 3.
 
 ### 0.96-inch SSD1306 OLED, 4-pin header
 

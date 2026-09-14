@@ -131,7 +131,8 @@ esp_err_t st7735_init(void)
 
     spi_device_interface_config_t device = {
         .clock_speed_hz = TFT_SPI_HZ,
-        .mode = 0,
+        /* The no-CS 7-pin ST7789 variant samples SPI in mode 3. */
+        .mode = 3,
         /* This 7-pin ST7789 module has no exposed CS; it is hard-wired active. */
         .spics_io_num = -1,
         .queue_size = 1,
