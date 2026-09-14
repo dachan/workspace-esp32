@@ -26,7 +26,7 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 - Wiring: TFT `BLK -> 3V3`, `DC/RES/SDA/SCK -> GPIO10/8/11/12`, `VCC -> 3V3`, `GND -> GND`; no exposed CS; OLED `SDA/SCL -> GPIO6/7`; see [date-time-display/WIRING.md](date-time-display/WIRING.md)
 - Firmware expected: `date-time-display/ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time`
 - Mac USB serial: `/dev/cu.usbmodem5C940014881` (re-verify after replug; macOS may renumber native USB CDC ports)
-- Last verified: 2026-09-14 — chip and flash matched the recorded MAC, full image write verified by esptool, and boot log showed `ST7735 240x240 ready`, `SSD1306 128x64 ready` at `0x3C`, and the joystick-enabled date/time task on commit `4e5a902`; application SHA-256 `93591b91fd8a406bfed082ac8154e662da90d0a36bd6db195468d9b2c6ffc60e`
+- Last verified: 2026-09-14 — chip and flash matched the recorded MAC, full image write verified by esptool, and boot log showed `ST7789 240x240 ready`, `SSD1306 128x64 ready` at `0x3C`, and the joystick-enabled date/time task on commit `e1d1915`; application SHA-256 `d33c6ed019a64acdf70b26d27fa28a484b415fe4c7faa29e8d2238300eb83ada`
 - Notes: the firmware sends an all-zero WS2812 frame on GPIO48 and holds GPIO21 low at boot to turn off common programmable indicators. A hardware power/USB LED, if fitted, is not firmware-controllable. The joystick is a passive active-low switch bank with `COM -> GND` and inputs on GPIO13/14/15/16/17/18/4; see [date-time-display/WIRING.md](date-time-display/WIRING.md). The pictured TFT's backlight is supplied from 3V3 through `BLK`; brightness is not firmware-controlled in this build.
 
 
