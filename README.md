@@ -20,6 +20,8 @@ their technical names.
   ChatGPT, Cursor, and OpenCode, plus
   `ai-model-control/mac-chatgpt-bridge/` macOS CLI that applies encoder `SET` lines over USB
   serial while a supported app is focused (`--watch --send-serial`).
+- `date-time-display/` — dual-display date/time firmware for the 1.3-inch
+  240x240 SPI TFT and 0.96-inch 128x64 I2C OLED.
 
 ## Wiring
 
@@ -43,6 +45,7 @@ Super Tamagotchi firmware --SPI/I2C--> display and touch
 | Standalone LED demo | [rainbow-wave/README.md](rainbow-wave/README.md) |
 | Super Tamagotchi | [README](super-tamagotchi/README.md) · [WIRING](super-tamagotchi/WIRING.md) |
 | AI model control macOS bridge | [ai-model-control/mac-chatgpt-bridge/README.md](ai-model-control/mac-chatgpt-bridge/README.md) |
+| Dual-display date/time | [date-time-display/WIRING.md](date-time-display/WIRING.md) |
 
 Set `IDF_PATH` to a local ESP-IDF installation before using the flash scripts.
 
