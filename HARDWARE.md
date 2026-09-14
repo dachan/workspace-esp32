@@ -13,7 +13,7 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 |---|---|---|---|
 | 3.5-inch ai-model-control desk panel | MAC `28:84:85:44:1b:5c`, 16 MB / 8 MB PSRAM class, ST7796U panel | `ai-model-control/` legacy profile | SuperMini 4 MB images |
 | Original round ai-model-control SuperMini | MAC `90:da:72:73:5a:64`, old round-display wiring `RST/CS/DC/SDA/SCL -> GPIO10/11/9/8/12` | `ai-model-control/build-supermini-1000hz` | New ordered-pin build |
-| New round ai-model-control SuperMini | ESP32-S3 QFN56 rev v0.2, 4 MB flash / 2 MB PSRAM, display wired `RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12` | `ai-model-control/build-supermini-new-order` | Original round build |
+| New round ai-model-control SuperMini | MAC `d4:05:92:47:d5:1c`, ESP32-S3 QFN56 rev v0.2, 4 MB flash / 2 MB PSRAM, display wired `RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12` | `ai-model-control/build-supermini-new-order` | Original round build |
 | Radar transmitter SuperMini | MAC `d4:05:92:47:d1:6c`, LD2450 UART on GPIO4/GPIO5 | `radar/build-radar-transmitter-supermini` | ai-model-control SuperMini images |
 
 
@@ -98,11 +98,12 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 ## ai-model-control supermini target (new board)
 
 - MCU: ESP32-S3 QFN56 rev v0.2 — embedded 4 MB flash, embedded 2 MB PSRAM, dual core, 40 MHz XTAL
+- MAC: d4:05:92:47:d5:1c
 - Display / peripherals: external round SPI panel photographed; controller/model is not marked in the photo. The flashed firmware expects the 1.28-inch round GC9A01 panel and two rotary encoders documented in `ai-model-control/README.md`.
 - Display header order from the supplied photo (top to bottom): `RST → CS → DC → SDA → SCL → GND → 3V3`; expected SuperMini connections for the new build are GPIO8 → GPIO9 → GPIO10 → GPIO11 → GPIO12 → GND → 3V3. Physical connection to this board remains unverified.
-- Firmware: new ordered-pin image from `ai-model-control/build-supermini-new-order` (commit `6e72c2b`); display order RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12.
-- Mac USB serial: `/dev/cu.usbmodem21101` (re-verify after replug)
-- Last verified: 2026-09-13 — full SuperMini-profile flash from commit `ab3f29d`, independent bootloader/partition/application readback verification, 2 MB PSRAM test OK, and sustained `READY` announcements with no watchdog reset
+- Firmware: new ordered-pin image from `ai-model-control/build-supermini-new-order` (commit `d7dc05c`); display order RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12.
+- Mac USB serial: `/dev/cu.usbmodem21201` (re-verify after replug; macOS may renumber native USB CDC ports)
+- Last verified: 2026-09-13 — full flash of `ai-model-control/build-supermini-new-order` from commit `d7dc05c` to `/dev/cu.usbmodem21201` (hash verified by esptool). Chip matched ESP32-S3 QFN56 rev v0.2 with embedded 4 MB flash + 2 MB PSRAM, MAC `d4:05:92:47:d5:1c`. Firmware SHA-256 `333512c0b2f9daf9c1f29a3d164e81424519ed2c64800cd1fd042c2ad613c8bf`. Boot serial repeated `READY ca2f71102f48badb` after reset
 - Notes: USB Serial/JTAG board newly identified on this date. Do not assume it is wired like an older SuperMini; verify every external connection before applying the documented GC9A01/encoder map.
 
 ## radar-transmitter supermini
