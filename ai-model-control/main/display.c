@@ -256,9 +256,15 @@ esp_err_t display_flush(void)
         for (int row = 0; row < band_h; row++) {
             const int panel_y = y + row;
 #if defined(AI_MODEL_PROFILE_SUPERMINI)
-            /* Row reverse un-mirrors GC9A01 glyphs. Do not also invert Y:
-             * that is a 180 and keeps letters backwards. */
+#if defined(AI_MODEL_SUPERMINI_ROTATE_180)
+            /* The panel's native X scan is reversed. Send the source row in
+             * its native order and reverse Y; the panel supplies the other
+             * axis, yielding a readable physical 180-degree rotation. */
+            const int src_y = h - 1 - panel_y;
+#else
+            /* Row reverse un-mirrors GC9A01 glyphs in its default pose. */
             const int src_y = panel_y;
+#endif
 #else
             /* Desk pose still needs soft 180 on top of MADCTL. Blit through
              * an internal-RAM band so SPI DMA never reads PSRAM. */
@@ -267,7 +273,11 @@ esp_err_t display_flush(void)
             const uint16_t *src = s_fb + (size_t)src_y * (size_t)w;
             uint16_t *dst = s_band + (size_t)row * (size_t)w;
             for (int x = 0; x < w; x++) {
+#if defined(AI_MODEL_PROFILE_SUPERMINI) && defined(AI_MODEL_SUPERMINI_ROTATE_180)
+                dst[x] = src[x];
+#else
                 dst[x] = src[w - 1 - x];
+#endif
             }
         }
         s_flush_pending = true;

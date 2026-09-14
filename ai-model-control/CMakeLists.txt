@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.16)
 set(AI_MODEL_PROFILE "legacy" CACHE STRING "ai-model-control hardware profile")
 set(AI_MODEL_SUPERMINI_DISPLAY_ORDER "legacy" CACHE STRING
     "SuperMini display wiring: legacy or header")
+set(AI_MODEL_SUPERMINI_ROTATE_180 OFF CACHE BOOL
+    "Rotate the SuperMini display output 180 degrees")
 set(AI_MODEL_MODEL_ENCODER_DIRECTION "-1" CACHE STRING
     "Model encoder catalog direction: -1 or 1")
 
