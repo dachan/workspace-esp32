@@ -110,7 +110,10 @@ static void serial_task(void *arg)
         .rx_buffer_size = 1024,
         .tx_buffer_size = 1024,
     };
-    esp_err_t driver_err = usb_serial_jtag_driver_install(&config);
+    esp_err_t driver_err = ESP_OK;
+    if (!usb_serial_jtag_is_driver_installed()) {
+        driver_err = usb_serial_jtag_driver_install(&config);
+    }
     if (driver_err != ESP_OK) {
         ESP_LOGW(TAG, "USB Serial/JTAG input unavailable: %s", esp_err_to_name(driver_err));
         vTaskDelete(NULL);
