@@ -20,8 +20,8 @@ static const char *TAG = "st7735";
 #define TFT_PIN_DC 10
 #define TFT_PIN_MOSI 11
 #define TFT_PIN_SCK 12
-#define TFT_SPI_HZ (26 * 1000 * 1000)
-#define TFT_TRANSFER_ROWS 16
+#define TFT_SPI_HZ (40 * 1000 * 1000)
+#define TFT_TRANSFER_ROWS 40
 #define FLUID_TABLE_SIZE 256
 #define FPS_GLYPH_WIDTH 3
 #define FPS_GLYPH_HEIGHT 5
@@ -33,6 +33,7 @@ static uint16_t *s_framebuffer;
 static uint8_t s_fluid_sine[FLUID_TABLE_SIZE];
 static uint16_t s_blur_previous[TFT_WIDTH];
 static uint16_t s_blur_current[TFT_WIDTH];
+static uint16_t s_blur_next[TFT_WIDTH];
 static bool s_fluid_sine_ready;
 static TickType_t s_fps_window_start;
 static uint16_t s_frames_since_fps_update;
@@ -140,40 +141,46 @@ static uint16_t fluid_color(int x, int y, uint8_t phase)
     return rainbow_color(hue, brightness);
 }
 
-static uint16_t blurred_pixel(const uint16_t *upper, const uint16_t *middle,
-                              const uint16_t *lower, int x)
+static uint16_t blur_three_pixels(uint16_t first, uint16_t second, uint16_t third)
 {
-    static const uint8_t weights[] = {1, 2, 1};
-    const uint16_t *rows[] = {upper, middle, lower};
-    uint32_t red = 0;
-    uint32_t green = 0;
-    uint32_t blue = 0;
+    uint32_t red = ((first >> 11) & 0x1f) + 2 * ((second >> 11) & 0x1f) +
+                   ((third >> 11) & 0x1f);
+    uint32_t green = ((first >> 5) & 0x3f) + 2 * ((second >> 5) & 0x3f) +
+                     ((third >> 5) & 0x3f);
+    uint32_t blue = (first & 0x1f) + 2 * (second & 0x1f) + (third & 0x1f);
+    return ((red / 4) << 11) | ((green / 4) << 5) | (blue / 4);
+}
 
-    for (int row = 0; row < 3; ++row) {
-        for (int column = 0; column < 3; ++column) {
-            uint16_t color = rows[row][x + column - 1];
-            uint8_t weight = weights[row] * weights[column];
-            red += ((color >> 11) & 0x1f) * weight;
-            green += ((color >> 5) & 0x3f) * weight;
-            blue += (color & 0x1f) * weight;
-        }
+static void horizontal_gaussian_blur(const uint16_t *source, uint16_t *destination)
+{
+    destination[0] = source[0];
+    for (int x = 1; x < TFT_WIDTH - 1; ++x) {
+        destination[x] = blur_three_pixels(source[x - 1], source[x], source[x + 1]);
     }
-    return ((red / 16) << 11) | ((green / 16) << 5) | (blue / 16);
+    destination[TFT_WIDTH - 1] = source[TFT_WIDTH - 1];
 }
 
 static void apply_gaussian_blur(void)
 {
-    memcpy(s_blur_previous, s_framebuffer, sizeof(s_blur_previous));
-    memcpy(s_blur_current, &s_framebuffer[TFT_WIDTH], sizeof(s_blur_current));
+    uint16_t *upper = s_blur_previous;
+    uint16_t *middle = s_blur_current;
+    uint16_t *lower = s_blur_next;
+    horizontal_gaussian_blur(s_framebuffer, upper);
+    horizontal_gaussian_blur(&s_framebuffer[TFT_WIDTH], middle);
+    horizontal_gaussian_blur(&s_framebuffer[2 * TFT_WIDTH], lower);
 
     for (int y = 1; y < TFT_HEIGHT - 1; ++y) {
         uint16_t *destination = &s_framebuffer[y * TFT_WIDTH];
-        const uint16_t *next = &s_framebuffer[(y + 1) * TFT_WIDTH];
         for (int x = 1; x < TFT_WIDTH - 1; ++x) {
-            destination[x] = blurred_pixel(s_blur_previous, s_blur_current, next, x);
+            destination[x] = blur_three_pixels(upper[x], middle[x], lower[x]);
         }
-        memcpy(s_blur_previous, s_blur_current, sizeof(s_blur_previous));
-        memcpy(s_blur_current, next, sizeof(s_blur_current));
+        if (y + 2 < TFT_HEIGHT) {
+            horizontal_gaussian_blur(&s_framebuffer[(y + 2) * TFT_WIDTH], upper);
+        }
+        uint16_t *recycled = upper;
+        upper = middle;
+        middle = lower;
+        lower = recycled;
     }
 }
 
@@ -271,6 +278,7 @@ static void update_fps_counter(void)
     if (elapsed_ticks >= pdMS_TO_TICKS(1000)) {
         s_frames_per_second = ((uint32_t)s_frames_since_fps_update * configTICK_RATE_HZ) /
                               elapsed_ticks;
+        ESP_LOGI(TAG, "screensaver FPS: %u", (unsigned)s_frames_per_second);
         s_frames_since_fps_update = 0;
         s_fps_window_start = now;
     }

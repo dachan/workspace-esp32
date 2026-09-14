@@ -19,7 +19,7 @@
 static const char *TAG = "date-time";
 
 enum {
-    SCREENSAVER_FRAME_INTERVAL_MS = 35,
+    SCREENSAVER_FRAME_INTERVAL_MS = 25,
 };
 
 static int month_number(const char *month)
