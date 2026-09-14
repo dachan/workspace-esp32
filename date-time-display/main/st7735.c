@@ -20,7 +20,7 @@ static const char *TAG = "st7735";
 #define TFT_PIN_DC 10
 #define TFT_PIN_MOSI 11
 #define TFT_PIN_SCK 12
-#define TFT_SPI_HZ (60 * 1000 * 1000)
+#define TFT_SPI_HZ (80 * 1000 * 1000)
 #define TFT_TRANSFER_ROWS 40
 #define FLUID_SCALE 2
 #define FLUID_FIELD_WIDTH (TFT_WIDTH / FLUID_SCALE)
