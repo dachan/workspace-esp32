@@ -3,11 +3,14 @@
 ## Project scope
 
 This repository contains ESP32-S3 firmware for an LD2450 radar display pair,
-shared peripheral drivers, a WS2812B demo, and a portable virtual pet. Radar
-is in `radar/`; shared non-radar drivers in `hardware-test/`; the LED demo in
+AI model-control UI, a dual-display date/time board, shared peripheral
+drivers, a WS2812B demo, and a portable virtual pet. Radar is in `radar/`;
+AI model control in `ai-model-control/`; date/time in `date-time-display/`;
+shared non-radar drivers in `hardware-test/`; the LED demo in
 `rainbow-wave/`; the virtual pet in `super-tamagotchi/`.
 
-Read the relevant project README and `super-tamagotchi/WIRING.md` before
+Read the relevant project README (and wiring notes such as
+`date-time-display/WIRING.md` or `super-tamagotchi/WIRING.md`) before
 changing firmware or connecting hardware.
 
 ## Canonical device naming
