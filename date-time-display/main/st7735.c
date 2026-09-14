@@ -26,9 +26,7 @@ static const char *TAG = "st7735";
 #define FLUID_FIELD_WIDTH (TFT_WIDTH / FLUID_SCALE)
 #define FLUID_FIELD_HEIGHT (TFT_HEIGHT / FLUID_SCALE)
 #define FLUID_TABLE_SIZE 256
-#define FLUID_BRIGHTNESS_MIN 140
-#define FLUID_BRIGHTNESS_RANGE 70
-#define FLUID_BRIGHTNESS_STEPS (FLUID_BRIGHTNESS_RANGE + 1)
+#define FLUID_PALETTE_COLORS 5
 #define FLUID_HUE_SUM_MAX (3 * (FLUID_TABLE_SIZE - 1))
 #define FPS_GLYPH_WIDTH 3
 #define FPS_GLYPH_HEIGHT 5
@@ -39,8 +37,7 @@ static spi_device_handle_t s_spi;
 static uint16_t *s_framebuffer;
 static uint8_t s_fluid_sine[FLUID_TABLE_SIZE];
 static uint8_t s_fluid_average[FLUID_HUE_SUM_MAX + 1];
-static uint8_t s_fluid_brightness_index[FLUID_TABLE_SIZE];
-static uint16_t s_fluid_palette[FLUID_BRIGHTNESS_STEPS][FLUID_TABLE_SIZE];
+static uint16_t s_fluid_palette[FLUID_TABLE_SIZE];
 static uint16_t s_fluid_field[FLUID_FIELD_WIDTH * FLUID_FIELD_HEIGHT];
 static uint16_t s_blur_previous[FLUID_FIELD_WIDTH];
 static uint16_t s_blur_current[FLUID_FIELD_WIDTH];
@@ -90,18 +87,6 @@ static esp_err_t set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
     return write_command(0x2c);
 }
 
-static uint8_t scale_channel(uint8_t value, uint8_t brightness)
-{
-    return ((uint16_t)value * brightness) / 255;
-}
-
-static uint8_t pastel_channel(uint8_t value, uint8_t brightness)
-{
-    const uint8_t white_mix = 185;
-    uint8_t shaded = scale_channel(value, brightness);
-    return white_mix + ((uint16_t)(255 - white_mix) * shaded) / 255;
-}
-
 static void initialize_fluid_sine(void)
 {
     if (s_fluid_sine_ready) {
@@ -114,29 +99,37 @@ static void initialize_fluid_sine(void)
     s_fluid_sine_ready = true;
 }
 
-static uint16_t rainbow_color(uint8_t position, uint8_t brightness)
-{
+typedef struct {
     uint8_t red;
     uint8_t green;
     uint8_t blue;
-    if (position < 85) {
-        red = 255 - position * 3;
-        green = position * 3;
-        blue = 0;
-    } else if (position < 170) {
-        position -= 85;
-        red = 0;
-        green = 255 - position * 3;
-        blue = position * 3;
-    } else {
-        position -= 170;
-        red = position * 3;
-        green = 0;
-        blue = 255 - position * 3;
+} fluid_palette_color_t;
+
+static const fluid_palette_color_t s_fluid_palette_colors[FLUID_PALETTE_COLORS] = {
+    {201, 182, 217}, /* #c9b6d9 lavender */
+    {248, 203, 221}, /* #f8cbdd pale pink */
+    {245, 180, 203}, /* #f5b4cb rose pink */
+    {194, 223, 252}, /* #c2defc light blue */
+    {170, 209, 252}, /* #aad1fc periwinkle blue */
+};
+
+static uint16_t fluid_palette_color(uint8_t position)
+{
+    uint8_t segment = position / (FLUID_TABLE_SIZE / (FLUID_PALETTE_COLORS - 1));
+    uint8_t local = position % (FLUID_TABLE_SIZE / (FLUID_PALETTE_COLORS - 1));
+    if (segment >= FLUID_PALETTE_COLORS - 1) {
+        segment = FLUID_PALETTE_COLORS - 2;
+        local = FLUID_TABLE_SIZE / (FLUID_PALETTE_COLORS - 1);
     }
-    red = pastel_channel(red, brightness);
-    green = pastel_channel(green, brightness);
-    blue = pastel_channel(blue, brightness);
+    const fluid_palette_color_t *first = &s_fluid_palette_colors[segment];
+    const fluid_palette_color_t *second = &s_fluid_palette_colors[segment + 1];
+    const uint16_t segment_width = FLUID_TABLE_SIZE / (FLUID_PALETTE_COLORS - 1);
+    uint8_t red = ((uint16_t)first->red * (segment_width - local) +
+                   (uint16_t)second->red * local + segment_width / 2) / segment_width;
+    uint8_t green = ((uint16_t)first->green * (segment_width - local) +
+                     (uint16_t)second->green * local + segment_width / 2) / segment_width;
+    uint8_t blue = ((uint16_t)first->blue * (segment_width - local) +
+                    (uint16_t)second->blue * local + segment_width / 2) / segment_width;
     return ((uint16_t)(red & 0xf8) << 8) |
            ((uint16_t)(green & 0xfc) << 3) |
            (blue >> 3);
@@ -147,17 +140,11 @@ static void initialize_fluid_palette(void)
     if (s_fluid_palette_ready) {
         return;
     }
-    for (int value = 0; value < FLUID_TABLE_SIZE; ++value) {
-        s_fluid_brightness_index[value] = (uint16_t)value * FLUID_BRIGHTNESS_RANGE / 255;
-    }
     for (int sum = 0; sum <= FLUID_HUE_SUM_MAX; ++sum) {
         s_fluid_average[sum] = sum / 3;
     }
-    for (int brightness = 0; brightness < FLUID_BRIGHTNESS_STEPS; ++brightness) {
-        for (int hue = 0; hue < FLUID_TABLE_SIZE; ++hue) {
-            s_fluid_palette[brightness][hue] =
-                rainbow_color(hue, FLUID_BRIGHTNESS_MIN + brightness);
-        }
+    for (int hue = 0; hue < FLUID_TABLE_SIZE; ++hue) {
+        s_fluid_palette[hue] = fluid_palette_color(hue);
     }
     s_fluid_palette_ready = true;
 }
@@ -167,9 +154,8 @@ static uint16_t fluid_color(int x, int y, uint8_t phase)
     uint8_t horizontal = s_fluid_sine[(uint8_t)(x * 2 + phase * 2)];
     uint8_t vertical = s_fluid_sine[(uint8_t)(y * 2 - phase)];
     uint8_t diagonal = s_fluid_sine[(uint8_t)(x + y + phase * 3)];
-    uint8_t swirl = s_fluid_sine[(uint8_t)(x - y + phase * 2)];
     uint8_t hue = s_fluid_average[horizontal + vertical + diagonal] + phase;
-    return s_fluid_palette[s_fluid_brightness_index[swirl]][hue];
+    return s_fluid_palette[hue];
 }
 
 static uint16_t blur_three_pixels(uint16_t first, uint16_t second, uint16_t third)
