@@ -116,6 +116,7 @@ idf.py -B ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time \
 After flashing, send `TIME YYYY-MM-DD HH:MM:SS` over the 115200-baud USB
 serial console, or use the joystick controls above. The value is saved in NVS
 and the OLED shows the centered date above the centered time, updating once per
-second. The TFT independently shows a five-colour fluid-motion screensaver
-with a stronger Gaussian blur and live FPS counter at the bottom right. The
+second. The TFT independently shows a single-hue lavender fluid-motion screensaver
+with 16 light pastel tints, a stronger Gaussian blur, and live FPS counter at the
+bottom right. The
 firmware starts from its compile timestamp until a clock value is received.
