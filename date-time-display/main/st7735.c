@@ -22,7 +22,7 @@ static const char *TAG = "st7735";
 #define TFT_PIN_SCK 12
 #define TFT_SPI_HZ (80 * 1000 * 1000)
 #define TFT_TRANSFER_ROWS 40
-#define FLUID_SCALE 2
+#define FLUID_SCALE 3
 #define FLUID_FIELD_WIDTH (TFT_WIDTH / FLUID_SCALE)
 #define FLUID_FIELD_HEIGHT (TFT_HEIGHT / FLUID_SCALE)
 #define FLUID_TABLE_SIZE 256
@@ -228,10 +228,14 @@ static void upscale_fluid_field(void)
         for (int x = 0; x < FLUID_FIELD_WIDTH; ++x) {
             uint16_t color = source[x];
             int destination_x = x * FLUID_SCALE;
-            destination[destination_x] = color;
-            destination[destination_x + 1] = color;
+            for (int scaled_x = 0; scaled_x < FLUID_SCALE; ++scaled_x) {
+                destination[destination_x + scaled_x] = color;
+            }
         }
-        memcpy(destination + TFT_WIDTH, destination, TFT_WIDTH * sizeof(*destination));
+        for (int scaled_y = 1; scaled_y < FLUID_SCALE; ++scaled_y) {
+            memcpy(destination + scaled_y * TFT_WIDTH, destination,
+                   TFT_WIDTH * sizeof(*destination));
+        }
     }
 }
 
