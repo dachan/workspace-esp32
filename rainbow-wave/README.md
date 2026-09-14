@@ -36,6 +36,8 @@ Brightness is limited for 3.3V operation.
 export IDF_PATH=/path/to/esp-idf
 source "$IDF_PATH/export.sh"
 ESP_PORT=/dev/ttyUSB0 ./tools/flash.sh
+
+The generated build directory is `ESP32_S3-no_display-Rainbow_Wave`.
 ```
 
 Set `ESP_PORT` to the serial device for the connected board.

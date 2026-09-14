@@ -149,19 +149,19 @@ sizes allow.
 export IDF_PATH=/path/to/esp-idf
 source "$IDF_PATH/export.sh"
 cd radar
-idf.py -B build-radar-transmitter -D RADAR_LINK_ROLE=transmitter build
+idf.py -B ESP32_S3-no_display-Radar_Sensor -D RADAR_LINK_ROLE=transmitter build
 ESP_PORT=/dev/ttyUSB0 ./tools/flash-radar.sh transmitter
 
 # Super Mini transmitter (4 MB flash; writes bootloader, table, and app)
-idf.py -B build-radar-transmitter-supermini \
+idf.py -B ESP32_MINI-no_display-Radar_Sensor \
   -D RADAR_LINK_ROLE=transmitter \
   -D RADAR_BOARD=supermini \
-  -D SDKCONFIG=/absolute/path/to/build-radar-transmitter-supermini/sdkconfig \
+  -D SDKCONFIG=/absolute/path/to/ESP32_MINI-no_display-Radar_Sensor/sdkconfig \
   -D SDKCONFIG_DEFAULTS=sdkconfig.defaults.supermini build
 ESP_PORT=/dev/ttyUSB0 ./tools/flash-radar.sh transmitter-supermini
 
 # Receiver/display board
-idf.py -B build-radar-receiver -D RADAR_LINK_ROLE=receiver build
+idf.py -B ESP32_S3-28_tft__touch_320x240-Radar_Receiver -D RADAR_LINK_ROLE=receiver build
 ESP_PORT=/dev/ttyUSB1 ./tools/flash-radar.sh receiver
 ```
 

@@ -22,4 +22,4 @@ port="$ESP_PORT"
 
 source "$idf_export" >/dev/null
 cd "$project_dir"
-idf.py -p "$port" build flash
+idf.py -B ESP32_S3-no_display-Rainbow_Wave -p "$port" build flash

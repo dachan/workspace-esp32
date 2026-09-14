@@ -28,7 +28,7 @@ export IDF_PATH=/path/to/esp-idf
 source "$IDF_PATH/export.sh"
 cd super-tamagotchi
 idf.py set-target esp32s3
-idf.py build flash monitor
+idf.py -B ESP32_S3-28_tft__touch_320x240-Super_Tamitgotchi build flash monitor
 ```
 
 ## Desktop simulator

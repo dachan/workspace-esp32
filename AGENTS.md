@@ -148,20 +148,20 @@ source "$IDF_PATH/export.sh"
 cd radar
 
 # Transmitter
-idf.py -B build-radar-transmitter \
+idf.py -B ESP32_S3-no_display-Radar_Sensor \
   -D RADAR_LINK_ROLE=transmitter build
 ESP_PORT=/dev/ttyUSB0 ./tools/flash-radar.sh transmitter
 
 # Super Mini transmitter (4 MB / quad PSRAM; UART GPIO4/GPIO5)
-idf.py -B build-radar-transmitter-supermini \
+idf.py -B ESP32_MINI-no_display-Radar_Sensor \
   -D RADAR_LINK_ROLE=transmitter \
   -D RADAR_BOARD=supermini \
-  -D SDKCONFIG=/absolute/path/to/build-radar-transmitter-supermini/sdkconfig \
+  -D SDKCONFIG=/absolute/path/to/ESP32_MINI-no_display-Radar_Sensor/sdkconfig \
   -D SDKCONFIG_DEFAULTS=sdkconfig.defaults.supermini build
 ESP_PORT=/dev/ttyUSB0 ./tools/flash-radar.sh transmitter-supermini
 
 # Receiver
-idf.py -B build-radar-receiver-accel \
+idf.py -B ESP32_S3-28_tft__touch_320x240-Radar_Receiver \
   -D RADAR_LINK_ROLE=receiver build
 ESP_PORT=/dev/ttyUSB1 ./tools/flash-radar.sh receiver
 ```
@@ -182,7 +182,7 @@ export IDF_PATH=/path/to/esp-idf
 source "$IDF_PATH/export.sh"
 cd super-tamagotchi
 idf.py set-target esp32s3
-idf.py build flash monitor
+idf.py -B ESP32_S3-28_tft__touch_320x240-Super_Tamitgotchi build flash monitor
 ```
 
 Choose the serial device via ESP-IDF options or a local env var — do not

@@ -22,11 +22,11 @@ if [[ $# -gt 2 \
 fi
 
 if [[ "$role" == "transmitter" && "$board" == "supermini" ]]; then
-  build_dir="build-radar-transmitter-supermini"
+  build_dir="ESP32_MINI-no_display-Radar_Sensor"
 elif [[ "$role" == "transmitter" ]]; then
-  build_dir="build-radar-transmitter"
+  build_dir="ESP32_S3-no_display-Radar_Sensor"
 else
-  build_dir="build-radar-receiver-accel"
+  build_dir="ESP32_S3-28_tft__touch_320x240-Radar_Receiver"
 fi
 
 if [[ -n "${IDF_EXPORT:-}" ]]; then

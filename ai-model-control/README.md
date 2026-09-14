@@ -167,9 +167,9 @@ legacy 480x320 profile remains intact:
 export IDF_PATH=/path/to/esp-idf
 source "$IDF_PATH/export.sh"
 cd ai-model-control
-idf.py -B build-supermini \
+idf.py -B ESP32_MINI-128_tft_240x240-AI_Model_Control-Original \
   -D AI_MODEL_PROFILE=supermini \
-  -D SDKCONFIG=/absolute/path/to/build-supermini/sdkconfig \
+  -D SDKCONFIG=/absolute/path/to/ESP32_MINI-128_tft_240x240-AI_Model_Control-Original/sdkconfig \
   -D SDKCONFIG_DEFAULTS=sdkconfig.defaults.supermini build
 ```
 
@@ -177,12 +177,12 @@ For the new board (`RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12`) mounted 180° from
 the default pose, make its image in a separate build directory:
 
 ```sh
-idf.py -B build-supermini-new-order-rotated \
+idf.py -B ESP32_MINI-128_tft_240x240-AI_Model_Control-New \
   -D AI_MODEL_PROFILE=supermini \
   -D AI_MODEL_SUPERMINI_DISPLAY_ORDER=header \
   -D AI_MODEL_SUPERMINI_ROTATE_180=ON \
   -D AI_MODEL_MODEL_ENCODER_DIRECTION=-1 \
-  -D SDKCONFIG=/absolute/path/to/build-supermini-new-order-rotated/sdkconfig \
+  -D SDKCONFIG=/absolute/path/to/ESP32_MINI-128_tft_240x240-AI_Model_Control-New/sdkconfig \
   -D SDKCONFIG_DEFAULTS=sdkconfig.defaults.supermini build
 ```
 
@@ -302,8 +302,8 @@ Activate the local ESP-IDF environment and set `ESP_PORT` to the verified device
 From this project directory:
 
 ```sh
-idf.py -B build build
-idf.py -B build -p "$ESP_PORT" flash monitor
+idf.py -B ESP32_S3-35_tft__touch_480x320-AI_Model_Control build
+idf.py -B ESP32_S3-35_tft__touch_480x320-AI_Model_Control -p "$ESP_PORT" flash monitor
 ```
 
 Verify the intended board and port before flashing. Use `--list-ports` on the
