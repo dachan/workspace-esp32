@@ -8,7 +8,6 @@
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
-#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -35,7 +34,7 @@ static uint8_t s_fluid_sine[FLUID_TABLE_SIZE];
 static uint16_t s_blur_previous[TFT_WIDTH];
 static uint16_t s_blur_current[TFT_WIDTH];
 static bool s_fluid_sine_ready;
-static int64_t s_fps_window_start_us;
+static TickType_t s_fps_window_start;
 static uint16_t s_frames_since_fps_update;
 static uint8_t s_frames_per_second;
 
@@ -263,16 +262,17 @@ static void draw_fps_counter(void)
 
 static void update_fps_counter(void)
 {
-    int64_t now = esp_timer_get_time();
-    if (s_fps_window_start_us == 0) {
-        s_fps_window_start_us = now;
+    TickType_t now = xTaskGetTickCount();
+    if (s_fps_window_start == 0) {
+        s_fps_window_start = now;
     }
     ++s_frames_since_fps_update;
-    int64_t elapsed_us = now - s_fps_window_start_us;
-    if (elapsed_us >= 1000000) {
-        s_frames_per_second = ((uint64_t)s_frames_since_fps_update * 1000000) / elapsed_us;
+    TickType_t elapsed_ticks = now - s_fps_window_start;
+    if (elapsed_ticks >= pdMS_TO_TICKS(1000)) {
+        s_frames_per_second = ((uint32_t)s_frames_since_fps_update * configTICK_RATE_HZ) /
+                              elapsed_ticks;
         s_frames_since_fps_update = 0;
-        s_fps_window_start_us = now;
+        s_fps_window_start = now;
     }
 }
 
