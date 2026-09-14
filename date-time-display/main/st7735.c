@@ -197,11 +197,11 @@ esp_err_t st7735_render_rainbow(uint8_t phase)
     if (s_framebuffer == NULL) {
         return ESP_ERR_INVALID_STATE;
     }
-    for (int x = 0; x < TFT_WIDTH; ++x) {
-        uint8_t position = (uint8_t)(x * 255 / (TFT_WIDTH - 1));
+    for (int y = 0; y < TFT_HEIGHT; ++y) {
+        uint8_t position = (uint8_t)(y * 255 / (TFT_HEIGHT - 1));
         uint16_t color = rainbow_color(position - phase,
                                        wave_brightness(position, phase));
-        for (int y = 0; y < TFT_HEIGHT; ++y) {
+        for (int x = 0; x < TFT_WIDTH; ++x) {
             s_framebuffer[y * TFT_WIDTH + x] = color;
         }
     }
