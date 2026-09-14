@@ -4,7 +4,6 @@
 #include <sys/time.h>
 #include <time.h>
 
-#include "driver/uart.h"
 #include "esp_log.h"
 #include "nvs.h"
 #include "nvs_flash.h"
