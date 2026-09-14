@@ -358,6 +358,7 @@ static void update_fps_counter(void)
     if (elapsed_ticks >= pdMS_TO_TICKS(1000)) {
         s_frames_per_second = ((uint32_t)s_frames_since_fps_update * configTICK_RATE_HZ) /
                               elapsed_ticks;
+        ESP_LOGI(TAG, "screensaver FPS: %u", (unsigned)s_frames_per_second);
         s_frames_since_fps_update = 0;
         s_fps_window_start = now;
     }
