@@ -23,6 +23,10 @@ static const char *TAG = "st7735";
 #define TFT_SPI_HZ (40 * 1000 * 1000)
 #define TFT_TRANSFER_ROWS 40
 #define FLUID_TABLE_SIZE 256
+#define FLUID_BRIGHTNESS_MIN 140
+#define FLUID_BRIGHTNESS_RANGE 70
+#define FLUID_BRIGHTNESS_STEPS (FLUID_BRIGHTNESS_RANGE + 1)
+#define FLUID_HUE_SUM_MAX (3 * (FLUID_TABLE_SIZE - 1))
 #define FPS_GLYPH_WIDTH 3
 #define FPS_GLYPH_HEIGHT 5
 #define FPS_GLYPH_SCALE 2
@@ -31,10 +35,14 @@ static const char *TAG = "st7735";
 static spi_device_handle_t s_spi;
 static uint16_t *s_framebuffer;
 static uint8_t s_fluid_sine[FLUID_TABLE_SIZE];
+static uint8_t s_fluid_average[FLUID_HUE_SUM_MAX + 1];
+static uint8_t s_fluid_brightness_index[FLUID_TABLE_SIZE];
+static uint16_t s_fluid_palette[FLUID_BRIGHTNESS_STEPS][FLUID_TABLE_SIZE];
 static uint16_t s_blur_previous[TFT_WIDTH];
 static uint16_t s_blur_current[TFT_WIDTH];
 static uint16_t s_blur_next[TFT_WIDTH];
 static bool s_fluid_sine_ready;
+static bool s_fluid_palette_ready;
 static TickType_t s_fps_window_start;
 static uint16_t s_frames_since_fps_update;
 static uint8_t s_frames_per_second;
@@ -130,15 +138,34 @@ static uint16_t rainbow_color(uint8_t position, uint8_t brightness)
            (blue >> 3);
 }
 
+static void initialize_fluid_palette(void)
+{
+    if (s_fluid_palette_ready) {
+        return;
+    }
+    for (int value = 0; value < FLUID_TABLE_SIZE; ++value) {
+        s_fluid_brightness_index[value] = (uint16_t)value * FLUID_BRIGHTNESS_RANGE / 255;
+    }
+    for (int sum = 0; sum <= FLUID_HUE_SUM_MAX; ++sum) {
+        s_fluid_average[sum] = sum / 3;
+    }
+    for (int brightness = 0; brightness < FLUID_BRIGHTNESS_STEPS; ++brightness) {
+        for (int hue = 0; hue < FLUID_TABLE_SIZE; ++hue) {
+            s_fluid_palette[brightness][hue] =
+                rainbow_color(hue, FLUID_BRIGHTNESS_MIN + brightness);
+        }
+    }
+    s_fluid_palette_ready = true;
+}
+
 static uint16_t fluid_color(int x, int y, uint8_t phase)
 {
     uint8_t horizontal = s_fluid_sine[(uint8_t)(x * 2 + phase * 2)];
     uint8_t vertical = s_fluid_sine[(uint8_t)(y * 2 - phase)];
     uint8_t diagonal = s_fluid_sine[(uint8_t)(x + y + phase * 3)];
     uint8_t swirl = s_fluid_sine[(uint8_t)(x - y + phase * 2)];
-    uint8_t hue = (uint8_t)(((uint16_t)horizontal + vertical + diagonal) / 3 + phase);
-    uint8_t brightness = 140 + ((uint16_t)swirl * 70 / 255);
-    return rainbow_color(hue, brightness);
+    uint8_t hue = s_fluid_average[horizontal + vertical + diagonal] + phase;
+    return s_fluid_palette[s_fluid_brightness_index[swirl]][hue];
 }
 
 static uint16_t blur_three_pixels(uint16_t first, uint16_t second, uint16_t third)
@@ -382,6 +409,7 @@ esp_err_t st7735_render_screensaver(uint8_t phase)
         return ESP_ERR_INVALID_STATE;
     }
     initialize_fluid_sine();
+    initialize_fluid_palette();
     for (int y = 0; y < TFT_HEIGHT; ++y) {
         for (int x = 0; x < TFT_WIDTH; ++x) {
             s_framebuffer[y * TFT_WIDTH + x] = fluid_color(x, y, phase);
