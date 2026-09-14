@@ -27,11 +27,21 @@ static const char *TAG = "display";
 #if defined(AI_MODEL_PROFILE_SUPERMINI)
 /* ESP32S3SuperMini + 1.28" 240x240 GC9A01. The round module has no MISO
  * or separately controlled backlight pin; its VCC/LED is a 3.3 V load. */
+#if defined(AI_MODEL_SUPERMINI_HEADER_ORDER)
+/* New board: match display header RST/CS/DC/SDA/SCL to GPIO8-12. */
 #define PIN_RST    8
 #define PIN_CS     9
 #define PIN_DC     10
 #define PIN_MOSI   11
 #define PIN_SCK    12
+#else
+/* Original board: legacy RST/CS/DC/SDA/SCL wiring. */
+#define PIN_RST    10
+#define PIN_CS     11
+#define PIN_DC     9
+#define PIN_MOSI   8
+#define PIN_SCK    12
+#endif
 #define LCD_PIXEL_CLK (26 * 1000 * 1000)
 #else
 /* Lonely Binary / radar-class ESP32-S3 + 3.5" TFT SPI 480x320 v1 (ST7796U). */

@@ -59,8 +59,11 @@ static int s_sw_armed[ENCODER_COUNT];
 #define MODEL_PCNT_RESET 500
 #define MODEL_COUNTS_PER_STEP 8
 #define MODEL_EMIT_US 160000
-/* Reverse the model knob's physical direction in the catalog. */
-#define MODEL_SIGN -1
+#ifndef AI_MODEL_MODEL_ENCODER_DIRECTION
+#define AI_MODEL_MODEL_ENCODER_DIRECTION -1
+#endif
+/* Build-specific physical direction of the model knob in the catalog. */
+#define MODEL_SIGN AI_MODEL_MODEL_ENCODER_DIRECTION
 
 static pcnt_unit_handle_t s_model_unit;
 static int s_model_prev_count;

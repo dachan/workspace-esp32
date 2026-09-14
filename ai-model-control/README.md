@@ -153,7 +153,10 @@ left unused because it is a boot-strapping pin; GPIO18 and GPIO39-42 are only
 available on this board's small underside pads.
 
 The round module has no MISO or separate backlight control in this wiring;
-leave MISO unconnected and power its VCC from 3V3. Desk pose keeps native
+leave MISO unconnected and power its VCC from 3V3. The original board uses
+the default `legacy` display order and `-1` model-encoder direction. The new
+ordered-pin board must use `header` plus `1`, which reverses its Model
+selection direction relative to the earlier new-board image. Desk pose keeps native
 MADCTL (`swap_xy(false)`, `mirror(false, false)`) and un-mirrors glyphs with
 a horizontal row reverse in `display_flush()`. Do not use MADCTL `mirror(true,
 true)` on this module — that 180 left letters backwards. Build it in its own
@@ -166,6 +169,18 @@ cd ai-model-control
 idf.py -B build-supermini \
   -D AI_MODEL_PROFILE=supermini \
   -D SDKCONFIG=/absolute/path/to/build-supermini/sdkconfig \
+  -D SDKCONFIG_DEFAULTS=sdkconfig.defaults.supermini build
+```
+
+For the new board (`RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12`), make the
+model-direction-reversed image in a separate build directory:
+
+```sh
+idf.py -B build-supermini-new-order-reversed-model \
+  -D AI_MODEL_PROFILE=supermini \
+  -D AI_MODEL_SUPERMINI_DISPLAY_ORDER=header \
+  -D AI_MODEL_MODEL_ENCODER_DIRECTION=1 \
+  -D SDKCONFIG=/absolute/path/to/build-supermini-new-order-reversed-model/sdkconfig \
   -D SDKCONFIG_DEFAULTS=sdkconfig.defaults.supermini build
 ```
 

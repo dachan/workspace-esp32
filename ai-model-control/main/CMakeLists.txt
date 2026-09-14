@@ -7,7 +7,12 @@ idf_component_register(
 
 if(AI_MODEL_PROFILE STREQUAL "supermini")
     target_compile_definitions(${COMPONENT_LIB} PRIVATE AI_MODEL_PROFILE_SUPERMINI=1)
+    if(AI_MODEL_SUPERMINI_DISPLAY_ORDER STREQUAL "header")
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE AI_MODEL_SUPERMINI_HEADER_ORDER=1)
+    endif()
 endif()
+target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    AI_MODEL_MODEL_ENCODER_DIRECTION=${AI_MODEL_MODEL_ENCODER_DIRECTION})
 
 set(BUILD_NUMBER_H "${CMAKE_CURRENT_BINARY_DIR}/build_number.h")
 add_custom_command(
