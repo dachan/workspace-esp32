@@ -22,6 +22,9 @@ static const char *TAG = "st7735";
 #define TFT_PIN_SCK 12
 #define TFT_SPI_HZ (40 * 1000 * 1000)
 #define TFT_TRANSFER_ROWS 40
+#define FLUID_SCALE 2
+#define FLUID_FIELD_WIDTH (TFT_WIDTH / FLUID_SCALE)
+#define FLUID_FIELD_HEIGHT (TFT_HEIGHT / FLUID_SCALE)
 #define FLUID_TABLE_SIZE 256
 #define FLUID_BRIGHTNESS_MIN 140
 #define FLUID_BRIGHTNESS_RANGE 70
@@ -38,9 +41,10 @@ static uint8_t s_fluid_sine[FLUID_TABLE_SIZE];
 static uint8_t s_fluid_average[FLUID_HUE_SUM_MAX + 1];
 static uint8_t s_fluid_brightness_index[FLUID_TABLE_SIZE];
 static uint16_t s_fluid_palette[FLUID_BRIGHTNESS_STEPS][FLUID_TABLE_SIZE];
-static uint16_t s_blur_previous[TFT_WIDTH];
-static uint16_t s_blur_current[TFT_WIDTH];
-static uint16_t s_blur_next[TFT_WIDTH];
+static uint16_t s_fluid_field[FLUID_FIELD_WIDTH * FLUID_FIELD_HEIGHT];
+static uint16_t s_blur_previous[FLUID_FIELD_WIDTH];
+static uint16_t s_blur_current[FLUID_FIELD_WIDTH];
+static uint16_t s_blur_next[FLUID_FIELD_WIDTH];
 static bool s_fluid_sine_ready;
 static bool s_fluid_palette_ready;
 static TickType_t s_fps_window_start;
@@ -181,13 +185,14 @@ static uint16_t blur_three_pixels(uint16_t first, uint16_t second, uint16_t thir
     return ((red / 4) << 11) | ((green / 4) << 5) | (blue / 4);
 }
 
-static void horizontal_gaussian_blur(const uint16_t *source, uint16_t *destination)
+static void horizontal_gaussian_blur(const uint16_t *source, uint16_t *destination,
+                                     int width)
 {
     destination[0] = source[0];
-    for (int x = 1; x < TFT_WIDTH - 1; ++x) {
+    for (int x = 1; x < width - 1; ++x) {
         destination[x] = blur_three_pixels(source[x - 1], source[x], source[x + 1]);
     }
-    destination[TFT_WIDTH - 1] = source[TFT_WIDTH - 1];
+    destination[width - 1] = source[width - 1];
 }
 
 static void apply_gaussian_blur(void)
@@ -195,22 +200,38 @@ static void apply_gaussian_blur(void)
     uint16_t *upper = s_blur_previous;
     uint16_t *middle = s_blur_current;
     uint16_t *lower = s_blur_next;
-    horizontal_gaussian_blur(s_framebuffer, upper);
-    horizontal_gaussian_blur(&s_framebuffer[TFT_WIDTH], middle);
-    horizontal_gaussian_blur(&s_framebuffer[2 * TFT_WIDTH], lower);
+    horizontal_gaussian_blur(s_fluid_field, upper, FLUID_FIELD_WIDTH);
+    horizontal_gaussian_blur(&s_fluid_field[FLUID_FIELD_WIDTH], middle, FLUID_FIELD_WIDTH);
+    horizontal_gaussian_blur(&s_fluid_field[2 * FLUID_FIELD_WIDTH], lower, FLUID_FIELD_WIDTH);
 
-    for (int y = 1; y < TFT_HEIGHT - 1; ++y) {
-        uint16_t *destination = &s_framebuffer[y * TFT_WIDTH];
-        for (int x = 1; x < TFT_WIDTH - 1; ++x) {
+    for (int y = 1; y < FLUID_FIELD_HEIGHT - 1; ++y) {
+        uint16_t *destination = &s_fluid_field[y * FLUID_FIELD_WIDTH];
+        for (int x = 1; x < FLUID_FIELD_WIDTH - 1; ++x) {
             destination[x] = blur_three_pixels(upper[x], middle[x], lower[x]);
         }
-        if (y + 2 < TFT_HEIGHT) {
-            horizontal_gaussian_blur(&s_framebuffer[(y + 2) * TFT_WIDTH], upper);
+        if (y + 2 < FLUID_FIELD_HEIGHT) {
+            horizontal_gaussian_blur(&s_fluid_field[(y + 2) * FLUID_FIELD_WIDTH], upper,
+                                     FLUID_FIELD_WIDTH);
         }
         uint16_t *recycled = upper;
         upper = middle;
         middle = lower;
         lower = recycled;
+    }
+}
+
+static void upscale_fluid_field(void)
+{
+    for (int y = 0; y < FLUID_FIELD_HEIGHT; ++y) {
+        const uint16_t *source = &s_fluid_field[y * FLUID_FIELD_WIDTH];
+        uint16_t *destination = &s_framebuffer[y * FLUID_SCALE * TFT_WIDTH];
+        for (int x = 0; x < FLUID_FIELD_WIDTH; ++x) {
+            uint16_t color = source[x];
+            int destination_x = x * FLUID_SCALE;
+            destination[destination_x] = color;
+            destination[destination_x + 1] = color;
+        }
+        memcpy(destination + TFT_WIDTH, destination, TFT_WIDTH * sizeof(*destination));
     }
 }
 
@@ -418,13 +439,15 @@ esp_err_t st7735_render_screensaver(uint8_t phase)
     initialize_fluid_sine();
     initialize_fluid_palette();
     TickType_t color_start = xTaskGetTickCount();
-    for (int y = 0; y < TFT_HEIGHT; ++y) {
-        for (int x = 0; x < TFT_WIDTH; ++x) {
-            s_framebuffer[y * TFT_WIDTH + x] = fluid_color(x, y, phase);
+    for (int y = 0; y < FLUID_FIELD_HEIGHT; ++y) {
+        for (int x = 0; x < FLUID_FIELD_WIDTH; ++x) {
+            s_fluid_field[y * FLUID_FIELD_WIDTH + x] =
+                fluid_color(x * FLUID_SCALE, y * FLUID_SCALE, phase);
         }
     }
     TickType_t blur_start = xTaskGetTickCount();
     apply_gaussian_blur();
+    upscale_fluid_field();
     TickType_t transfer_start = xTaskGetTickCount();
     draw_fps_counter();
     esp_err_t err = flush_framebuffer();
