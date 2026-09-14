@@ -20,7 +20,7 @@ their technical names.
   ChatGPT, Cursor, and OpenCode, plus
   `ai-model-control/mac-chatgpt-bridge/` macOS CLI that applies encoder `SET` lines over USB
   serial while a supported app is focused (`--watch --send-serial`).
-- `date-time-display/` — dual-display firmware with a rainbow-wave 1.3-inch
+- `date-time-display/` — dual-display firmware with a fluid-motion 1.3-inch
   240x240 SPI TFT and a centered date/time 0.96-inch 128x64 I2C OLED.
 
 ## Wiring

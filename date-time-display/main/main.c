@@ -19,7 +19,7 @@
 static const char *TAG = "date-time";
 
 enum {
-    RAINBOW_FRAME_INTERVAL_MS = 35,
+    SCREENSAVER_FRAME_INTERVAL_MS = 35,
 };
 
 static int month_number(const char *month)
@@ -315,7 +315,7 @@ void app_main(void)
     struct tm edit_time = {0};
     int edit_field = 0;
     bool force_oled_render = true;
-    uint8_t rainbow_phase = 0;
+    uint8_t screensaver_phase = 0;
     while (true) {
         joystick_action_t action = joystick_poll();
         if (action != JOYSTICK_NONE) {
@@ -335,12 +335,12 @@ void app_main(void)
         strftime(clock_text, sizeof(clock_text), "%H:%M:%S", &local);
         TickType_t current_tick = xTaskGetTickCount();
         if (last_tft_frame == 0 ||
-            current_tick - last_tft_frame >= pdMS_TO_TICKS(RAINBOW_FRAME_INTERVAL_MS)) {
-            esp_err_t tft_err = st7735_render_rainbow(rainbow_phase);
+            current_tick - last_tft_frame >= pdMS_TO_TICKS(SCREENSAVER_FRAME_INTERVAL_MS)) {
+            esp_err_t tft_err = st7735_render_screensaver(screensaver_phase);
             if (tft_err != ESP_OK) {
-                ESP_LOGW(TAG, "rainbow render failed: TFT=%s", esp_err_to_name(tft_err));
+                ESP_LOGW(TAG, "screensaver render failed: TFT=%s", esp_err_to_name(tft_err));
             }
-            rainbow_phase += 3;
+            ++screensaver_phase;
             last_tft_frame = current_tick;
         }
 

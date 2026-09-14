@@ -1,5 +1,7 @@
 #include "st7735.h"
 
+#include <math.h>
+
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_check.h"
@@ -19,9 +21,12 @@ static const char *TAG = "st7735";
 #define TFT_PIN_SCK 12
 #define TFT_SPI_HZ (26 * 1000 * 1000)
 #define TFT_TRANSFER_ROWS 16
+#define FLUID_TABLE_SIZE 256
 
 static spi_device_handle_t s_spi;
 static uint16_t *s_framebuffer;
+static uint8_t s_fluid_sine[FLUID_TABLE_SIZE];
+static bool s_fluid_sine_ready;
 
 static esp_err_t write_bytes(const void *data, size_t length, bool command)
 {
@@ -67,12 +72,16 @@ static uint8_t scale_channel(uint8_t value, uint8_t brightness)
     return ((uint16_t)value * brightness) / 255;
 }
 
-static uint8_t wave_brightness(uint8_t position, uint8_t phase)
+static void initialize_fluid_sine(void)
 {
-    uint8_t distance = position - phase;
-    uint8_t folded = distance > 127 ? 255 - distance : distance;
-    uint8_t wave = 255 - (folded * 2);
-    return 48 + ((uint16_t)wave * (255 - 48) / 255);
+    if (s_fluid_sine_ready) {
+        return;
+    }
+    for (int index = 0; index < FLUID_TABLE_SIZE; ++index) {
+        float angle = (float)index * 6.283185307f / FLUID_TABLE_SIZE;
+        s_fluid_sine[index] = (uint8_t)((sinf(angle) + 1.0f) * 127.5f);
+    }
+    s_fluid_sine_ready = true;
 }
 
 static uint16_t rainbow_color(uint8_t position, uint8_t brightness)
@@ -98,6 +107,17 @@ static uint16_t rainbow_color(uint8_t position, uint8_t brightness)
     return ((uint16_t)(red & 0xf8) << 8) |
            ((uint16_t)(green & 0xfc) << 3) |
            (blue >> 3);
+}
+
+static uint16_t fluid_color(int x, int y, uint8_t phase)
+{
+    uint8_t horizontal = s_fluid_sine[(uint8_t)(x * 2 + phase * 2)];
+    uint8_t vertical = s_fluid_sine[(uint8_t)(y * 2 - phase)];
+    uint8_t diagonal = s_fluid_sine[(uint8_t)(x + y + phase * 3)];
+    uint8_t swirl = s_fluid_sine[(uint8_t)(x - y + phase * 2)];
+    uint8_t hue = (uint8_t)(((uint16_t)horizontal + vertical + diagonal) / 3 + phase);
+    uint8_t brightness = 64 + ((uint16_t)swirl * 191 / 255);
+    return rainbow_color(hue, brightness);
 }
 
 static esp_err_t flush_framebuffer(void)
@@ -192,17 +212,15 @@ esp_err_t st7735_init(void)
     return ESP_OK;
 }
 
-esp_err_t st7735_render_rainbow(uint8_t phase)
+esp_err_t st7735_render_screensaver(uint8_t phase)
 {
     if (s_framebuffer == NULL) {
         return ESP_ERR_INVALID_STATE;
     }
+    initialize_fluid_sine();
     for (int y = 0; y < TFT_HEIGHT; ++y) {
-        uint8_t position = (uint8_t)(y * 255 / (TFT_HEIGHT - 1));
-        uint16_t color = rainbow_color(position - phase,
-                                       wave_brightness(position, phase));
         for (int x = 0; x < TFT_WIDTH; ++x) {
-            s_framebuffer[y * TFT_WIDTH + x] = color;
+            s_framebuffer[y * TFT_WIDTH + x] = fluid_color(x, y, phase);
         }
     }
     return flush_framebuffer();
