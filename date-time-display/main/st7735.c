@@ -22,6 +22,7 @@ static const char *TAG = "st7735";
 #define TFT_PIN_MOSI 11
 #define TFT_PIN_SCK 12
 #define TFT_SPI_HZ (26 * 1000 * 1000)
+#define TFT_TRANSFER_ROWS 16
 
 static spi_device_handle_t s_spi;
 static uint16_t *s_framebuffer;
@@ -122,7 +123,7 @@ esp_err_t st7735_init(void)
         .miso_io_num = -1,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
-        .max_transfer_sz = TFT_WIDTH * TFT_HEIGHT * 2,
+        .max_transfer_sz = TFT_WIDTH * TFT_TRANSFER_ROWS * 2,
     };
     err = spi_bus_initialize(TFT_HOST, &bus, SPI_DMA_CH_AUTO);
     if (err != ESP_OK) {
@@ -186,9 +187,19 @@ esp_err_t st7735_render(const char *date, const char *time_text)
     ESP_RETURN_ON_ERROR(set_window(0, 0, TFT_WIDTH - 1, TFT_HEIGHT - 1), TAG,
                         "set address window");
     gpio_set_level(TFT_PIN_DC, 1);
-    spi_transaction_t transaction = {
-        .length = (size_t)TFT_WIDTH * TFT_HEIGHT * 16,
-        .tx_buffer = s_framebuffer,
-    };
-    return spi_device_transmit(s_spi, &transaction);
+    for (int row = 0; row < TFT_HEIGHT; row += TFT_TRANSFER_ROWS) {
+        int rows = TFT_HEIGHT - row;
+        if (rows > TFT_TRANSFER_ROWS) {
+            rows = TFT_TRANSFER_ROWS;
+        }
+        spi_transaction_t transaction = {
+            .length = (size_t)TFT_WIDTH * rows * 16,
+            .tx_buffer = &s_framebuffer[row * TFT_WIDTH],
+        };
+        esp_err_t err = spi_device_transmit(s_spi, &transaction);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+    return ESP_OK;
 }
