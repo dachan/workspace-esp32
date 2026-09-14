@@ -26,7 +26,7 @@ static const char *TAG = "st7735";
 #define FLUID_FIELD_WIDTH (TFT_WIDTH / FLUID_SCALE)
 #define FLUID_FIELD_HEIGHT (TFT_HEIGHT / FLUID_SCALE)
 #define FLUID_TABLE_SIZE 256
-#define FLUID_PALETTE_COLORS 5
+#define FLUID_TINT_COUNT 16
 #define FLUID_HUE_SUM_MAX (3 * (FLUID_TABLE_SIZE - 1))
 #define FPS_GLYPH_WIDTH 3
 #define FPS_GLYPH_HEIGHT 5
@@ -35,6 +35,7 @@ static const char *TAG = "st7735";
 
 static spi_device_handle_t s_spi;
 static uint16_t *s_framebuffer;
+static uint16_t s_transfer_buffer[TFT_WIDTH * TFT_TRANSFER_ROWS];
 static uint8_t s_fluid_sine[FLUID_TABLE_SIZE];
 static uint8_t s_fluid_average[FLUID_HUE_SUM_MAX + 1];
 static uint16_t s_fluid_palette[FLUID_TABLE_SIZE];
@@ -105,31 +106,32 @@ typedef struct {
     uint8_t blue;
 } fluid_palette_color_t;
 
-static const fluid_palette_color_t s_fluid_palette_colors[FLUID_PALETTE_COLORS] = {
-    {201, 182, 217}, /* #c9b6d9 lavender */
-    {248, 203, 221}, /* #f8cbdd pale pink */
-    {245, 180, 203}, /* #f5b4cb rose pink */
-    {194, 223, 252}, /* #c2defc light blue */
-    {170, 209, 252}, /* #aad1fc periwinkle blue */
+static const fluid_palette_color_t s_fluid_tints[FLUID_TINT_COUNT] = {
+    {246, 239, 249}, /* near-white lavender */
+    {243, 235, 247},
+    {240, 231, 245},
+    {237, 228, 243},
+    {234, 224, 241},
+    {231, 220, 239},
+    {228, 216, 237},
+    {225, 212, 234},
+    {222, 208, 232},
+    {219, 205, 230},
+    {216, 201, 228},
+    {213, 197, 226},
+    {210, 193, 224},
+    {207, 190, 222},
+    {204, 186, 219},
+    {201, 182, 217}, /* supplied lavender #c9b6d9 */
 };
 
 static uint16_t fluid_palette_color(uint8_t position)
 {
-    uint8_t segment = position / (FLUID_TABLE_SIZE / (FLUID_PALETTE_COLORS - 1));
-    uint8_t local = position % (FLUID_TABLE_SIZE / (FLUID_PALETTE_COLORS - 1));
-    if (segment >= FLUID_PALETTE_COLORS - 1) {
-        segment = FLUID_PALETTE_COLORS - 2;
-        local = FLUID_TABLE_SIZE / (FLUID_PALETTE_COLORS - 1);
-    }
-    const fluid_palette_color_t *first = &s_fluid_palette_colors[segment];
-    const fluid_palette_color_t *second = &s_fluid_palette_colors[segment + 1];
-    const uint16_t segment_width = FLUID_TABLE_SIZE / (FLUID_PALETTE_COLORS - 1);
-    uint8_t red = ((uint16_t)first->red * (segment_width - local) +
-                   (uint16_t)second->red * local + segment_width / 2) / segment_width;
-    uint8_t green = ((uint16_t)first->green * (segment_width - local) +
-                     (uint16_t)second->green * local + segment_width / 2) / segment_width;
-    uint8_t blue = ((uint16_t)first->blue * (segment_width - local) +
-                    (uint16_t)second->blue * local + segment_width / 2) / segment_width;
+    uint8_t tint = ((uint16_t)position * (FLUID_TINT_COUNT - 1)) / (FLUID_TABLE_SIZE - 1);
+    const fluid_palette_color_t *color = &s_fluid_tints[tint];
+    uint8_t red = color->red;
+    uint8_t green = color->green;
+    uint8_t blue = color->blue;
     return ((uint16_t)(red & 0xf8) << 8) |
            ((uint16_t)(green & 0xfc) << 3) |
            (blue >> 3);
@@ -331,9 +333,14 @@ static esp_err_t flush_framebuffer(void)
         if (rows > TFT_TRANSFER_ROWS) {
             rows = TFT_TRANSFER_ROWS;
         }
+        int pixel_count = TFT_WIDTH * rows;
+        const uint16_t *source = &s_framebuffer[row * TFT_WIDTH];
+        for (int index = 0; index < pixel_count; ++index) {
+            s_transfer_buffer[index] = __builtin_bswap16(source[index]);
+        }
         spi_transaction_t transaction = {
-            .length = (size_t)TFT_WIDTH * rows * 16,
-            .tx_buffer = &s_framebuffer[row * TFT_WIDTH],
+            .length = (size_t)pixel_count * 16,
+            .tx_buffer = s_transfer_buffer,
         };
         esp_err_t err = spi_device_transmit(s_spi, &transaction);
         if (err != ESP_OK) {
