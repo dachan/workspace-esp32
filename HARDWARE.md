@@ -25,8 +25,8 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 - Wiring: TFT `RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12`; OLED `SDA/SCL -> GPIO6/7`; both displays `VCC -> 3V3`, `GND -> GND`; see [date-time-display/WIRING.md](date-time-display/WIRING.md)
 - Firmware expected: `date-time-display/ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time`
 - Mac USB serial: `/dev/cu.usbmodem5C940014881` (re-verify after replug; macOS may renumber native USB CDC ports)
-- Last verified: 2026-09-14 — chip and flash matched the recorded MAC, full image write verified by esptool, and boot log showed `ST7735 240x240 ready`, `TFT=ESP_OK`, and a stable date/time task on commit `8f244c6`; application SHA-256 `20deecf3cb3242380a5b4f0900fd6bb61cb30b378549449cdcc4a15007703731`
-- Notes: the OLED initialization received no ACK at `0x3C` or `0x3D` during this pass, so its physical power, header order, and GPIO6/GPIO7 wiring remain unverified. The firmware keeps the TFT running and will retry the OLED after reset. The 1.3-inch listing may describe an ST7789-compatible controller; change the init sequence only if the controller marking or a blank panel confirms that variant.
+- Last verified: 2026-09-14 — chip and flash matched the recorded MAC, full image write verified by esptool, and boot log showed `ST7735 240x240 ready`, `TFT=ESP_OK`, and a stable date/time task on commit `ec748fb`; application SHA-256 `0b8e9205e78fb8658a9f405ba09c7b258f95a8ff04ae11101479bd7149c8e313`
+- Notes: the firmware sends an all-zero WS2812 frame on GPIO48 and holds GPIO21 low at boot to turn off common programmable indicators. A hardware power/USB LED, if fitted, is not firmware-controllable. The OLED initialization received no ACK at `0x3C` or `0x3D` during this pass, so its physical power, header order, and GPIO6/GPIO7 wiring remain unverified. The firmware keeps the TFT running and will retry the OLED after reset. The 1.3-inch listing may describe an ST7789-compatible controller; change the init sequence only if the controller marking or a blank panel confirms that variant.
 
 
 ## ESP32_MINI-no_display-Radar_Sensor
