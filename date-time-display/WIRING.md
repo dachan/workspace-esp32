@@ -4,29 +4,31 @@ Firmware build label:
 
 `ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time`
 
-The new board is an ESP32-S3. The TFT is the 7-pin SPI module and the OLED is
-the 4-pin I2C SSD1306 module. Both displays use the 3.3 V rail and a common
-ground. Disconnect USB power before changing wiring.
+The new board is an ESP32-S3. The pictured TFT is the 7-pin SPI ST7789 module
+marked `BLK, DC, RES, SDA, SCK, VCC, GND`; it is not the CS-equipped pinout
+shown in the earlier diagram. The OLED is the 4-pin I2C SSD1306 module. Both
+displays use the 3.3 V rail and a common ground. Disconnect USB power before
+changing wiring.
 
 ## Direct wiring
 
-### 1.3-inch ST7735 TFT, 7-pin header
+### 1.3-inch ST7789 TFT, 7-pin header (pictured module)
 
 | TFT input | ESP32-S3 pin |
 |---|---|
-| RST / RES | GPIO8 |
-| CS | GPIO9 |
-| DC / A0 | GPIO10 |
+| BLK | 3V3 |
+| DC | GPIO10 |
+| RES / RST | GPIO8 |
 | SDA / MOSI | GPIO11 |
-| SCL / CLK | GPIO12 |
-| GND | GND |
+| SCK / CLK | GPIO12 |
 | VCC | 3V3 |
+| GND | GND |
 
-On this SPI module, `SDA` means serial data/MOSI; it is not the OLED's I2C
-SDA signal. The module's backlight is normally tied to VCC on this 7-pin
-variant, so there is no separate firmware-controlled BL wire. If the specific
-board exposes an additional LED/BL pad, leave it NC unless its documentation
-requires a current-limited connection.
+There is no exposed `CS` pin on this module; its chip select is hard-wired on
+the board, and the firmware leaves the ESP32 CS output disabled. `BLK` is the
+backlight supply and should be connected to 3V3 for always-on brightness. On
+this display, `SDA` means SPI serial data/MOSI and `SCK` means SPI clock; neither
+is the OLED's I2C signal.
 
 ### 0.96-inch SSD1306 OLED, 4-pin header
 
@@ -70,14 +72,14 @@ Controls while the normal clock is shown:
 ## Connector-order view
 
 ```text
-ST7735 7P             ESP32-S3             SSD1306 4P
-RST  ---------------- GPIO8
-CS   ---------------- GPIO9
-DC   ---------------- GPIO10
-SDA  ---------------- GPIO11 (SPI MOSI)
-SCL  ---------------- GPIO12 (SPI CLK)
-GND  ---------------- GND  --------------- GND
-VCC  ---------------- 3V3  --------------- VCC
+ST7789 7P            ESP32-S3             SSD1306 4P
+BLK  --------------- 3V3
+DC   --------------- GPIO10
+RES  --------------- GPIO8
+SDA  --------------- GPIO11 (SPI MOSI)
+SCK  --------------- GPIO12 (SPI CLK)
+VCC  --------------- 3V3  --------------- VCC
+GND  --------------- GND  --------------- GND
                                               SCL -------- GPIO7
                                               SDA -------- GPIO6
 
@@ -94,8 +96,9 @@ RST  --------------- GPIO4
 
 Keep GPIO0/3/45/46 and the native USB pins out of this display wiring. If the
 TFT remains blank while the OLED works, check the panel controller marking:
-some square 240x240 modules sold as “ST7735” use an ST7789-compatible
-controller and need a different initialization sequence.
+The supplied module is marked `Driver IC: ST7789`. If the controller marking
+on a replacement differs, verify its initialization sequence before reusing
+this build.
 
 ## Build and set the clock
 

@@ -17,7 +17,6 @@ static const char *TAG = "st7735";
 #define TFT_HEIGHT 240
 #define TFT_HOST SPI2_HOST
 #define TFT_PIN_RST 8
-#define TFT_PIN_CS 9
 #define TFT_PIN_DC 10
 #define TFT_PIN_MOSI 11
 #define TFT_PIN_SCK 12
@@ -133,7 +132,8 @@ esp_err_t st7735_init(void)
     spi_device_interface_config_t device = {
         .clock_speed_hz = TFT_SPI_HZ,
         .mode = 0,
-        .spics_io_num = TFT_PIN_CS,
+        /* This 7-pin ST7789 module has no exposed CS; it is hard-wired active. */
+        .spics_io_num = -1,
         .queue_size = 1,
     };
     err = spi_bus_add_device(TFT_HOST, &device, &s_spi);
@@ -165,9 +165,9 @@ esp_err_t st7735_init(void)
         ESP_LOGE(TAG, "framebuffer allocation failed");
         return ESP_ERR_NO_MEM;
     }
-    ESP_LOGI(TAG, "ST7735 %dx%d ready; SPI GPIO%d/%d/%d/%d/%d",
-             TFT_WIDTH, TFT_HEIGHT, TFT_PIN_RST, TFT_PIN_CS, TFT_PIN_DC,
-             TFT_PIN_MOSI, TFT_PIN_SCK);
+    ESP_LOGI(TAG, "ST7789 %dx%d ready; SPI RES/DC/SDA/SCK GPIO%d/%d/%d/%d",
+             TFT_WIDTH, TFT_HEIGHT, TFT_PIN_RST, TFT_PIN_DC, TFT_PIN_MOSI,
+             TFT_PIN_SCK);
     return ESP_OK;
 }
 

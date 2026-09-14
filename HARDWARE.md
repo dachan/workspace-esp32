@@ -21,13 +21,13 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 
 - MCU: ESP32-S3 QFN56 rev v0.2, dual core, 40 MHz crystal, embedded 16 MB flash and 8 MB PSRAM class
 - MAC: `7c:4f:ad:ba:c8:98`
-- Displays: Estardyn 1.3-inch 240x240 SPI TFT (ST7735 listing) plus 0.96-inch 128x64 I2C SSD1306 OLED
+- Displays: Estardyn 1.3-inch 240x240 SPI TFT (pictured ST7789, 7-pin `BLK/DC/RES/SDA/SCK/VCC/GND`) plus 0.96-inch 128x64 I2C SSD1306 OLED
 - Joystick: passive 8-pin switch module, `COM -> GND`; `UP/DOWN/LEFT/RIGHT/MID/SEL/RST -> GPIO13/14/15/16/17/18/4`
-- Wiring: TFT `RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12`; OLED `SDA/SCL -> GPIO6/7`; both displays `VCC -> 3V3`, `GND -> GND`; see [date-time-display/WIRING.md](date-time-display/WIRING.md)
+- Wiring: TFT `BLK -> 3V3`, `DC/RES/SDA/SCK -> GPIO10/8/11/12`, `VCC -> 3V3`, `GND -> GND`; no exposed CS; OLED `SDA/SCL -> GPIO6/7`; see [date-time-display/WIRING.md](date-time-display/WIRING.md)
 - Firmware expected: `date-time-display/ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time`
 - Mac USB serial: `/dev/cu.usbmodem5C940014881` (re-verify after replug; macOS may renumber native USB CDC ports)
 - Last verified: 2026-09-14 — chip and flash matched the recorded MAC, full image write verified by esptool, and boot log showed `ST7735 240x240 ready`, `SSD1306 128x64 ready` at `0x3C`, and the joystick-enabled date/time task on commit `4e5a902`; application SHA-256 `93591b91fd8a406bfed082ac8154e662da90d0a36bd6db195468d9b2c6ffc60e`
-- Notes: the firmware sends an all-zero WS2812 frame on GPIO48 and holds GPIO21 low at boot to turn off common programmable indicators. A hardware power/USB LED, if fitted, is not firmware-controllable. The joystick is a passive active-low switch bank with `COM -> GND` and inputs on GPIO13/14/15/16/17/18/4; see [date-time-display/WIRING.md](date-time-display/WIRING.md). The 1.3-inch listing may describe an ST7789-compatible controller; change the init sequence only if the controller marking or a blank panel confirms that variant.
+- Notes: the firmware sends an all-zero WS2812 frame on GPIO48 and holds GPIO21 low at boot to turn off common programmable indicators. A hardware power/USB LED, if fitted, is not firmware-controllable. The joystick is a passive active-low switch bank with `COM -> GND` and inputs on GPIO13/14/15/16/17/18/4; see [date-time-display/WIRING.md](date-time-display/WIRING.md). The pictured TFT's backlight is supplied from 3V3 through `BLK`; brightness is not firmware-controlled in this build.
 
 
 ## ESP32_MINI-no_display-Radar_Sensor
