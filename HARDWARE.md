@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-13 (ESP32 device-to-build matching)
+Last inventory pass: 2026-09-14 (ESP32 device-to-build matching)
 
 ## ESP32 device/build matching
 
@@ -12,9 +12,21 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 | Canonical device label | Stable identity | Correct build | Do not confuse with |
 |---|---|---|---|
 | `ESP32_S3-35_tft_touch_480x320-AI_Model_Control` | MAC `28:84:85:44:1b:5c`, 16 MB / 8 MB PSRAM class, ST7796U panel | `ai-model-control/ESP32_S3-35_tft_touch_480x320-AI_Model_Control` | Mini 4 MB images |
+| `ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time` | MAC `7c:4f:ad:ba:c8:98`, ESP32-S3 QFN56 rev v0.2, 16 MB flash / 8 MB PSRAM | `date-time-display/ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time` | 1.3-inch TFT / 0.96-inch OLED wiring not yet physically verified |
 | `ESP32_MINI-128_tft_240x240-AI_Model_Control-Original` | MAC `90:da:72:73:5a:64`, old round-display wiring `RST/CS/DC/SDA/SCL -> GPIO10/11/9/8/12` | `ai-model-control/ESP32_MINI-128_tft_240x240-AI_Model_Control-Original` | New ordered-pin build |
 | `ESP32_MINI-128_tft_240x240-AI_Model_Control-New` | MAC `d4:05:92:47:d5:1c`, ESP32-S3 QFN56 rev v0.2, 4 MB flash / 2 MB PSRAM, display wired `RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12` | `ai-model-control/ESP32_MINI-128_tft_240x240-AI_Model_Control-New` | Original round build |
 | `ESP32_MINI-no_display-Radar_Sensor` | MAC `d4:05:92:47:d1:6c`, LD2450 UART on GPIO4/GPIO5 | `radar/ESP32_MINI-no_display-Radar_Sensor` | AI Model Control Mini images |
+
+## ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time
+
+- MCU: ESP32-S3 QFN56 rev v0.2, dual core, 40 MHz crystal, embedded 16 MB flash and 8 MB PSRAM class
+- MAC: `7c:4f:ad:ba:c8:98`
+- Displays: Estardyn 1.3-inch 240x240 SPI TFT (ST7735 listing) plus 0.96-inch 128x64 I2C SSD1306 OLED
+- Wiring: TFT `RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12`; OLED `SDA/SCL -> GPIO6/7`; both displays `VCC -> 3V3`, `GND -> GND`; see [date-time-display/WIRING.md](date-time-display/WIRING.md)
+- Firmware expected: `date-time-display/ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time`
+- Mac USB serial: `/dev/cu.usbmodem5C940014881` (re-verify after replug; macOS may renumber native USB CDC ports)
+- Last verified: 2026-09-14 — chip and flash matched the recorded MAC, full image write verified by esptool, and boot log showed `ST7735 240x240 ready`, `TFT=ESP_OK`, and a stable date/time task on commit `8f244c6`; application SHA-256 `20deecf3cb3242380a5b4f0900fd6bb61cb30b378549449cdcc4a15007703731`
+- Notes: the OLED initialization received no ACK at `0x3C` or `0x3D` during this pass, so its physical power, header order, and GPIO6/GPIO7 wiring remain unverified. The firmware keeps the TFT running and will retry the OLED after reset. The 1.3-inch listing may describe an ST7789-compatible controller; change the init sequence only if the controller marking or a blank panel confirms that variant.
 
 
 ## ESP32_MINI-no_display-Radar_Sensor
