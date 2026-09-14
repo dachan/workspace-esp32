@@ -1,6 +1,7 @@
 #include "st7735.h"
 
 #include <math.h>
+#include <string.h>
 
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
@@ -26,6 +27,8 @@ static const char *TAG = "st7735";
 static spi_device_handle_t s_spi;
 static uint16_t *s_framebuffer;
 static uint8_t s_fluid_sine[FLUID_TABLE_SIZE];
+static uint16_t s_blur_previous[TFT_WIDTH];
+static uint16_t s_blur_current[TFT_WIDTH];
 static bool s_fluid_sine_ready;
 
 static esp_err_t write_bytes(const void *data, size_t length, bool command)
@@ -74,7 +77,7 @@ static uint8_t scale_channel(uint8_t value, uint8_t brightness)
 
 static uint8_t pastel_channel(uint8_t value, uint8_t brightness)
 {
-    const uint8_t white_mix = 150;
+    const uint8_t white_mix = 185;
     uint8_t shaded = scale_channel(value, brightness);
     return white_mix + ((uint16_t)(255 - white_mix) * shaded) / 255;
 }
@@ -126,8 +129,45 @@ static uint16_t fluid_color(int x, int y, uint8_t phase)
     uint8_t diagonal = s_fluid_sine[(uint8_t)(x + y + phase * 3)];
     uint8_t swirl = s_fluid_sine[(uint8_t)(x - y + phase * 2)];
     uint8_t hue = (uint8_t)(((uint16_t)horizontal + vertical + diagonal) / 3 + phase);
-    uint8_t brightness = 64 + ((uint16_t)swirl * 191 / 255);
+    uint8_t brightness = 140 + ((uint16_t)swirl * 70 / 255);
     return rainbow_color(hue, brightness);
+}
+
+static uint16_t blurred_pixel(const uint16_t *upper, const uint16_t *middle,
+                              const uint16_t *lower, int x)
+{
+    static const uint8_t weights[] = {1, 2, 1};
+    const uint16_t *rows[] = {upper, middle, lower};
+    uint32_t red = 0;
+    uint32_t green = 0;
+    uint32_t blue = 0;
+
+    for (int row = 0; row < 3; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            uint16_t color = rows[row][x + column - 1];
+            uint8_t weight = weights[row] * weights[column];
+            red += ((color >> 11) & 0x1f) * weight;
+            green += ((color >> 5) & 0x3f) * weight;
+            blue += (color & 0x1f) * weight;
+        }
+    }
+    return ((red / 16) << 11) | ((green / 16) << 5) | (blue / 16);
+}
+
+static void apply_gaussian_blur(void)
+{
+    memcpy(s_blur_previous, s_framebuffer, sizeof(s_blur_previous));
+    memcpy(s_blur_current, &s_framebuffer[TFT_WIDTH], sizeof(s_blur_current));
+
+    for (int y = 1; y < TFT_HEIGHT - 1; ++y) {
+        uint16_t *destination = &s_framebuffer[y * TFT_WIDTH];
+        const uint16_t *next = &s_framebuffer[(y + 1) * TFT_WIDTH];
+        for (int x = 1; x < TFT_WIDTH - 1; ++x) {
+            destination[x] = blurred_pixel(s_blur_previous, s_blur_current, next, x);
+        }
+        memcpy(s_blur_previous, s_blur_current, sizeof(s_blur_previous));
+        memcpy(s_blur_current, next, sizeof(s_blur_current));
+    }
 }
 
 static esp_err_t flush_framebuffer(void)
@@ -233,5 +273,6 @@ esp_err_t st7735_render_screensaver(uint8_t phase)
             s_framebuffer[y * TFT_WIDTH + x] = fluid_color(x, y, phase);
         }
     }
+    apply_gaussian_blur();
     return flush_framebuffer();
 }
