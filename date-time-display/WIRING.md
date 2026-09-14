@@ -42,6 +42,31 @@ on-board I2C pull-ups, add approximately 4.7 kOhm from SDA to 3V3 and from SCL
 to 3V3. Do not connect the TFT's SPI `SDA` to the OLED's I2C `SDA`; they are
 different buses despite the shared label.
 
+### Joystick switch module, 8-pin header
+
+The pictured module is a passive switch bank. Connect its `COM` pin to ground;
+do not connect a module VCC pin. The firmware enables ESP32 internal pull-ups,
+so every switch input is active-low when pressed.
+
+| Joystick pin | ESP32-S3 pin |
+|---|---|
+| COM | GND |
+| UP | GPIO13 |
+| DOWN | GPIO14 |
+| LEFT | GPIO15 |
+| RIGHT | GPIO16 |
+| MID | GPIO17 |
+| SEL | GPIO18 |
+| RST | GPIO4 |
+
+Controls while the normal clock is shown:
+
+- `SEL` enters date/time edit mode; press it again to advance through year,
+  month, day, hour, minute, and second.
+- `LEFT`/`RIGHT` select the previous/next field, and `UP`/`DOWN` change it.
+- `MID` saves the edited time to NVS; `RST` cancels the edit. `RST` is a
+  firmware cancel input, not the ESP32's hardware reset pin.
+
 ## Connector-order view
 
 ```text
@@ -55,6 +80,16 @@ GND  ---------------- GND  --------------- GND
 VCC  ---------------- 3V3  --------------- VCC
                                               SCL -------- GPIO7
                                               SDA -------- GPIO6
+
+Joystick 8P          ESP32-S3
+COM  --------------- GND
+UP   --------------- GPIO13
+DOWN --------------- GPIO14
+LEFT --------------- GPIO15
+RIGHT -------------- GPIO16
+MID  --------------- GPIO17
+SEL  --------------- GPIO18
+RST  --------------- GPIO4
 ```
 
 Keep GPIO0/3/45/46 and the native USB pins out of this display wiring. If the
@@ -75,6 +110,6 @@ idf.py -B ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time \
 ```
 
 After flashing, send `TIME YYYY-MM-DD HH:MM:SS` over the 115200-baud USB
-serial console. The value is saved in NVS and both displays update once per
-second. The firmware starts from its compile timestamp until a clock value is
-received.
+serial console, or use the joystick controls above. The value is saved in NVS
+and both displays update once per second. The firmware starts from its compile
+timestamp until a clock value is received.

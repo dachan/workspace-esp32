@@ -22,6 +22,7 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 - MCU: ESP32-S3 QFN56 rev v0.2, dual core, 40 MHz crystal, embedded 16 MB flash and 8 MB PSRAM class
 - MAC: `7c:4f:ad:ba:c8:98`
 - Displays: Estardyn 1.3-inch 240x240 SPI TFT (ST7735 listing) plus 0.96-inch 128x64 I2C SSD1306 OLED
+- Joystick: passive 8-pin switch module, `COM -> GND`; `UP/DOWN/LEFT/RIGHT/MID/SEL/RST -> GPIO13/14/15/16/17/18/4`
 - Wiring: TFT `RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12`; OLED `SDA/SCL -> GPIO6/7`; both displays `VCC -> 3V3`, `GND -> GND`; see [date-time-display/WIRING.md](date-time-display/WIRING.md)
 - Firmware expected: `date-time-display/ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time`
 - Mac USB serial: `/dev/cu.usbmodem5C940014881` (re-verify after replug; macOS may renumber native USB CDC ports)
