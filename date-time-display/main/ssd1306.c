@@ -1,5 +1,6 @@
 #include "ssd1306.h"
 
+#include <stdbool.h>
 #include <string.h>
 
 #include "driver/gpio.h"
@@ -21,11 +22,13 @@ static const char *TAG = "ssd1306";
 #define OLED_I2C_HZ 400000
 
 static uint8_t s_buffer[OLED_WIDTH * OLED_PAGES];
+static uint8_t s_address = 0x3c;
+static bool s_ready;
 
 static esp_err_t command(uint8_t value)
 {
     uint8_t data[] = {0x00, value};
-    return i2c_master_write_to_device(OLED_PORT, OLED_ADDRESS, data, sizeof(data),
+    return i2c_master_write_to_device(OLED_PORT, s_address, data, sizeof(data),
                                       pdMS_TO_TICKS(100));
 }
 
@@ -88,7 +91,7 @@ static esp_err_t refresh(void)
             return err;
         }
         memcpy(&page_data[1], &s_buffer[page * OLED_WIDTH], OLED_WIDTH);
-        err = i2c_master_write_to_device(OLED_PORT, OLED_ADDRESS, page_data,
+        err = i2c_master_write_to_device(OLED_PORT, s_address, page_data,
                                          sizeof(page_data), pdMS_TO_TICKS(100));
         if (err != ESP_OK) {
             return err;
@@ -120,16 +123,34 @@ esp_err_t ssd1306_init(void)
         0x8d, 0x14, 0x20, 0x00, 0xa1, 0xc8, 0xda, 0x12,
         0x81, 0xcf, 0xd9, 0xf1, 0xdb, 0x40, 0xa4, 0xa6, 0xaf,
     };
-    ESP_RETURN_ON_ERROR(commands(init_values, sizeof(init_values)), TAG, "init");
-    clear_buffer();
-    ESP_RETURN_ON_ERROR(refresh(), TAG, "clear");
-    ESP_LOGI(TAG, "SSD1306 128x64 ready; I2C SDA GPIO%d, SCL GPIO%d, address 0x%02x",
-             OLED_PIN_SDA, OLED_PIN_SCL, OLED_ADDRESS);
-    return ESP_OK;
+    esp_err_t last_error = ESP_FAIL;
+    const uint8_t addresses[] = {0x3c, 0x3d};
+    for (size_t i = 0; i < sizeof(addresses); ++i) {
+        s_address = addresses[i];
+        last_error = commands(init_values, sizeof(init_values));
+        if (last_error != ESP_OK) {
+            continue;
+        }
+        clear_buffer();
+        last_error = refresh();
+        if (last_error == ESP_OK) {
+            s_ready = true;
+            ESP_LOGI(TAG, "SSD1306 128x64 ready; I2C SDA GPIO%d, SCL GPIO%d, address 0x%02x",
+                     OLED_PIN_SDA, OLED_PIN_SCL, s_address);
+            return ESP_OK;
+        }
+    }
+    s_ready = false;
+    ESP_LOGW(TAG, "SSD1306 not responding at 0x3C or 0x3D (%s)",
+             esp_err_to_name(last_error));
+    return last_error;
 }
 
 esp_err_t ssd1306_render(const char *date, const char *time_text)
 {
+    if (!s_ready) {
+        return ESP_ERR_INVALID_STATE;
+    }
     clear_buffer();
     draw_text(date, 2, 2, 1);
     draw_text(time_text, 2, 26, 2);

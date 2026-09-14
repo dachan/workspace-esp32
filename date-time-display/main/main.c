@@ -137,7 +137,10 @@ void app_main(void)
     settimeofday(&tv, NULL);
 
     ESP_ERROR_CHECK(st7735_init());
-    ESP_ERROR_CHECK(ssd1306_init());
+    bool oled_ready = ssd1306_init() == ESP_OK;
+    if (!oled_ready) {
+        ESP_LOGW(TAG, "OLED is offline; TFT will continue and OLED will retry after reset");
+    }
     xTaskCreate(serial_task, "serial", 4096, NULL, 5, NULL);
     ESP_LOGI(TAG, "dual display date/time ready; send TIME YYYY-MM-DD HH:MM:SS to set clock");
 
@@ -151,7 +154,7 @@ void app_main(void)
         strftime(date, sizeof(date), "%Y-%m-%d", &local);
         strftime(clock_text, sizeof(clock_text), "%H:%M:%S", &local);
         esp_err_t tft_err = st7735_render(date, clock_text);
-        esp_err_t oled_err = ssd1306_render(date, clock_text);
+        esp_err_t oled_err = oled_ready ? ssd1306_render(date, clock_text) : ESP_ERR_INVALID_STATE;
         if (tft_err != ESP_OK || oled_err != ESP_OK) {
             ESP_LOGW(TAG, "render failed: TFT=%s OLED=%s",
                      esp_err_to_name(tft_err), esp_err_to_name(oled_err));
