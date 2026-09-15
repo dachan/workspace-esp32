@@ -63,9 +63,9 @@ snapshot; it does not use Wi-Fi or SNTP. The helper also sends `FRONT Cursor`,
 header brand lockup and app-specific panel state match without applying anything
 to the desktop app. `FRONT None` keeps the last app's catalog and logo; it
 does not fall back to ChatGPT. After each SYNC the helper resends FRONT so a
-firmware restart recovers focus. After 1 min without Cursor, ChatGPT, or OpenCode
-focus and without encoder or touch, the panel shows a date/time screensaver.
-Focusing Cursor, ChatGPT, or OpenCode, turning a knob, or tapping the glass wakes it.
+firmware restart recovers focus. `FRONT None` immediately switches the panel to
+its date/time clock. Until Cursor, ChatGPT, or OpenCode is focused again, encoder
+and touch controls are ignored so they cannot change a stored dial selection.
 
 A five-second press-and-hold anywhere on the glass starts a five-point touch
 calibration. The Model Dial helper's **Apply Dial to Focused App** menu item
@@ -356,7 +356,7 @@ swift build -c release
 
 ## Code organization
 
-- `main/main.c`: input/state coordination, 1 min clock screensaver, and save/paint retries.
+- `main/main.c`: focused-app input coordination, immediate no-focus clock view, and save/paint retries.
 - `main/ui.c`: drawing including the idle screensaver; `display.c`: SPI and DMA ownership; `canvas.c`/`font.c`: pixels/text.
 - `main/front_title.c`: Mac `FRONT Cursor` / `FRONT ChatGPT` / `FRONT None`;
   None keeps the last app and does not restore ChatGPT.

@@ -19,7 +19,6 @@
 #include "ui.h"
 
 #define CALIBRATE_HOLD_MS 5000
-#define SCREENSAVER_IDLE_MS 60000
 
 static const char *TAG = "chatgpt_model";
 
@@ -156,13 +155,13 @@ void app_main(void)
     TickType_t local_changed_at = 0;
     TickType_t last_save_attempt = 0;
     TickType_t last_paint_attempt = 0;
-    TickType_t last_active = xTaskGetTickCount();
     bool save_failed = false;
     bool paint_failed = false;
 
     while (1) {
         model_fields_t before = fields;
-        // Capture all inputs before persistence or SPI work blocks this task.
+        // Always drain inputs before persistence or SPI work blocks this task.
+        // They only affect state while a supported desktop app is focused.
         int thinking_delta = encoder_delta(ENCODER_THINKING);
         int model_delta = encoder_delta(ENCODER_MODEL);
         bool thinking_pressed = encoder_button_pressed(ENCODER_THINKING);
@@ -171,6 +170,7 @@ void app_main(void)
         touch_poll(&touch);
         TickType_t now = xTaskGetTickCount();
         bool focused = front_title_is_focused();
+        bool focus_gained = focused && !was_focused;
         desk_app_t app = front_title_app();
         if (focused != was_focused || (focused && front_ready && app != previous_app)) {
             // Cancel only intent queued for the previous focus. Process the new
@@ -192,40 +192,33 @@ void app_main(void)
                 serial_sync_update(&fields, true);
             }
         }
-        if (!touch.down) {
+        bool controls_enabled = focused && !focus_gained;
+        if (controls_enabled && !touch.down) {
             hold_calibrated = false;
         }
-        if (touch.down && touch.held_ms >= CALIBRATE_HOLD_MS && !hold_calibrated) {
+        if (controls_enabled && touch.down && touch.held_ms >= CALIBRATE_HOLD_MS && !hold_calibrated) {
             hold_calibrated = true;
             calibrate_run();
             touch_clear_state();
             paint_pending = true;
         }
-        bool sync_pressed = thinking_pressed || model_pressed;
+        bool sync_pressed = controls_enabled && (thinking_pressed || model_pressed);
         bool local_changed = false;
-        bool input_activity = thinking_delta || model_delta || thinking_pressed || model_pressed
-            || touch.down || touch.released;
-        local_changed |= apply_model_delta(&fields, model_delta);
-        if (local_changed) adapt_fields_for_front(&fields);
-        local_changed |= apply_thinking_delta(&fields, thinking_delta);
-        if (local_changed) {
-            adapt_fields_for_front(&fields);
-            model_nvs_remember(&fields);
-            hold_rx = true;
-            local_changed_at = now;
-            if (focused) {
+        if (controls_enabled) {
+            local_changed |= apply_model_delta(&fields, model_delta);
+            if (local_changed) adapt_fields_for_front(&fields);
+            local_changed |= apply_thinking_delta(&fields, thinking_delta);
+            if (local_changed) {
+                adapt_fields_for_front(&fields);
+                model_nvs_remember(&fields);
+                hold_rx = true;
+                local_changed_at = now;
                 serial_sync_apply(&fields);
-            } else {
-                serial_sync_update(&fields, true);
             }
         }
         if (sync_pressed) {
-            if (focused) {
-                serial_sync_push(&fields);
-                ESP_LOGI(TAG, "encoder sync requested");
-            } else {
-                ESP_LOGI(TAG, "encoder sync ignored: no supported app focused");
-            }
+            serial_sync_push(&fields);
+            ESP_LOGI(TAG, "encoder sync requested");
         }
 
         // Compatibility display updates must not overwrite a settling local edit.
@@ -249,14 +242,12 @@ void app_main(void)
         }
         serial_sync_poll();
         now = xTaskGetTickCount();
-        if (front_title_is_focused() || input_activity) {
-            last_active = now;
+        if (focused) {
             if (screensaver_on) {
                 screensaver_on = false;
                 paint_pending = true;
             }
-        } else if (!screensaver_on
-                   && (TickType_t)(now - last_active) >= pdMS_TO_TICKS(SCREENSAVER_IDLE_MS)) {
+        } else if (!screensaver_on) {
             screensaver_on = true;
             paint_pending = true;
         }
