@@ -170,6 +170,28 @@ void app_main(void)
         touch_sample_t touch = {0};
         touch_poll(&touch);
         TickType_t now = xTaskGetTickCount();
+        bool focused = front_title_is_focused();
+        desk_app_t app = front_title_app();
+        if (focused != was_focused || (focused && front_ready && app != previous_app)) {
+            // Cancel only intent queued for the previous focus. Process the new
+            // physical input below so a click on this same poll still syncs.
+            serial_sync_cancel_intent();
+        }
+        was_focused = focused;
+        if (focused) {
+            if (!front_ready || app != previous_app) {
+                if (front_ready) {
+                    model_nvs_remember_for(&fields, previous_app);
+                }
+                model_nvs_restore_for(&fields, app);
+                clamp_cursor_model(&fields);
+                adapt_fields_for_front(&fields);
+                model_nvs_remember_for(&fields, app);
+                previous_app = app;
+                front_ready = true;
+                serial_sync_update(&fields, true);
+            }
+        }
         if (!touch.down) {
             hold_calibrated = false;
         }
@@ -191,14 +213,14 @@ void app_main(void)
             model_nvs_remember(&fields);
             hold_rx = true;
             local_changed_at = now;
-            if (front_title_is_focused()) {
+            if (focused) {
                 serial_sync_apply(&fields);
             } else {
                 serial_sync_update(&fields, true);
             }
         }
         if (sync_pressed) {
-            if (front_title_is_focused()) {
+            if (focused) {
                 serial_sync_push(&fields);
                 ESP_LOGI(TAG, "encoder sync requested");
             } else {
@@ -224,26 +246,6 @@ void app_main(void)
             model_nvs_remember(&fields);
             save_pending = true;
             paint_pending = true;
-        }
-        bool focused = front_title_is_focused();
-        desk_app_t app = front_title_app();
-        if (focused != was_focused || (focused && front_ready && app != previous_app)) {
-            serial_sync_cancel_intent();
-        }
-        was_focused = focused;
-        if (focused) {
-            if (!front_ready || app != previous_app) {
-                if (front_ready) {
-                    model_nvs_remember_for(&fields, previous_app);
-                }
-                model_nvs_restore_for(&fields, app);
-                clamp_cursor_model(&fields);
-                adapt_fields_for_front(&fields);
-                model_nvs_remember_for(&fields, app);
-                previous_app = app;
-                front_ready = true;
-                serial_sync_update(&fields, true);
-            }
         }
         serial_sync_poll();
         now = xTaskGetTickCount();
