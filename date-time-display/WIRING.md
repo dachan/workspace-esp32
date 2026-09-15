@@ -116,7 +116,9 @@ idf.py -B ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time \
 After flashing, send `TIME YYYY-MM-DD HH:MM:SS` over the 115200-baud USB
 serial console, or use the joystick controls above. The value is saved in NVS
 and the OLED shows the centered `HH:MM` time above the centered date, updating once per
-second. The TFT independently shows a never-ending fluid-motion screensaver
+second. Both text lines follow an eight-position ±2-pixel shift pattern that advances
+every 30 minutes to spread OLED wear. The TFT independently shows a never-ending
+fluid-motion screensaver
 with a 32-step light-pastel gradient from each hardware-random HSV base tint
 toward a soft highlight with the restored 64/255 lift. Each next target is at least 115
 RGB-distance units from the previous base colour. Palette progression updates
