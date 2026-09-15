@@ -20,10 +20,20 @@ static const char *TAG = "ssd1306";
 #define OLED_PIN_SDA 6
 #define OLED_PIN_SCL 7
 #define OLED_I2C_HZ 400000
+#define OLED_PIXEL_SHIFT_INTERVAL_RENDERS (30 * 60)
+#define OLED_PIXEL_SHIFT_POSITION_COUNT 8
 
 static uint8_t s_buffer[OLED_WIDTH * OLED_PAGES];
 static uint8_t s_address = 0x3c;
 static bool s_ready;
+static int s_pixel_shift_render_count;
+static int s_pixel_shift_position;
+
+/* Spread fixed text over a small diamond to reduce OLED pixel wear. */
+static const int s_pixel_shift_x[OLED_PIXEL_SHIFT_POSITION_COUNT] =
+    {0, 1, 2, 1, 0, -1, -2, -1};
+static const int s_pixel_shift_y[OLED_PIXEL_SHIFT_POSITION_COUNT] =
+    {0, 1, 0, -1, -2, -1, 0, 1};
 
 static esp_err_t command(uint8_t value)
 {
@@ -77,6 +87,16 @@ static int text_width(const char *text, int scale)
 {
     size_t length = strlen(text);
     return length == 0 ? 0 : (int)(length * 6 * scale - scale);
+}
+
+static void advance_pixel_shift(void)
+{
+    ++s_pixel_shift_render_count;
+    if (s_pixel_shift_render_count >= OLED_PIXEL_SHIFT_INTERVAL_RENDERS) {
+        s_pixel_shift_render_count = 0;
+        s_pixel_shift_position =
+            (s_pixel_shift_position + 1) % OLED_PIXEL_SHIFT_POSITION_COUNT;
+    }
 }
 
 static esp_err_t refresh(void)
@@ -163,11 +183,14 @@ esp_err_t ssd1306_render(const char *date, const char *time_text)
     const int group_height = 7 * date_scale + line_gap + 7 * time_scale;
     const int time_y = (OLED_HEIGHT - group_height) / 2;
     const int date_y = time_y + 7 * time_scale + line_gap;
+    advance_pixel_shift();
+    const int shift_x = s_pixel_shift_x[s_pixel_shift_position];
+    const int shift_y = s_pixel_shift_y[s_pixel_shift_position];
 
     clear_buffer();
-    draw_text(date, (OLED_WIDTH - text_width(date, date_scale)) / 2,
-              date_y, date_scale);
-    draw_text(time_text, (OLED_WIDTH - text_width(time_text, time_scale)) / 2,
-              time_y, time_scale);
+    draw_text(date, (OLED_WIDTH - text_width(date, date_scale)) / 2 + shift_x,
+              date_y + shift_y, date_scale);
+    draw_text(time_text, (OLED_WIDTH - text_width(time_text, time_scale)) / 2 + shift_x,
+              time_y + shift_y, time_scale);
     return refresh();
 }
