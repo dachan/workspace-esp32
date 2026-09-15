@@ -80,7 +80,7 @@ final class BridgeRuntime {
     private func applyInitialSnapshotIfRequested() {
         guard applyOnConnectPending, receivedModel != nil, receivedThinking != nil else { return }
         applyOnConnectPending = false
-        requestApply(force: true, source: "menu Sync")
+        requestApply(force: true, source: "Apply Dial to Focused App")
     }
 
     private func requestApply(force: Bool, source: String) {

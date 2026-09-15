@@ -43,9 +43,10 @@ keys on their own. A settled rotation follows its complete state with `APPLY`;
 an encoder click follows fresh revisions for both fields with `PUSH`.
 `APPLY` uses the per-process cache, while `PUSH` forces both fields.
 
-The Model Dial helper's Sync menu item restarts the bridge, which requests the
-panel's current MODEL/THINKING revisions and explicitly applies that first
-complete snapshot to the focused app.
+The Model Dial helper's Apply Dial to Focused App menu item restarts the bridge,
+requests the panel's current MODEL/THINKING revisions, and explicitly applies
+that first complete snapshot to the focused app. Refresh Cursor Models only
+updates the dial's Cursor model list.
 
 Each changed field gets a new revision, including after firmware restart.
 Unacknowledged state retries every 0.5 s; a full USB transmit buffer retries after
@@ -67,8 +68,9 @@ focus and without encoder or touch, the panel shows a date/time screensaver.
 Focusing Cursor, ChatGPT, or OpenCode, turning a knob, or tapping the glass wakes it.
 
 A five-second press-and-hold anywhere on the glass starts a five-point touch
-calibration. The Model Dial helper's **Sync** menu item asks the bridge to
-apply the current panel model and thinking to the focused app. The Model Dial
+calibration. The Model Dial helper's **Apply Dial to Focused App** menu item
+asks the bridge to apply the current panel model and thinking to the focused app.
+**Refresh Cursor Models** only refreshes the dial's Cursor model list. The Model Dial
 Settings window controls which ChatGPT effort levels and Cursor models are
 available on the encoders; the bridge sends those masks to the panel on every
 connection. A release is confirmed after 150 ms without contact so a transient
@@ -204,7 +206,8 @@ idf.py -B ESP32_MINI-128_tft_240x240-AI_Model_Control-New \
 
 The round target has no touch calibration or glass SYNC control. Press either
 encoder to sync the displayed model and effort to the focused app; the Model
-Dial helper's Sync command provides the same explicit action from macOS.
+Dial helper's Apply Dial to Focused App command provides the same explicit
+action from macOS.
 
 ## Desk control (encoders → ChatGPT / Cursor)
 
@@ -226,8 +229,8 @@ interrupted operations cannot suppress the final correction when a dial returns
 to an earlier value. Model changes always invalidate effort; otherwise an
 effort-only change skips model selection. Completed values are cached per Mac
 process. Supported-app focus only changes the panel catalog and restores its
-remembered values; it never posts keys. The Model Dial helper's Sync menu item
-and either encoder click force both current panel values. Switching ChatGPT ↔
+remembered values; it never posts keys. Apply Dial to Focused App and either
+encoder click force both current panel values. Switching ChatGPT ↔
 Cursor restores that app's last model and effort on the panel. When neither is
 focused, encoder changes remain authoritative on the ESP32 but their apply intent
 is dropped rather than deferred. Focus loss interrupts the current apply.
@@ -341,7 +344,7 @@ sends the current model and effort as a forced `PUSH`.
 
 The Mac helper temporarily filters user input to the focused app during each
 model/thinking apply. Escape cancels; focus loss or a five-second timeout releases
-the filter; another dial movement or Sync is required to retry. See [input guard](mac-chatgpt-bridge/README.md#input-guard)
+the filter; another dial movement or Apply Dial to Focused App is required to retry. See [input guard](mac-chatgpt-bridge/README.md#input-guard)
 for permissions, held-input handling, and the availability check.
 
 ```sh

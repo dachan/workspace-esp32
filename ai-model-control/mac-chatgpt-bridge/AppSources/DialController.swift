@@ -31,6 +31,11 @@ final class DialController {
         return status
     }
 
+    var canApplyDialToFocusedApp: Bool {
+        wantsBridge && port != nil && !isSyncing && AXIsProcessTrusted()
+            && focusedTargetName != nil
+    }
+
     var availablePorts: [String] { ports() }
 
     func selectPort(_ path: String) {
@@ -114,9 +119,18 @@ final class DialController {
         }
     }
 
+    func applyDialToFocusedApp() {
+        guard canApplyDialToFocusedApp else { return }
+        let app = focusedTargetName ?? "supported app"
+        message = "Requesting the panel's current state for \(app)"
+        recordBridgeEvent("Apply Dial to Focused App requested for \(app)")
+        restartBridge(applyOnConnect: true)
+    }
+
     func syncApps() {
         guard wantsBridge, !isSyncing else { return }
         isSyncing = true
+        status = "Refreshing Cursor models"
         let originalMask = preferences.cursorModelMask
         Task {
             let result = await Task.detached(priority: .utility) { CursorModelSync.readMask() }.value
@@ -131,8 +145,7 @@ final class DialController {
             case .failure(let error):
                 recordBridgeEvent("Cursor sync: \(error.localizedDescription); saved selection retained")
             }
-            recordBridgeEvent("Sync requested for the focused app")
-            restartBridge(applyOnConnect: true)
+            restartBridge()
         }
     }
 
@@ -261,15 +274,22 @@ final class DialController {
 
     private func recordBridgeOutput(_ text: String) {
         message = lastLine(text)
-        if text == "BRIDGE_STATUS SERIAL_CONNECTED" { status = "Waiting for panel response" }
+        if text == "BRIDGE_STATUS SERIAL_CONNECTED" { status = "Panel connected — waiting for dial state" }
         if text.contains(" rx MODEL ") || text.contains(" rx THINKING ")
             || text.contains(" ignored MODEL ") || text.contains(" ignored THINKING ") {
-            status = "Panel responding"
+            status = "Dial state received"
         }
         if text == "BRIDGE_STATUS SERIAL_UNAVAILABLE" { status = "Serial unavailable — retrying" }
         if text.contains("input guard unavailable") { status = "Input permission needed — see log" }
-        if text.contains("stopped after 3 attempts") { status = "Apply failed — turn dial or Sync" }
-        if text.contains(" posted ") { status = "Panel responding" }
+        if text.contains("stopped until the next") { status = "Apply failed — change dial or apply again" }
+        if text.contains("dropped APPLY") || text.contains("dropped PUSH") {
+            status = "Apply dropped — focus a supported app"
+        }
+        if text.contains(" rx APPLY") || text.contains(" rx PUSH")
+            || text.contains(" rx Apply Dial to Focused App") {
+            status = "Applying dial to focused app"
+        }
+        if text.contains(" posted ") { status = "Command sent — verify app setting" }
         appendLogLines(text.split(whereSeparator: \.isNewline).map(String.init))
     }
 
@@ -339,6 +359,15 @@ final class DialController {
         let prefixes = ["cu.usbmodem", "cu.usbserial", "cu.wchusbserial", "cu.SLAB_USBtoUART"]
         return names.filter { name in prefixes.contains(where: { name.hasPrefix($0) }) }
             .map { "/dev/\($0)" }.sorted()
+    }
+
+    private var focusedTargetName: String? {
+        switch NSWorkspace.shared.frontmostApplication?.bundleIdentifier {
+        case "com.openai.chat", "com.openai.codex": return "ChatGPT"
+        case "com.todesktop.230313mzl4w4u92": return "Cursor"
+        case "ai.opencode.desktop": return "OpenCode"
+        default: return nil
+        }
     }
 }
 #endif
