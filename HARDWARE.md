@@ -47,7 +47,7 @@ I2C pins; they are a different interface.
 
 - MCU: ESP32-S3 QFN56 rev v0.2, dual core, 40 MHz crystal, embedded 16 MB flash and 8 MB PSRAM class
 - MAC: `7c:4f:ad:ba:c8:98`
-- Displays: Estardyn 1.3-inch 240x240 SPI TFT (pictured ST7789, 7-pin `BLK/DC/RES/SDA/SCK/VCC/GND`) running a never-ending fluid-motion screensaver with a 32-step light-pastel gradient from each random HSV base tint toward a soft highlight, continuously morphing to a new target at least 115 RGB-distance units away, with each visual cycle 25% longer than the previous settings, with a stronger Gaussian blur and bottom-right FPS counter, plus 0.96-inch 128x64 I2C SSD1306 OLED with centered date/time
+- Displays: Estardyn 1.3-inch 240x240 SPI TFT (pictured ST7789, 7-pin `BLK/DC/RES/SDA/SCK/VCC/GND`) running a never-ending fluid-motion screensaver with a 32-step light-pastel gradient from each random HSV base tint toward a soft highlight, continuously morphing to a new target at least 115 RGB-distance units away, with each visual cycle 25% longer than the previous settings, with a stronger Gaussian blur, plus 0.96-inch 128x64 I2C SSD1306 OLED with centered date/time
 - Joystick: passive 8-pin switch module, `COM -> GND`; `UP/DOWN/LEFT/RIGHT/MID/SEL/RST -> GPIO13/14/15/16/17/18/4`
 - Wiring: TFT `BLK -> 3V3`, `DC/RES/SDA/SCK -> GPIO10/8/11/12`, `VCC -> 3V3`, `GND -> GND`; no exposed CS; OLED `SDA/SCL -> GPIO6/7`; see [date-time-display/WIRING.md](date-time-display/WIRING.md)
 - Firmware expected: `date-time-display/ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time`

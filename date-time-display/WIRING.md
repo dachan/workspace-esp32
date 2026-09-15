@@ -124,5 +124,5 @@ toward a soft highlight with the restored 64/255 lift. Each next target is at le
 RGB-distance units from the previous base colour. Palette progression updates
 every 20 frames and fluid phase advances at 2/5 phase units per frame, making
 each visual cycle 25% longer than the previous settings, with a stronger Gaussian
-blur and live FPS counter in the bottom right. The
+blur. The
 firmware starts from its compile timestamp until a clock value is received.
