@@ -335,7 +335,8 @@ void app_main(void)
         char date[16];
         char clock_text[16];
         strftime(date, sizeof(date), "%Y-%m-%d", &local);
-        strftime(clock_text, sizeof(clock_text), "%H:%M:%S", &local);
+        // Keep the OLED clock compact; serial status retains second precision.
+        strftime(clock_text, sizeof(clock_text), "%H:%M", &local);
         TickType_t current_tick = xTaskGetTickCount();
         if (last_tft_frame == 0 ||
             current_tick - last_tft_frame >= pdMS_TO_TICKS(SCREENSAVER_FRAME_INTERVAL_MS)) {
