@@ -9,7 +9,7 @@ change saved model/effort settings.
 ESP32-S3 AI model control panel for **model** and **thinking** selection across
 ChatGPT, Cursor, and OpenCode
 on the desk-mounted 3.5" ST7796U panel. Rotary encoders change both locally
-(display + NVS). After **0.4 s** with no further changes the firmware sends
+(display + NVS). After **0.05 s** with no further changes the firmware sends
 the latest state to `mac-chatgpt-bridge/`. The Mac helper
 treats that latest state as authoritative and applies it only while ChatGPT, Cursor, or OpenCode is already the foreground app.
 When no supported app is focused, it retains the newest panel state and
@@ -20,7 +20,7 @@ applies it once a supported app becomes foreground.
 The current helper sends `SYNC` on connection and on `READY <16-hex boot id>`.
 Firmware repeats READY every 0.5 seconds until SYNC, recovering even when
 a reset does not disconnect USB. There is no periodic SYNC. Firmware
-responds with its latest model and thinking after any active 0.4 s settle window:
+responds with its latest model and thinking after any active 0.05 s settle window:
 
 ```text
 Mac → ESP: SYNC
@@ -199,7 +199,7 @@ thinking/model actions.
 ## Desk control (encoders → ChatGPT / Cursor)
 
 Firmware `v 0.35+` updates the panel immediately, then sends SET after a
-0.4 s settle window. Thinking pulses are held until the knob pauses so
+0.05 s settle window. Thinking pulses are held until the knob pauses so
 two detents are one level and a quick turn can run Light↔Extra High. Model
 steps still use a 160 ms emit gap. The Mac helper uses `NSWorkspace.frontmostApplication`
 and focuses the prompt first: Cursor Command-L only if Agents is not already
@@ -209,7 +209,7 @@ control by Accessibility, chooses **Select model**, and presses the exact model 
 While Cursor is focused it opens the model list with Command-/ (first Down
 is Auto), then reopens it for Effort with Left, Up, Right, then Down-only to
 the level; Return selects, then Escape twice closes the menus. The bridge
-settles 0.25 s after the last received change, applies model and effort in one
+settles 0.05 s after the last received change, applies model and effort in one
 pass using a single latest-target worker. New generations supersede older
 operations. Fields are marked unknown before posting keys, so partial or
 interrupted operations cannot suppress the final correction when a dial returns
@@ -220,7 +220,7 @@ Model Dial helper's Sync menu item also reapplies the current panel values. Swit
 Cursor restores that app's last model and effort on the panel. When neither is
 focused, encoder changes remain the authoritative ESP32 state; the bridge retains
 them and applies them after a supported app becomes foreground without activating it. Focus loss
-suspends the apply until that happens. Model picker and confirmation waits use 0.25 s; all posted
+suspends the apply until that happens. Model picker and confirmation waits use 0.05 s; all posted
 keystrokes use a shared 0.05 s gap. A five-second hold on the glass starts
 touch calibration.
 
@@ -323,7 +323,7 @@ are not tracked in Git. Alternate `idf.py -B ...` directories are supported.
 
 Two encoders on the **right** header (see repo `s3-n16r8.jpeg`): **thinking**
 (GPIO41/40/39) and **model** (GPIO1/2/42). Rotate or click to step; the
-panel updates immediately and SET waits 0.4 s after the last detent.
+panel updates immediately and SET waits 0.05 s after the last detent.
 
 ## Bridge watch
 
