@@ -4,7 +4,7 @@ import Foundation
 
 enum Keys {
     /// Shared settle time for model pickers and confirmations.
-    static let modelTiming = 0.050
+    static let modelTiming = 0.250
 
     /// Shared delay between bridge-posted keystrokes.
     static let keystrokeDelay = 0.050

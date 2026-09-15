@@ -44,7 +44,7 @@ static void update_field(sync_field_t *field, const char *value, bool local_chan
     field->revision = ((uint64_t)esp_random() << 32) | esp_random();
     field->pending = local_change && value[0];
     field->started_at = xTaskGetTickCount();
-    field->wait_ticks = pdMS_TO_TICKS(50);
+    field->wait_ticks = pdMS_TO_TICKS(400);
 }
 
 void serial_sync_update(const model_fields_t *fields, bool local_change)
