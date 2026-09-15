@@ -117,8 +117,9 @@ After flashing, send `TIME YYYY-MM-DD HH:MM:SS` over the 115200-baud USB
 serial console, or use the joystick controls above. The value is saved in NVS
 and the OLED shows the centered date above the centered time, updating once per
 second. The TFT independently shows a never-ending fluid-motion screensaver
-with a 16-step light-pastel gradient from each hardware-random HSV base tint
-toward a soft highlight. Each next target is at least 96 RGB-distance units
+with a 32-step light-pastel gradient from each hardware-random HSV base tint
+toward a soft highlight with a 77/255 lift. Each next target is at least 115
+RGB-distance units
 from the previous base colour, and targets and fluid motion morph at half the former
 animation speed, with a stronger Gaussian blur and live FPS counter at the
 bottom right. The
