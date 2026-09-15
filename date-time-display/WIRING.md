@@ -118,7 +118,7 @@ serial console, or use the joystick controls above. The value is saved in NVS
 and the OLED shows the centered date above the centered time, updating once per
 second. The TFT independently shows a never-ending fluid-motion screensaver
 with a 32-step light-pastel gradient from each hardware-random HSV base tint
-toward a soft highlight with a 77/255 lift. Each next target is at least 115
+toward a soft highlight with the restored 64/255 lift. Each next target is at least 115
 RGB-distance units from the previous base colour. Palette progression updates
 every 20 frames and fluid phase advances at 2/5 phase units per frame, making
 each visual cycle 25% longer than the previous settings, with a stronger Gaussian
