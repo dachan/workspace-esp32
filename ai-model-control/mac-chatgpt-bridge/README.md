@@ -30,7 +30,7 @@ model and thinking state until a supported app is focused again.
    Each field is marked unknown before posting keys, so an interrupted or failed
    sequence cannot cause a later correction to be skipped. Completed fields are
    cached per process only while their generation is current. `PUSH` forces both
-   fields to be posted again. Model picker and confirmation waits use 0.25 s;
+   fields to be posted again. Model picker and confirmation waits use 0.20 s;
    every bridge-posted keystroke uses a shared 0.05 s gap.
    - ChatGPT / Codex model: click the visible model control by Accessibility,
      then **Select model** and the exact ESP dial model label.

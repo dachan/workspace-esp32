@@ -63,7 +63,7 @@ enum CursorPicker {
         // Command-/ focuses the empty search field; first Down highlights Auto.
         guard step(Keys.down, count: index + 1, pulse: pulse),
               Keys.key(Keys.return, pulse: pulse),
-              Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
+              Keys.wait(Keys.pickerTiming, pulse: pulse) else { return .interrupted }
         return .applied(path: "keyboard model \(name)")
     }
 
@@ -76,7 +76,7 @@ enum CursorPicker {
         guard step(Keys.left, count: 1, pulse: pulse),
               step(Keys.up, count: 1, pulse: pulse),
               step(Keys.right, count: 1, pulse: pulse),
-              Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
+              Keys.wait(Keys.pickerTiming, pulse: pulse) else { return .interrupted }
         guard let root = root(for: focus),
               let menu = find(in: root, where: {
                   role($0) == "AXMenu" &&
@@ -95,12 +95,12 @@ enum CursorPicker {
         // Right enters at the first level, independently of the saved effort.
         guard step(Keys.down, count: index, pulse: pulse),
               Keys.key(Keys.return, pulse: pulse),
-              Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
+              Keys.wait(Keys.pickerTiming, pulse: pulse) else { return .interrupted }
         // Effort can leave both submenu and parent open. Let each Escape
         // settle before restoring composer focus, or the second can be lost.
         for _ in 0..<2 {
             guard Keys.key(Keys.escape, pulse: pulse),
-                  Keys.wait(Keys.modelTiming, pulse: pulse) else { return .interrupted }
+                  Keys.wait(Keys.pickerTiming, pulse: pulse) else { return .interrupted }
         }
         if let currentRoot = Self.root(for: focus), find(in: currentRoot, where: {
             guard role($0) == "AXMenu" else { return false }

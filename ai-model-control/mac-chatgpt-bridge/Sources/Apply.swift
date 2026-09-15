@@ -267,7 +267,7 @@ enum Switcher {
         guard Keys.command(Keys.slash, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not post Command-/")
         }
-        guard Keys.wait(Keys.modelTiming, pulse: pulse) else {
+        guard Keys.wait(Keys.pickerTiming, pulse: pulse) else {
             return .interrupted
         }
         guard DeskFront.isForeground(preferred: preferred) else {

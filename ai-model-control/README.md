@@ -220,7 +220,7 @@ Model Dial helper's Sync menu item also reapplies the current panel values. Swit
 Cursor restores that app's last model and effort on the panel. When neither is
 focused, encoder changes remain the authoritative ESP32 state; the bridge retains
 them and applies them after a supported app becomes foreground without activating it. Focus loss
-suspends the apply until that happens. Model picker and confirmation waits use 0.25 s; all posted
+suspends the apply until that happens. Model picker and confirmation waits use 0.20 s; all posted
 keystrokes use a shared 0.05 s gap. A five-second hold on the glass starts
 touch calibration.
 

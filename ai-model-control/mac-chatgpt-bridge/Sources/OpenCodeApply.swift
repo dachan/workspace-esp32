@@ -12,7 +12,7 @@ enum OpenCodeApply {
         }
         if let result = prepare(focus, pulse: pulse) { return result }
         openPickers.insert(focus.pid)
-        guard Keys.command(Keys.apostrophe, pulse: pulse), Keys.wait(Keys.modelTiming, pulse: pulse) else {
+        guard Keys.command(Keys.apostrophe, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
             return .interrupted
         }
         // Luna is already highlighted when the native menu opens. Down is
@@ -24,7 +24,7 @@ enum OpenCodeApply {
                 }
             }
         }
-        guard Keys.key(Keys.return, pulse: pulse), Keys.wait(Keys.modelTiming, pulse: pulse) else {
+        guard Keys.key(Keys.return, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
             return .interrupted
         }
         openPickers.remove(focus.pid)

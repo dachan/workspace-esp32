@@ -18,7 +18,7 @@ enum ChatGPTPicker {
         guard let control = findModelControl(in: root) else {
             return .failed("ChatGPT model control unavailable")
         }
-        guard click(control, pulse: pulse), Keys.wait(Keys.modelTiming, pulse: pulse) else {
+        guard click(control, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not open the ChatGPT model control")
         }
         guard DeskFront.isForeground(preferred: preferred) else {
@@ -31,7 +31,7 @@ enum ChatGPTPicker {
             closeMenus(pulse: pulse)
             return .failed("ChatGPT Select model menu unavailable")
         }
-        guard click(selectModel, pulse: pulse), Keys.wait(Keys.modelTiming, pulse: pulse) else {
+        guard click(selectModel, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not open the ChatGPT model list")
         }
         guard DeskFront.isForeground(preferred: preferred) else {
@@ -44,7 +44,7 @@ enum ChatGPTPicker {
             closeMenus(pulse: pulse)
             return .failed("ChatGPT model \(name) is unavailable")
         }
-        guard click(choice, pulse: pulse), Keys.wait(Keys.modelTiming, pulse: pulse) else {
+        guard click(choice, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not select \(name)")
         }
         guard DeskFront.isForeground(preferred: preferred) else {

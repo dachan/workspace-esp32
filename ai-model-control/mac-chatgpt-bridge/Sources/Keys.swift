@@ -3,8 +3,11 @@ import CoreGraphics
 import Foundation
 
 enum Keys {
+    /// Delay after a new dial target before applying it.
+    static let bridgeSettle = 0.200
+
     /// Shared settle time for model pickers and confirmations.
-    static let modelTiming = 0.250
+    static let pickerTiming = 0.200
 
     /// Shared delay between bridge-posted keystrokes.
     static let keystrokeDelay = 0.050

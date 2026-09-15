@@ -97,7 +97,7 @@ final class BridgeRuntime {
         forceApply = forceApply || force || !continuingTarget
         // Batch paired knob turns and wait for the firmware's FRONT update to
         // restore the focused app's saved panel state before posting keys.
-        settleAt = ProcessInfo.processInfo.systemUptime + Keys.modelTiming
+        settleAt = ProcessInfo.processInfo.systemUptime + Keys.bridgeSettle
         retryAt = 0
         lastFailure = nil
     }
@@ -265,7 +265,7 @@ final class BridgeRuntime {
                     retryAt = 0
                     print("\(stamp()) posted \(kind.rawValue) \(value) via \(path)")
                     if kind == .model, focus.kind == .cursor,
-                       !Keys.wait(Keys.modelTiming, pulse: pulse) { break applyFields }
+                       !Keys.wait(Keys.pickerTiming, pulse: pulse) { break applyFields }
                 case .interrupted:
                     return .interrupted
                 case .failed(let message):
