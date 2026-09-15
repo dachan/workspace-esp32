@@ -60,15 +60,18 @@ codex, push, pull the Mac, then flash on the Mac. The Mac helper is
 Mac folder). Detail for keystroke recipes, InputGuard, NVS defaults, ST7796
 MADCTL lock, and logo codegen lives in `ai-model-control/README.md`.
 
-Firmware settle **0.4 s** after the last rotary detent before sending
-`SET`/`STATE`. The bridge settles **0.20 s** more after the last received
-change, then applies only fields that differ. Model picker / confirmation
-waits are **0.20 s**; every bridge-posted keystroke is separated by **0.05 s**.
+Firmware settles **0.4 s** after the last rotary detent, sends complete
+`STATE` frames, then `APPLY`. The bridge settles **0.20 s** after that
+explicit intent and applies only fields that differ. Model picker /
+confirmation waits are **0.20 s**; every bridge-posted keystroke is separated
+by **0.05 s**.
 
 The helper **never activates** ChatGPT, Cursor, or OpenCode. Encoder lines
 apply only while that app is already focused; otherwise they are dropped —
 no activate, no CANCEL, no deferred apply when focus returns. Focus lost
-mid-apply drops the change. Tap SYNC to send PUSH plus new STATE revisions.
+mid-apply drops the change. App focus and connection snapshots update state
+without posting keys. Press either encoder to send `PUSH` plus new `STATE`
+revisions and force the current model and effort into the focused app.
 
 **Encoders.** Thinking uses polled falling-CLK decode (two detents = one
 level). The model knob uses PCNT hardware quadrature — a polled decode
@@ -136,8 +139,10 @@ notarization, a bundled flasher, and signed firmware artifacts.
 ## v0.90 release freeze
 
 Keep `ai-model-control/VERSION` at **0.90**. The user explicitly authorized
-rebuilding and reflashing the event-driven serial recovery change while retaining
-this version number. This exception does not authorize other firmware changes.
+rebuilding and reflashing the event-driven serial recovery and intent-driven
+synchronization changes while retaining this version number. Focus never posts
+keys, settled rotation sends `APPLY`, and either encoder click sends `PUSH`.
+These exceptions do not authorize other firmware changes.
 Firmware repeats `READY <16-hex boot id>` until SYNC. The bridge sends SYNC
 on connection and READY, never periodically. ENABLED is sent for SYNC and
 model-list changes; STATE retries until ACK. Retain the 30-second TIME refresh.

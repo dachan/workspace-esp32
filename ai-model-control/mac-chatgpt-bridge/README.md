@@ -2,9 +2,8 @@
 
 macOS helper for the AI model control panel's encoders. Foreground is one
 `NSWorkspace.frontmostApplication` read. It never activates ChatGPT, Cursor, or OpenCode.
-While one of those apps is focused it focuses the prompt via Accessibility,
-then posts that app's keyboard shortcuts; otherwise it retains the ESP32's
-model and thinking state until a supported app is focused again.
+It posts keyboard shortcuts only after explicit `APPLY` or `PUSH` intent
+while a supported app is already focused. Focus changes only update the panel.
 
 ## What it does
 
@@ -15,14 +14,15 @@ model and thinking state until a supported app is focused again.
    `--bundle-id` can force one of those.
 3. Requests current state on connection and each firmware READY announcement. Accepts revisioned
    `STATE` updates and legacy `SET MODEL` / `SET THINKING` lines. ACKs validated
-   updates on receipt; duplicate revisions are acknowledged without reapplying.
-   An ACK means received, not applied.
-4. If ChatGPT, Cursor, or OpenCode is focused, focus the prompt first — Cursor via
+   updates on receipt; duplicate revisions are acknowledged without applying.
+   An ACK means received, not applied. Revisioned state waits for `APPLY` from
+   a settled rotation or `PUSH` from an encoder click. Legacy SET remains an
+   application intent for compatibility.
+4. After explicit intent, if ChatGPT, Cursor, or OpenCode is focused, focus the prompt first — Cursor via
    Command-L only when the Agents panel is missing (Cmd+L toggles it closed
    if it is already open), otherwise AX-focus `aislash-editor-input`;
    ChatGPT/Codex by message-box identity — then apply using that app's shortcuts.
-   Applies start 0.20 s after the last
-   received change; focus-triggered forced reconciliation starts immediately.
+   Applies start after the 0.20 s intent settle.
    One worker retains the latest complete model/effort target,
    with a generation that changes on every accepted update or bridge SYNC.
    Serial is drained during delays; a newer generation aborts and re-targets,
@@ -30,8 +30,9 @@ model and thinking state until a supported app is focused again.
    effort, and model changes invalidate the cached effort for both apps.
    Each field is marked unknown before posting keys, so an interrupted or failed
    sequence cannot cause a later correction to be skipped. Completed fields are
-   cached per process only while their generation is current. `PUSH` forces both
-   fields to be posted again. Model picker and confirmation waits use 0.20 s;
+   cached per process only while their generation is current. `APPLY` posts
+   differing fields; `PUSH` forces both fields to be posted again. Model
+   picker and confirmation waits use 0.20 s;
    every bridge-posted keystroke uses a shared 0.05 s gap.
    - ChatGPT / Codex model: click the visible model control by Accessibility,
      then **Select model** and the exact ESP dial model label.
@@ -45,19 +46,18 @@ model and thinking state until a supported app is focused again.
    - Cursor effort: Command-/ (reopened after selecting a model when
      both changed), then Left, Up, Right directly into Reasoning, Down to
      the level, and Return once, then Escape twice to close the menus. An effort-only change skips model selection.
-5. If none of ChatGPT, Cursor, or OpenCode is focused: leave the ESP32 display/NVS as
-   the source of truth and retain its latest model and thinking state. No shortcuts are
-   posted while an unsupported app is frontmost; when a supported app returns, the helper
-   applies the retained state after its normal settle delay without activating that app. The helper also sends `FRONT Cursor`, `FRONT ChatGPT`, `FRONT OpenCode`, or `FRONT None`
-   so the panel lockup matches the focused app and can idle to a clock
-   screensaver when none is focused.
+5. If none of ChatGPT, Cursor, or OpenCode is focused: retain the ESP32 state
+   but drop its application intent. Returning focus never posts keys. The helper
+   still sends `FRONT Cursor`, `FRONT ChatGPT`, `FRONT OpenCode`, or
+   `FRONT None` so the panel lockup and remembered state match the focused app
+   and can idle to a clock screensaver when none is focused.
 
 Shortcut sequences stay bound to the process that was focused when they began.
 Losing focus, including switching between ChatGPT, Codex, Cursor, and OpenCode,
-interrupts the sequence but retains the ESP32 target for a later supported-app focus. A superseded sequence, or one
+interrupts the sequence and requires another dial movement or Sync. A superseded sequence, or one
 that failed while the app stayed focused, is retried at two-second intervals while that app remains frontmost, up to
 three failed attempts per target. This limit applies to all apps and input-filter
-creation failures; a later supported-app focus, dial update, or Sync starts a fresh attempt budget. Interrupted pickers are dismissed before retrying in that process, tracking
+creation failures; a later dial update or Sync starts a fresh attempt budget. Interrupted pickers are dismissed before retrying in that process, tracking
 both Cursor menu layers and each Escape already posted. ChatGPT thinking retries
 start from the absolute Light clamp. Logs say “posted” when the current generation's
 key sequence completes; the helper does not read back the app's selected value.
@@ -74,8 +74,8 @@ A connection change cancels the in-flight target and clears received revisions
 and applied-value caches, so the reconnect snapshot is accepted even when its
 revision is unchanged. Frames from a poll that ended in a disconnect are discarded.
 Current firmware retransmits until ACK and answers SYNC with its state, so a
-bridge restart or device reset recovers the panel state without another knob
-movement; if no supported app is focused when it arrives, the bridge retains it until one is.
+bridge restart or device reset recovers the panel state without applying it.
+The menu-bar Sync action explicitly applies the first complete restart snapshot.
 Older firmware still works, but cannot replay missing changes. If the device path
 changes, restart with the new `--port`.
 
@@ -104,11 +104,11 @@ GPT-5.6 Luna). Effort depends on the model (see below).
 
 Bind ChatGPT's three shortcuts if they are Unassigned. Cursor uses Command-/
 to open the model list (first Down is Auto). Firmware waits 0.4 s after the
-last encoder detent before sending a SET line.
+last encoder detent before sending complete STATE frames and `APPLY`.
 
 ## Input guard
 
-Model and thinking changes share a temporary input filter for the focused app's
+Explicit model and thinking applies share a temporary input filter for the focused app's
 process, including the waits between menu steps. New keyboard presses, pointer
 movement, clicks, drags, and scrolling are discarded while the bridge's tagged
 events pass through. Key-up, modifier-state, and mouse-up events also pass so
@@ -261,8 +261,8 @@ OpenCode effort sync is unsupported. The panel may retain its local thinking
 value, but the bridge skips OpenCode thinking updates; it does not open the
 variant menu or use the cycling shortcut.
 
-Prompt focus, interruption cleanup, per-process apply caching, SYNC reapply,
-and dropping changes when the app is not foreground follow the existing bridge
+Prompt focus, interruption cleanup, per-process apply caching, explicit Sync,
+and dropping intent when the app is not foreground follow the existing bridge
 workflow. A new firmware build is required for the OpenCode header and saved
 state; rebuilding alone does not update the connected device or running helper.
 

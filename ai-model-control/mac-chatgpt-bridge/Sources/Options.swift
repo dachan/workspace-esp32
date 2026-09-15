@@ -10,6 +10,7 @@ struct Options {
     var front = false
     var watch = false
     var listen = false
+    var applyOnConnect = false
     var setModel: String?
     var setThinking: String?
     var port: String?
@@ -51,6 +52,8 @@ func parseOptions(_ args: [String]) -> Options? {
             options.watch = true
         case "--listen":
             options.listen = true
+        case "--apply-on-connect":
+            options.applyOnConnect = true
         case "--send-serial":
             break // Compatibility with existing launch commands.
         case "--set-model":
@@ -125,6 +128,7 @@ func usage() -> String {
       --watch             Follow foreground + optional serial SET lines
       --listen            Read SET MODEL / SET THINKING from --port
                           (implied by --watch --port)
+      --apply-on-connect  Apply the first complete panel snapshot if an app is focused
       --port PATH         USB serial device
       --baud N            Serial baud (default 115200)
       --list-ports        List likely USB serial devices

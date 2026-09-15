@@ -22,6 +22,7 @@ final class DialController {
     private var wantsBridge = true
     private var stopping = false
     private var restartAt: TimeInterval = 0
+    private var applyOnNextStart = false
     private(set) var selectedPort = UserDefaults.standard.string(forKey: "selectedSerialPort")
 
     var statusSummary: String {
@@ -101,8 +102,9 @@ final class DialController {
         }
     }
 
-    func restartBridge() {
+    func restartBridge(applyOnConnect: Bool = false) {
         guard wantsBridge else { return }
+        applyOnNextStart = applyOnNextStart || applyOnConnect
         restartAt = ProcessInfo.processInfo.systemUptime + 0.2
         status = "Restarting"
         recordBridgeEvent("Bridge restart requested")
@@ -130,7 +132,7 @@ final class DialController {
                 recordBridgeEvent("Cursor sync: \(error.localizedDescription); saved selection retained")
             }
             recordBridgeEvent("Sync requested for the focused app")
-            restartBridge()
+            restartBridge(applyOnConnect: true)
         }
     }
 
@@ -181,13 +183,17 @@ final class DialController {
             recordBridgeEvent(message!)
             return
         }
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = [
+        var arguments = [
             "--watch", "--send-serial", "--port", candidate,
             "--chatgpt-effort-mask", maskArgument(preferences.chatGPTThinkingMask),
             "--cursor-model-mask", maskArgument(preferences.cursorModelMask),
         ]
+        if applyOnNextStart {
+            arguments.append("--apply-on-connect")
+        }
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = arguments
         capture(process) { [weak self, weak process] text in
             guard let self, let process, self.bridge === process, !self.stopping else { return }
             self.recordBridgeOutput(text)
@@ -211,6 +217,7 @@ final class DialController {
         do {
             bridge = process
             try process.run()
+            applyOnNextStart = false
             port = candidate
             status = "Connecting to panel"
             message = "Bridge started on \(candidate)"

@@ -119,7 +119,7 @@ void app_main(void)
     ESP_ERROR_CHECK(serial_model_init());
     ESP_ERROR_CHECK(encoder_init());
 #if defined(AI_MODEL_PROFILE_SUPERMINI)
-    ESP_LOGI(TAG, "round target: touch disabled; encoder clicks provide local controls");
+    ESP_LOGI(TAG, "round target: touch disabled; either encoder click syncs the current state");
 #else
     if (touch_init() != ESP_OK) {
         ESP_LOGW(TAG, "touch unavailable; five-point calibration hold is disabled");
@@ -148,6 +148,7 @@ void app_main(void)
 
     desk_app_t previous_app = DESK_CHATGPT;
     bool front_ready = false;
+    bool was_focused = false;
     bool hold_calibrated = false;
     bool paint_pending = true;
     bool hold_rx = false;
@@ -178,25 +179,31 @@ void app_main(void)
             touch_clear_state();
             paint_pending = true;
         }
+        bool sync_pressed = thinking_pressed || model_pressed;
         bool local_changed = false;
         bool input_activity = thinking_delta || model_delta || thinking_pressed || model_pressed
             || touch.down || touch.released;
         local_changed |= apply_model_delta(&fields, model_delta);
         if (local_changed) adapt_fields_for_front(&fields);
         local_changed |= apply_thinking_delta(&fields, thinking_delta);
-        if (thinking_pressed) {
-            // Empty panel: Extra High minus one selects High.
-            local_changed |= apply_thinking_delta(&fields, fields.has_thinking ? 1 : -1);
-        }
-        if (model_pressed) {
-            local_changed |= apply_model_delta(&fields, 1);
-        }
         if (local_changed) {
             adapt_fields_for_front(&fields);
             model_nvs_remember(&fields);
             hold_rx = true;
             local_changed_at = now;
-            serial_sync_update(&fields, true);
+            if (front_title_is_focused()) {
+                serial_sync_apply(&fields);
+            } else {
+                serial_sync_update(&fields, true);
+            }
+        }
+        if (sync_pressed) {
+            if (front_title_is_focused()) {
+                serial_sync_push(&fields);
+                ESP_LOGI(TAG, "encoder sync requested");
+            } else {
+                ESP_LOGI(TAG, "encoder sync ignored: no supported app focused");
+            }
         }
 
         // Compatibility display updates must not overwrite a settling local edit.
@@ -218,9 +225,13 @@ void app_main(void)
             save_pending = true;
             paint_pending = true;
         }
-        serial_sync_poll();
-        if (front_title_is_focused()) {
-            desk_app_t app = front_title_app();
+        bool focused = front_title_is_focused();
+        desk_app_t app = front_title_app();
+        if (focused != was_focused || (focused && front_ready && app != previous_app)) {
+            serial_sync_cancel_intent();
+        }
+        was_focused = focused;
+        if (focused) {
             if (!front_ready || app != previous_app) {
                 if (front_ready) {
                     model_nvs_remember_for(&fields, previous_app);
@@ -234,6 +245,7 @@ void app_main(void)
                 serial_sync_update(&fields, true);
             }
         }
+        serial_sync_poll();
         now = xTaskGetTickCount();
         if (front_title_is_focused() || input_activity) {
             last_active = now;

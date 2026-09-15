@@ -9,11 +9,12 @@ change saved model/effort settings.
 ESP32-S3 AI model control panel for **model** and **thinking** selection across
 ChatGPT, Cursor, and OpenCode
 on the desk-mounted 3.5" ST7796U panel. Rotary encoders change both locally
-(display + NVS). After **0.4 s** with no further changes the firmware sends
-the latest state to `mac-chatgpt-bridge/`. The Mac helper
-treats that latest state as authoritative and applies it only while ChatGPT, Cursor, or OpenCode is already the foreground app.
-When no supported app is focused, it retains the newest panel state and
-applies it once a supported app becomes foreground.
+(display + NVS). After **0.4 s** with no further changes, the firmware sends
+the latest complete state plus `APPLY` to `mac-chatgpt-bridge/` only while
+ChatGPT, Cursor, or OpenCode is already foreground. Focus changes restore the
+app-specific panel state without posting keys. Pressing either encoder sends
+the complete current state plus `PUSH`, which forces model and effort into
+the currently focused supported app.
 
 ## Protocol (USB serial, 115200)
 
@@ -29,14 +30,22 @@ Mac → ESP: CONFIG CHATGPT_EFFORTS <16-hex effort mask>
 Mac → ESP: CONFIG CURSOR_MODELS <16-hex model mask>
 ESP → Mac: STATE <16-hex revision> MODEL <name>
 ESP → Mac: STATE <16-hex revision> THINKING <level>
+ESP → Mac: APPLY
+ESP → Mac: PUSH
 Mac → ESP: ACK <16-hex revision> MODEL
 Mac → ESP: ACK <16-hex revision> THINKING
 ESP → Mac: STATE <16-hex revision> MODEL <name>
 ESP → Mac: STATE <16-hex revision> THINKING <level>
 ```
 
+Revisioned `STATE` frames update the bridge's panel snapshot but never post
+keys on their own. A settled rotation follows its complete state with `APPLY`;
+an encoder click follows fresh revisions for both fields with `PUSH`.
+`APPLY` uses the per-process cache, while `PUSH` forces both fields.
+
 The Model Dial helper's Sync menu item restarts the bridge, which requests the
-panel's current MODEL/THINKING revisions and reapplies them to the focused app.
+panel's current MODEL/THINKING revisions and explicitly applies that first
+complete snapshot to the focused app.
 
 Each changed field gets a new revision, including after firmware restart.
 Unacknowledged state retries every 0.5 s; a full USB transmit buffer retries after
@@ -50,9 +59,10 @@ Mac also sends `TIME <unix-seconds> <tz-offset-minutes>` on connect and every
 30 s so the panel can show a local clock. Firmware ticks minutes from that
 snapshot; it does not use Wi-Fi or SNTP. The helper also sends `FRONT Cursor`,
 `FRONT ChatGPT`, `FRONT OpenCode`, or `FRONT None` when the focused app changes so the
-header brand lockup matches. `FRONT None` keeps the last app's catalog and
-logo; it does not fall back to ChatGPT. After each SYNC the helper resends
-FRONT so a firmware restart recovers focus. After 1 min without Cursor, ChatGPT, or OpenCode
+header brand lockup and app-specific panel state match without applying anything
+to the desktop app. `FRONT None` keeps the last app's catalog and logo; it
+does not fall back to ChatGPT. After each SYNC the helper resends FRONT so a
+firmware restart recovers focus. After 1 min without Cursor, ChatGPT, or OpenCode
 focus and without encoder or touch, the panel shows a date/time screensaver.
 Focusing Cursor, ChatGPT, or OpenCode, turning a knob, or tapping the glass wakes it.
 
@@ -192,9 +202,9 @@ idf.py -B ESP32_MINI-128_tft_240x240-AI_Model_Control-New \
   -D SDKCONFIG_DEFAULTS=sdkconfig.defaults.supermini build
 ```
 
-The round target has no touch calibration or glass SYNC control; use the
-Model Dial helper's Sync command, and use encoder clicks for the existing local
-thinking/model actions.
+The round target has no touch calibration or glass SYNC control. Press either
+encoder to sync the displayed model and effort to the focused app; the Model
+Dial helper's Sync command provides the same explicit action from macOS.
 
 ## Desk control (encoders → ChatGPT / Cursor)
 
@@ -209,18 +219,19 @@ control by Accessibility, chooses **Select model**, and presses the exact model 
 While Cursor is focused it opens the model list with Command-/ (first Down
 is Auto), then reopens it for Effort with Left, Up, Right, then Down-only to
 the level; Return selects, then Escape twice closes the menus. The bridge
-settles 0.20 s after the last received change, applies model and effort in one
-pass using a single latest-target worker. New generations supersede older
+settles 0.20 s after an explicit `APPLY` or `PUSH`, then applies model and
+effort in one pass using a single latest-target worker. New generations supersede older
 operations. Fields are marked unknown before posting keys, so partial or
 interrupted operations cannot suppress the final correction when a dial returns
 to an earlier value. Model changes always invalidate effort; otherwise an
 effort-only change skips model selection. Completed values are cached per Mac
-process, but every supported-app focus forces immediate reconciliation from the ESP32 without the received-change settle delay. Keyboard posting is not UI readback. The
-Model Dial helper's Sync menu item also reapplies the current panel values. Switching ChatGPT ↔
+process. Supported-app focus only changes the panel catalog and restores its
+remembered values; it never posts keys. The Model Dial helper's Sync menu item
+and either encoder click force both current panel values. Switching ChatGPT ↔
 Cursor restores that app's last model and effort on the panel. When neither is
-focused, encoder changes remain the authoritative ESP32 state; the bridge retains
-them and applies them after a supported app becomes foreground without activating it. Focus loss
-suspends the apply until that happens. Model picker and confirmation waits use 0.20 s; all posted
+focused, encoder changes remain authoritative on the ESP32 but their apply intent
+is dropped rather than deferred. Focus loss interrupts the current apply.
+Model picker and confirmation waits use 0.20 s; all posted
 keystrokes use a shared 0.05 s gap. A five-second hold on the glass starts
 touch calibration.
 
@@ -322,14 +333,15 @@ version numbers are never modified by the build. Generated headers and archives
 are not tracked in Git. Alternate `idf.py -B ...` directories are supported.
 
 Two encoders on the **right** header (see repo `s3-n16r8.jpeg`): **thinking**
-(GPIO41/40/39) and **model** (GPIO1/2/42). Rotate or click to step; the
-panel updates immediately and SET waits 0.4 s after the last detent.
+(GPIO41/40/39) and **model** (GPIO1/2/42). Rotation updates the panel
+immediately and sends `APPLY` after the 0.4 s settle. Pressing either encoder
+sends the current model and effort as a forced `PUSH`.
 
 ## Bridge watch
 
 The Mac helper temporarily filters user input to the focused app during each
 model/thinking apply. Escape cancels; focus loss or a five-second timeout releases
-the filter but retains the ESP32 target for a later supported-app focus. See [input guard](mac-chatgpt-bridge/README.md#input-guard)
+the filter; another dial movement or Sync is required to retry. See [input guard](mac-chatgpt-bridge/README.md#input-guard)
 for permissions, held-input handling, and the availability check.
 
 ```sh

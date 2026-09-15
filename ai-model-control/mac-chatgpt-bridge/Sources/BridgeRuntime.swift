@@ -32,9 +32,11 @@ final class BridgeRuntime {
     private var forceApply = false
     private var bootID: UInt64?
     private var connectionGeneration: UInt64 = 0
+    private var applyOnConnectPending: Bool
 
     init(options: Options) {
         self.options = options
+        applyOnConnectPending = options.applyOnConnect
         Catalog.setChatGPTThinkingMask(options.chatGPTThinkingMask)
         Catalog.setCursorEnabledMask(options.cursorModelMask)
         session = options.port.map {
@@ -48,6 +50,7 @@ final class BridgeRuntime {
     }
 
     private func receive(_ update: SerialUpdate) {
+        let legacyIntent = update.revision == nil
         guard let value = update.kind.canonicalName(update.value) else {
             fputs("chatgpt-bridge: ignore unknown \(update.kind.rawValue) \(update.value)\n", stderr)
             return
@@ -65,14 +68,30 @@ final class BridgeRuntime {
             receivedThinking = value
         }
         replaceDesiredWithPanelState()
+        print("\(stamp()) rx \(update.kind.rawValue) \(value)")
+        fflush(stdout)
+        if legacyIntent {
+            requestApply(force: false, source: "legacy SET")
+        } else {
+            applyInitialSnapshotIfRequested()
+        }
+    }
+
+    private func applyInitialSnapshotIfRequested() {
+        guard applyOnConnectPending, receivedModel != nil, receivedThinking != nil else { return }
+        applyOnConnectPending = false
+        requestApply(force: true, source: "menu Sync")
+    }
+
+    private func requestApply(force: Bool, source: String) {
         guard DeskFront.isForeground(preferred: options.bundleID) else {
-            suspendPending("no supported app is focused")
-            print("\(stamp()) deferred \(update.kind.rawValue) \(value) (no supported app is focused)")
+            suspendPending("\(source) received without focus")
+            print("\(stamp()) dropped \(source) (no supported app is focused)")
             fflush(stdout)
             return
         }
-        beginApplyingToFocusedApp()
-        print("\(stamp()) rx \(update.kind.rawValue) \(value)")
+        beginApplyingToFocusedApp(force: force)
+        print("\(stamp()) rx \(source)")
         fflush(stdout)
     }
 
@@ -83,10 +102,10 @@ final class BridgeRuntime {
         generation &+= 1
     }
 
-    /// The dial is authoritative. Keep its most recent complete state while
-    /// unsupported apps are frontmost, then reconcile it only once a supported
-    /// app is confirmed foreground.
-    private func beginApplyingToFocusedApp(force: Bool = false, settle: Bool = true) {
+    /// The dial is authoritative, but state receipt alone never posts keys.
+    /// A complete snapshot is applied only after explicit APPLY/PUSH intent
+    /// while a supported app is already foreground.
+    private func beginApplyingToFocusedApp(force: Bool = false) {
         guard !desired.isEmpty, DeskFront.isForeground(preferred: options.bundleID) else { return }
         let continuingTarget = targetFocus?.isCurrent == true
         if !continuingTarget {
@@ -94,16 +113,16 @@ final class BridgeRuntime {
         }
         guard targetFocus != nil else { return }
         applyFailures = 0
-        forceApply = forceApply || force || !continuingTarget
-        // Batch paired dial updates. Focus-triggered reconciliation starts
-        // immediately so it does not collide with the user's first keystrokes.
-        settleAt = settle ? ProcessInfo.processInfo.systemUptime + Keys.bridgeSettle : 0
+        forceApply = forceApply || force
+        // Explicit APPLY/PUSH intents arrive after their complete state frames.
+        // Keep the short settle so a newer physical action can supersede this one.
+        settleAt = ProcessInfo.processInfo.systemUptime + Keys.bridgeSettle
         retryAt = 0
         lastFailure = nil
     }
 
-    /// Interrupting an apply must never forget the dial's desired state. A
-    /// later supported-app focus creates a fresh FocusOperation and retries it.
+    /// Interrupting an apply retains panel state, but a new APPLY/PUSH intent
+    /// is required before another keyboard transaction starts.
     private func suspendPending(_ reason: String) {
         if targetFocus != nil && !desired.isEmpty {
             print("\(stamp()) deferred target (\(reason))")
@@ -113,13 +132,13 @@ final class BridgeRuntime {
         generation &+= 1
         retryAt = 0
         lastFailure = nil
-        forceApply = true
+        forceApply = false
     }
 
     private func suspendAfterFocusLoss(_ reason: String) {
         suspendPending(reason)
-        // Focus may leave and return during one apply; make that return visible
-        // to noteFront() so it starts a fresh, foreground-bound operation.
+        // Focus may leave and return during one apply; keep the transition
+        // visible to noteFront() without restarting keyboard automation.
         lastFront = false
         lastFrontPID = nil
     }
@@ -160,18 +179,8 @@ final class BridgeRuntime {
                 session.requestSync()
                 continue
             }
-            if raw == "PUSH" {
-                guard DeskFront.isForeground(preferred: options.bundleID) else {
-                    forceApply = true
-                    suspendPending("SYNC received without focus")
-                    print("\(stamp()) deferred PUSH (no supported app is focused)")
-                    fflush(stdout)
-                    continue
-                }
-                forceApply = true
-                beginApplyingToFocusedApp()
-                print("\(stamp()) rx PUSH")
-                fflush(stdout)
+            if raw == "APPLY" || raw == "PUSH" {
+                requestApply(force: raw == "PUSH", source: raw)
                 continue
             }
             if raw.hasPrefix("ENABLED ") {
@@ -305,12 +314,8 @@ final class BridgeRuntime {
             lastFrontPID = pid
             print("\(stamp()) \(DeskFront.label(preferred: options.bundleID))")
             fflush(stdout)
-            if front {
-                // Reapply even if this process was previously cached: the user
-                // may have changed the app directly while it was unfocused.
-                beginApplyingToFocusedApp(force: true, settle: false)
-            } else {
-                suspendPending("no supported app is focused")
+            if targetFocus != nil {
+                suspendPending(front ? "focused app changed" : "no supported app is focused")
             }
         }
     }

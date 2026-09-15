@@ -43,7 +43,7 @@ enum Keys {
         Chat/agent input must be focused.
         Fast/Slow is not set from the dial.
         The Model Dial Settings window controls the enabled Cursor model list; Auto stays on.
-        Tap SYNC on the panel to reapply the current model and thinking.
+        Press either encoder to reapply the current model and thinking.
       OpenCode
         Command-apostrophe opens models; exact accessible names select choices.
         The variant menu selects absolute effort (Light maps to Low, Extra High to Xhigh).
