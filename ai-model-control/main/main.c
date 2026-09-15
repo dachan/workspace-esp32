@@ -250,7 +250,7 @@ void app_main(void)
             save_pending = fields.has_model;
             paint_pending = true;
         }
-        if (clock_needs_paint() || front_title_needs_paint()) {
+        if (clock_needs_paint() || front_title_needs_paint() || ui_needs_pixel_shift()) {
             paint_pending = true;
         }
         now = xTaskGetTickCount();

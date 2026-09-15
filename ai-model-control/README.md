@@ -1,5 +1,11 @@
 # ai-model-control
 
+The chooser and clock screensaver shift by up to two pixels every 30 minutes
+of uptime on both display profiles. They start centered and cycle around eight
+surrounding positions. Exposed edges use the background color; calibration
+stays fixed. Shifts redraw even without clock or encoder activity and do not
+change saved model/effort settings.
+
 ESP32-S3 AI model control panel for **model** and **thinking** selection across
 ChatGPT, Cursor, and OpenCode
 on the desk-mounted 3.5" ST7796U panel. Rotary encoders change both locally

@@ -7,3 +7,4 @@
 
 esp_err_t ui_render(const model_fields_t *fields);
 esp_err_t ui_render_screensaver(void);
+bool ui_needs_pixel_shift(void);

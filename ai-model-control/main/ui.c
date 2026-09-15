@@ -9,6 +9,55 @@
 #include "font.h"
 #include "front_title.h"
 #include "logo.h"
+#include "esp_timer.h"
+
+// Uptime keeps host clock corrections and redraw frequency out of the cadence.
+static const int8_t shift_positions[][2] = {
+    {0, 0}, {2, 0}, {2, 2}, {0, 2}, {-2, 2}, {-2, 0}, {-2, -2}, {0, -2}, {2, -2},
+};
+static int drawn_shift = -1;
+
+static int current_shift(void)
+{
+    return (esp_timer_get_time() / (30LL * 60 * 1000000))
+        % (sizeof(shift_positions) / sizeof(shift_positions[0]));
+}
+
+bool ui_needs_pixel_shift(void)
+{
+    return current_shift() != drawn_shift;
+}
+
+static esp_err_t flush_shifted(uint16_t background)
+{
+    const int position = current_shift();
+    const int dx = shift_positions[position][0];
+    const int dy = shift_positions[position][1];
+    uint16_t *fb = display_framebuffer();
+    // Each render starts cleared. Move in overlap-safe order and fill edges.
+    if (fb && (dx || dy)) {
+        const int start = dy > 0 ? DISPLAY_HEIGHT - 1 : 0;
+        const int end = dy > 0 ? -1 : DISPLAY_HEIGHT;
+        const int step = dy > 0 ? -1 : 1;
+        for (int y = start; y != end; y += step) {
+            uint16_t *row = fb + y * DISPLAY_WIDTH;
+            const int source_y = y - dy;
+            if (source_y < 0 || source_y >= DISPLAY_HEIGHT) {
+                for (int x = 0; x < DISPLAY_WIDTH; ++x) row[x] = background;
+                continue;
+            }
+            const int left = dx > 0 ? dx : 0;
+            const int right = dx < 0 ? -dx : 0;
+            memmove(row + left, fb + source_y * DISPLAY_WIDTH + right,
+                    (DISPLAY_WIDTH - left - right) * sizeof(*fb));
+            for (int x = 0; x < left; ++x) row[x] = background;
+            for (int x = DISPLAY_WIDTH - right; x < DISPLAY_WIDTH; ++x) row[x] = background;
+        }
+    }
+    esp_err_t err = display_flush();
+    if (err == ESP_OK) drawn_shift = position;
+    return err;
+}
 
 #if !defined(AI_MODEL_PROFILE_SUPERMINI)
 static void draw_wrapped(int x, int y, int max_w, const char *text, uint16_t fg, uint16_t bg, int scale)
@@ -198,7 +247,7 @@ static esp_err_t ui_render_round(const model_fields_t *fields)
 
     draw_centered(DISPLAY_HEIGHT - 15, FIRMWARE_BUILD_STRING, muted, bg, 1);
 
-    esp_err_t err = display_flush();
+    esp_err_t err = flush_shifted(bg);
     if (err == ESP_OK) {
         front_title_mark_drawn();
     }
@@ -281,7 +330,7 @@ esp_err_t ui_render(const model_fields_t *fields)
         font_draw_text(DISPLAY_WIDTH - 12 - bw, DISPLAY_HEIGHT - 12 - 7, build, muted, card, 1);
     }
 
-    esp_err_t err = display_flush();
+    esp_err_t err = flush_shifted(bg);
     if (err == ESP_OK) {
         front_title_mark_drawn();
     }
@@ -327,5 +376,5 @@ esp_err_t ui_render_screensaver(void)
         font_draw_text((DISPLAY_WIDTH - date_w) / 2, date_y, date_text, clock, bg, date_scale);
     }
 
-    return display_flush();
+    return flush_shifted(bg);
 }
