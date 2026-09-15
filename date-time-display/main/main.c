@@ -20,6 +20,7 @@ static const char *TAG = "date-time";
 
 enum {
     SCREENSAVER_FRAME_INTERVAL_MS = 25,
+    SCREENSAVER_PHASE_DIVISOR = 2,
 };
 
 static int month_number(const char *month)
@@ -315,7 +316,7 @@ void app_main(void)
     struct tm edit_time = {0};
     int edit_field = 0;
     bool force_oled_render = true;
-    uint8_t screensaver_phase = 0;
+    uint16_t screensaver_phase_accumulator = 0;
     while (true) {
         joystick_action_t action = joystick_poll();
         if (action != JOYSTICK_NONE) {
@@ -336,11 +337,13 @@ void app_main(void)
         TickType_t current_tick = xTaskGetTickCount();
         if (last_tft_frame == 0 ||
             current_tick - last_tft_frame >= pdMS_TO_TICKS(SCREENSAVER_FRAME_INTERVAL_MS)) {
+            uint8_t screensaver_phase =
+                (uint8_t)(screensaver_phase_accumulator / SCREENSAVER_PHASE_DIVISOR);
             esp_err_t tft_err = st7735_render_screensaver(screensaver_phase);
             if (tft_err != ESP_OK) {
                 ESP_LOGW(TAG, "screensaver render failed: TFT=%s", esp_err_to_name(tft_err));
             }
-            ++screensaver_phase;
+            ++screensaver_phase_accumulator;
             last_tft_frame = current_tick;
         }
 
