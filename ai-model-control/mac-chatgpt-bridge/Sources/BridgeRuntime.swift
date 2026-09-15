@@ -86,7 +86,7 @@ final class BridgeRuntime {
     /// The dial is authoritative. Keep its most recent complete state while
     /// unsupported apps are frontmost, then reconcile it only once a supported
     /// app is confirmed foreground.
-    private func beginApplyingToFocusedApp(force: Bool = false) {
+    private func beginApplyingToFocusedApp(force: Bool = false, settle: Bool = true) {
         guard !desired.isEmpty, DeskFront.isForeground(preferred: options.bundleID) else { return }
         let continuingTarget = targetFocus?.isCurrent == true
         if !continuingTarget {
@@ -95,9 +95,9 @@ final class BridgeRuntime {
         guard targetFocus != nil else { return }
         applyFailures = 0
         forceApply = forceApply || force || !continuingTarget
-        // Batch paired knob turns and wait for the firmware's FRONT update to
-        // restore the focused app's saved panel state before posting keys.
-        settleAt = ProcessInfo.processInfo.systemUptime + Keys.bridgeSettle
+        // Batch paired dial updates. Focus-triggered reconciliation starts
+        // immediately so it does not collide with the user's first keystrokes.
+        settleAt = settle ? ProcessInfo.processInfo.systemUptime + Keys.bridgeSettle : 0
         retryAt = 0
         lastFailure = nil
     }
@@ -308,7 +308,7 @@ final class BridgeRuntime {
             if front {
                 // Reapply even if this process was previously cached: the user
                 // may have changed the app directly while it was unfocused.
-                beginApplyingToFocusedApp(force: true)
+                beginApplyingToFocusedApp(force: true, settle: false)
             } else {
                 suspendPending("no supported app is focused")
             }

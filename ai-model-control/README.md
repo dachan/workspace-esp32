@@ -215,7 +215,7 @@ operations. Fields are marked unknown before posting keys, so partial or
 interrupted operations cannot suppress the final correction when a dial returns
 to an earlier value. Model changes always invalidate effort; otherwise an
 effort-only change skips model selection. Completed values are cached per Mac
-process, but every supported-app focus forces reconciliation from the ESP32. Keyboard posting is not UI readback. The
+process, but every supported-app focus forces immediate reconciliation from the ESP32 without the received-change settle delay. Keyboard posting is not UI readback. The
 Model Dial helper's Sync menu item also reapplies the current panel values. Switching ChatGPT ↔
 Cursor restores that app's last model and effort on the panel. When neither is
 focused, encoder changes remain the authoritative ESP32 state; the bridge retains
