@@ -13,6 +13,7 @@
 #include "freertos/task.h"
 #include "indicator_led.h"
 #include "joystick.h"
+#include "clock_sync.h"
 #include "ssd1306.h"
 #include "st7735.h"
 
@@ -259,7 +260,9 @@ static void serial_task(void *arg)
             line_length = 0;
 
         int year, month, day, hour, minute, second;
-        if (sscanf(line, "TIME %d-%d-%d %d:%d:%d",
+        if (clock_sync_handle_command(line, serial_write)) {
+            continue;
+        } else if (sscanf(line, "TIME %d-%d-%d %d:%d:%d",
                    &year, &month, &day, &hour, &minute, &second) == 6) {
             struct tm value = {
                 .tm_sec = second,
@@ -300,6 +303,7 @@ void app_main(void)
     time_t initial = load_time();
     struct timeval tv = {.tv_sec = initial, .tv_usec = 0};
     settimeofday(&tv, NULL);
+    clock_sync_init(persist_time);
 
     indicator_leds_off();
     ESP_ERROR_CHECK(st7735_init());
