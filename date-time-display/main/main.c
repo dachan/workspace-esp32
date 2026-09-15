@@ -20,7 +20,9 @@ static const char *TAG = "date-time";
 
 enum {
     SCREENSAVER_FRAME_INTERVAL_MS = 25,
-    SCREENSAVER_PHASE_DIVISOR = 2,
+    SCREENSAVER_PHASE_STEP_NUMERATOR = 2,
+    SCREENSAVER_PHASE_STEP_DENOMINATOR = 5,
+    SCREENSAVER_PHASE_PERIOD = 256 * SCREENSAVER_PHASE_STEP_DENOMINATOR,
 };
 
 static int month_number(const char *month)
@@ -338,12 +340,15 @@ void app_main(void)
         if (last_tft_frame == 0 ||
             current_tick - last_tft_frame >= pdMS_TO_TICKS(SCREENSAVER_FRAME_INTERVAL_MS)) {
             uint8_t screensaver_phase =
-                (uint8_t)(screensaver_phase_accumulator / SCREENSAVER_PHASE_DIVISOR);
+                (uint8_t)(screensaver_phase_accumulator / SCREENSAVER_PHASE_STEP_DENOMINATOR);
             esp_err_t tft_err = st7735_render_screensaver(screensaver_phase);
             if (tft_err != ESP_OK) {
                 ESP_LOGW(TAG, "screensaver render failed: TFT=%s", esp_err_to_name(tft_err));
             }
-            ++screensaver_phase_accumulator;
+            screensaver_phase_accumulator += SCREENSAVER_PHASE_STEP_NUMERATOR;
+            if (screensaver_phase_accumulator >= SCREENSAVER_PHASE_PERIOD) {
+                screensaver_phase_accumulator -= SCREENSAVER_PHASE_PERIOD;
+            }
             last_tft_frame = current_tick;
         }
 

@@ -29,7 +29,7 @@ static const char *TAG = "st7735";
 #define FLUID_TABLE_SIZE 256
 #define FLUID_TINT_COUNT 32
 #define FLUID_TINT_LIGHTEN_MAX 77
-#define FLUID_PALETTE_UPDATE_INTERVAL 16
+#define FLUID_PALETTE_UPDATE_INTERVAL 20
 #define FLUID_MIN_COLOR_DISTANCE 115
 #define FLUID_TARGET_ATTEMPTS 32
 #define FLUID_FALLBACK_HUE_STEP 30
@@ -536,8 +536,11 @@ esp_err_t st7735_render_screensaver(uint8_t phase)
         return ESP_ERR_INVALID_STATE;
     }
     initialize_fluid_sine();
-    if ((s_fluid_palette_tick++ & (FLUID_PALETTE_UPDATE_INTERVAL - 1)) == 0) {
+    if (s_fluid_palette_tick == 0) {
         update_fluid_palette();
+        s_fluid_palette_tick = FLUID_PALETTE_UPDATE_INTERVAL - 1;
+    } else {
+        --s_fluid_palette_tick;
     }
     for (int y = 0; y < FLUID_FIELD_HEIGHT; ++y) {
         for (int x = 0; x < FLUID_FIELD_WIDTH; ++x) {
