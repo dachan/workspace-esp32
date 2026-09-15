@@ -118,7 +118,8 @@ serial console, or use the joystick controls above. The value is saved in NVS
 and the OLED shows the centered date above the centered time, updating once per
 second. The TFT independently shows a never-ending fluid-motion screensaver
 with a 16-step light-pastel gradient from each hardware-random HSV base tint
-toward a soft highlight. Targets and fluid motion morph at half the former
+toward a soft highlight. Each next target is at least 96 RGB-distance units
+from the previous base colour, and targets and fluid motion morph at half the former
 animation speed, with a stronger Gaussian blur and live FPS counter at the
 bottom right. The
 firmware starts from its compile timestamp until a clock value is received.
