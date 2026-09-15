@@ -63,7 +63,7 @@ MADCTL lock, and logo codegen lives in `ai-model-control/README.md`.
 Firmware settles **0.4 s** after the last rotary detent, sends complete
 `STATE` frames, then `APPLY`. The bridge settles **0.20 s** after that
 explicit intent and applies only fields that differ. Model picker /
-confirmation waits are **0.20 s**; every bridge-posted keystroke is separated
+confirmation waits are **0.10 s**; every bridge-posted keystroke is separated
 by **0.05 s**.
 
 The helper **never activates** ChatGPT, Cursor, or OpenCode. Encoder lines

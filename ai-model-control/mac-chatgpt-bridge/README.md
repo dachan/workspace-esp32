@@ -32,7 +32,7 @@ while a supported app is already focused. Focus changes only update the panel.
    sequence cannot cause a later correction to be skipped. Completed fields are
    cached per process only while their generation is current. `APPLY` posts
    differing fields; `PUSH` forces both fields to be posted again. Model
-   picker and confirmation waits use 0.20 s;
+   picker and confirmation waits use 0.10 s;
    every bridge-posted keystroke uses a shared 0.05 s gap.
    - ChatGPT / Codex model: click the visible model control by Accessibility,
      then **Select model** and the exact ESP dial model label.

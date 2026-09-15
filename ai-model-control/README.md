@@ -231,7 +231,7 @@ and either encoder click force both current panel values. Switching ChatGPT ↔
 Cursor restores that app's last model and effort on the panel. When neither is
 focused, encoder changes remain authoritative on the ESP32 but their apply intent
 is dropped rather than deferred. Focus loss interrupts the current apply.
-Model picker and confirmation waits use 0.20 s; all posted
+Model picker and confirmation waits use 0.10 s; all posted
 keystrokes use a shared 0.05 s gap. A five-second hold on the glass starts
 touch calibration.
 

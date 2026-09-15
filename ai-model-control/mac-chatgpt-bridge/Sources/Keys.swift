@@ -7,7 +7,7 @@ enum Keys {
     static let bridgeSettle = 0.200
 
     /// Shared settle time for model pickers and confirmations.
-    static let pickerTiming = 0.200
+    static let pickerTiming = 0.100
 
     /// Shared delay between bridge-posted keystrokes.
     static let keystrokeDelay = 0.050
