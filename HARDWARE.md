@@ -17,6 +17,32 @@ Do not choose a build from the transient `/dev/cu.usbmodem*` number alone; macOS
 | `ESP32_MINI-128_tft_240x240-AI_Model_Control-New` | MAC `d4:05:92:47:d5:1c`, ESP32-S3 QFN56 rev v0.2, 4 MB flash / 2 MB PSRAM, display wired `RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12` | `ai-model-control/ESP32_MINI-128_tft_240x240-AI_Model_Control-New` | Original round build |
 | `ESP32_MINI-no_display-Radar_Sensor` | MAC `d4:05:92:47:d1:6c`, LD2450 UART on GPIO4/GPIO5 | `radar/ESP32_MINI-no_display-Radar_Sensor` | AI Model Control Mini images |
 
+## Unassigned display modules
+
+These modules are inventory items only: neither has been electrically connected,
+identified by its controller IC, nor assigned to an ESP32. Do not treat the
+similar-looking boards as interchangeable with the existing FT6336 radar panel
+or the GC9A01 Mini panel.
+
+| Inventory label | Observed from supplied back photo | Connection status |
+|---|---|---|
+| 2.8-inch TFT SPI 240x320 v1.2 (Photo 1) | Silkscreen `2.8 TFT SPI 240X320 V1.2`; microSD socket; TFT pins `VCC/GND/CS/RESET/DC/SDI(MOSI)/SCK/LED/SDO(MISO)`; additional `T_CLK/T_CS/T_DIN/T_DO/T_IRQ` header; SD pads `SD_CS/SD_MOSI/SD_MISO/SD_SCK` | Unconnected; TFT controller and whether a touch overlay is fitted are unverified. |
+| 2.8-inch TFT 240x320 RGB v1.1 (Photo 2) | Silkscreen `2.8\" TFT 240X320RGB V1.1`; microSD socket; the same TFT, `T_*`, and SD pin labels as Photo 1 | Unconnected; TFT controller and whether a touch overlay is fitted are unverified. |
+
+### ESP32-S3 Mini compatibility note
+
+Both modules appear electrically compatible with an ESP32-S3 Super Mini at
+3.3 V logic, subject to checking the module documentation before power is
+applied. They are not drop-in replacements for the 1.28-inch GC9A01 panel:
+they need a 240x320 TFT controller profile and five TFT signals (`CS`, `RESET`,
+`DC`, `MOSI`, `SCK`), plus `MISO` if SD or the `T_DO` touch readback is used.
+The touch header, if an overlay is fitted, needs a separate `T_CS` and `T_IRQ`
+and shares SPI clock/data with the TFT. The current Mini AI Model Control
+firmware supports only the GC9A01 round panel and intentionally has touch
+disabled, so it cannot drive either module without a new firmware profile and
+verified wiring. Do not connect its `T_*` pins to the radar receiver's FT6336
+I2C pins; they are a different interface.
+
 ## ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time
 
 - MCU: ESP32-S3 QFN56 rev v0.2, dual core, 40 MHz crystal, embedded 16 MB flash and 8 MB PSRAM class
