@@ -8,6 +8,7 @@
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -28,6 +29,7 @@ static const char *TAG = "st7735";
 #define FLUID_TABLE_SIZE 256
 #define FLUID_TINT_COUNT 16
 #define FLUID_TINT_LIGHTEN_MAX 24
+#define FLUID_PALETTE_UPDATE_INTERVAL 8
 #define FLUID_HUE_SUM_MAX (3 * (FLUID_TABLE_SIZE - 1))
 #define FPS_GLYPH_WIDTH 3
 #define FPS_GLYPH_HEIGHT 5
@@ -46,8 +48,8 @@ static uint16_t s_blur_current[FLUID_FIELD_WIDTH];
 static uint16_t s_blur_next[FLUID_FIELD_WIDTH];
 static bool s_fluid_sine_ready;
 static bool s_fluid_palette_ready;
-static uint8_t s_fluid_palette_morph;
-static uint16_t s_fluid_morph_counter;
+static uint16_t s_fluid_palette_tick;
+static uint32_t s_fluid_random_state = 0x6d2b79f5u;
 static TickType_t s_fps_window_start;
 static uint16_t s_frames_since_fps_update;
 static uint8_t s_frames_per_second;
@@ -109,10 +111,9 @@ typedef struct {
     uint8_t blue;
 } fluid_palette_color_t;
 
-static const fluid_palette_color_t s_fluid_base_colors[2] = {
-    {201, 182, 217}, /* supplied lavender #c9b6d9 */
-    {248, 203, 221}, /* supplied pale pink #f8cbdd */
-};
+static fluid_palette_color_t s_fluid_base_color;
+static fluid_palette_color_t s_fluid_target_color;
+static uint16_t s_fluid_morph_progress;
 static fluid_palette_color_t s_fluid_tints[FLUID_TINT_COUNT];
 
 static uint16_t fluid_palette_color(uint8_t position)
@@ -127,19 +128,75 @@ static uint16_t fluid_palette_color(uint8_t position)
            (blue >> 3);
 }
 
-static void update_fluid_palette(uint8_t morph)
+static uint32_t fluid_random_next(void)
 {
-    if (s_fluid_palette_ready && morph == s_fluid_palette_morph) {
-        return;
+    uint32_t value = s_fluid_random_state;
+    value ^= value << 13;
+    value ^= value >> 17;
+    value ^= value << 5;
+    s_fluid_random_state = value;
+    return value;
+}
+
+static fluid_palette_color_t random_pastel_color(void)
+{
+    /* HSV with high value and restrained saturation keeps every target light. */
+    uint16_t hue = fluid_random_next() % 360;
+    uint8_t saturation = 32 + fluid_random_next() % 33;
+    uint8_t value = 244 + fluid_random_next() % 12;
+    uint8_t minimum = ((uint16_t)value * (255 - saturation)) / 255;
+    uint8_t chroma = value - minimum;
+    uint8_t offset = ((uint16_t)(hue % 60) * chroma) / 60;
+    uint8_t second = ((hue / 60) & 1) == 0 ? minimum + offset : value - offset;
+
+    switch (hue / 60) {
+    case 0:
+        return (fluid_palette_color_t){value, second, minimum};
+    case 1:
+        return (fluid_palette_color_t){second, value, minimum};
+    case 2:
+        return (fluid_palette_color_t){minimum, value, second};
+    case 3:
+        return (fluid_palette_color_t){minimum, second, value};
+    case 4:
+        return (fluid_palette_color_t){second, minimum, value};
+    default:
+        return (fluid_palette_color_t){value, minimum, second};
     }
-    fluid_palette_color_t base = {
-        .red = ((uint16_t)s_fluid_base_colors[0].red * (255 - morph) +
-                (uint16_t)s_fluid_base_colors[1].red * morph + 127) / 255,
-        .green = ((uint16_t)s_fluid_base_colors[0].green * (255 - morph) +
-                  (uint16_t)s_fluid_base_colors[1].green * morph + 127) / 255,
-        .blue = ((uint16_t)s_fluid_base_colors[0].blue * (255 - morph) +
-                 (uint16_t)s_fluid_base_colors[1].blue * morph + 127) / 255,
+}
+
+static fluid_palette_color_t blend_pastel_colors(uint16_t progress)
+{
+    return (fluid_palette_color_t){
+        .red = ((uint32_t)s_fluid_base_color.red * (255 - progress) +
+                (uint32_t)s_fluid_target_color.red * progress + 127) / 255,
+        .green = ((uint32_t)s_fluid_base_color.green * (255 - progress) +
+                  (uint32_t)s_fluid_target_color.green * progress + 127) / 255,
+        .blue = ((uint32_t)s_fluid_base_color.blue * (255 - progress) +
+                 (uint32_t)s_fluid_target_color.blue * progress + 127) / 255,
     };
+}
+
+static void update_fluid_palette(void)
+{
+    if (!s_fluid_palette_ready) {
+        s_fluid_random_state ^= esp_random();
+        if (s_fluid_random_state == 0) {
+            s_fluid_random_state = 0x6d2b79f5u;
+        }
+        s_fluid_base_color = random_pastel_color();
+        s_fluid_target_color = random_pastel_color();
+        s_fluid_morph_progress = 0;
+        for (int sum = 0; sum <= FLUID_HUE_SUM_MAX; ++sum) {
+            s_fluid_average[sum] = sum / 3;
+        }
+        s_fluid_palette_ready = true;
+    } else if (s_fluid_morph_progress > 255) {
+        s_fluid_base_color = s_fluid_target_color;
+        s_fluid_target_color = random_pastel_color();
+        s_fluid_morph_progress = 0;
+    }
+    fluid_palette_color_t base = blend_pastel_colors(s_fluid_morph_progress);
     for (int tint = 0; tint < FLUID_TINT_COUNT; ++tint) {
         uint8_t lighten = (uint16_t)(FLUID_TINT_COUNT - 1 - tint) *
                           FLUID_TINT_LIGHTEN_MAX / (FLUID_TINT_COUNT - 1);
@@ -149,16 +206,10 @@ static void update_fluid_palette(uint8_t morph)
             .blue = base.blue + ((uint16_t)(255 - base.blue) * lighten) / 255,
         };
     }
-    if (!s_fluid_palette_ready) {
-        for (int sum = 0; sum <= FLUID_HUE_SUM_MAX; ++sum) {
-            s_fluid_average[sum] = sum / 3;
-        }
-    }
     for (int hue = 0; hue < FLUID_TABLE_SIZE; ++hue) {
         s_fluid_palette[hue] = fluid_palette_color(hue);
     }
-    s_fluid_palette_morph = morph;
-    s_fluid_palette_ready = true;
+    ++s_fluid_morph_progress;
 }
 
 static uint16_t fluid_color(int x, int y, uint8_t phase)
@@ -436,9 +487,9 @@ esp_err_t st7735_render_screensaver(uint8_t phase)
         return ESP_ERR_INVALID_STATE;
     }
     initialize_fluid_sine();
-    uint8_t morph_index = (uint8_t)(s_fluid_morph_counter++ >> 3);
-    uint8_t morph = morph_index < 128 ? morph_index * 2 : (255 - morph_index) * 2;
-    update_fluid_palette(morph);
+    if ((s_fluid_palette_tick++ & (FLUID_PALETTE_UPDATE_INTERVAL - 1)) == 0) {
+        update_fluid_palette();
+    }
     for (int y = 0; y < FLUID_FIELD_HEIGHT; ++y) {
         for (int x = 0; x < FLUID_FIELD_WIDTH; ++x) {
             s_fluid_field[y * FLUID_FIELD_WIDTH + x] =
