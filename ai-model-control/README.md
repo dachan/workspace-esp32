@@ -5,9 +5,9 @@ ChatGPT, Cursor, and OpenCode
 on the desk-mounted 3.5" ST7796U panel. Rotary encoders change both locally
 (display + NVS). After **0.4 s** with no further changes the firmware sends
 the latest state to `mac-chatgpt-bridge/`. The Mac helper
-applies those only while ChatGPT, Cursor, or OpenCode is already the foreground app.
-Changes are never deferred: state that arrives while no supported app is focused
-is dropped by the helper and stays on the panel and in NVS only.
+treats that latest state as authoritative and applies it only while ChatGPT, Cursor, or OpenCode is already the foreground app.
+When no supported app is focused, it retains the newest panel state and
+applies it once a supported app becomes foreground.
 
 ## Protocol (USB serial, 115200)
 
@@ -209,13 +209,12 @@ operations. Fields are marked unknown before posting keys, so partial or
 interrupted operations cannot suppress the final correction when a dial returns
 to an earlier value. Model changes always invalidate effort; otherwise an
 effort-only change skips model selection. Completed values are cached per Mac
-process, and focus loss discards the target. Keyboard posting is not UI readback. The
-Model Dial helper's Sync menu item reapplies the current panel values. Switching ChatGPT ↔
+process, but every supported-app focus forces reconciliation from the ESP32. Keyboard posting is not UI readback. The
+Model Dial helper's Sync menu item also reapplies the current panel values. Switching ChatGPT ↔
 Cursor restores that app's last model and effort on the panel. When neither is
-focused, encoder changes stay on the ESP32 display/NVS and the bridge discards
-them without activating either app; turning the knob again while ChatGPT or
-Cursor is focused is what applies a setting. Focus lost mid-apply discards the
-change too. Model picker and confirmation waits use 0.25 s; all posted
+focused, encoder changes remain the authoritative ESP32 state; the bridge retains
+them and applies them after a supported app becomes foreground without activating it. Focus loss
+suspends the apply until that happens. Model picker and confirmation waits use 0.25 s; all posted
 keystrokes use a shared 0.05 s gap. A five-second hold on the glass starts
 touch calibration.
 
@@ -324,7 +323,7 @@ panel updates immediately and SET waits 0.4 s after the last detent.
 
 The Mac helper temporarily filters user input to the focused app during each
 model/thinking apply. Escape cancels; focus loss or a five-second timeout releases
-the filter and drops the target. See [input guard](mac-chatgpt-bridge/README.md#input-guard)
+the filter but retains the ESP32 target for a later supported-app focus. See [input guard](mac-chatgpt-bridge/README.md#input-guard)
 for permissions, held-input handling, and the availability check.
 
 ```sh

@@ -14,7 +14,8 @@ func printFront(preferred: String?) {
 final class BridgeRuntime {
     private let options: Options
     private let session: SerialSession?
-    // The complete latest target survives partial application; no detent queue.
+    // The complete latest ESP32 target survives partial application and focus loss;
+    // there is no detent queue.
     private var desired: [SettingKind: String] = [:]
     private var generation: UInt64 = 0
     private var targetFocus: FocusOperation?
@@ -63,34 +64,64 @@ final class BridgeRuntime {
         } else {
             receivedThinking = value
         }
-        // Changes are never deferred: without focus the dial state lives on the panel only.
+        replaceDesiredWithPanelState()
         guard DeskFront.isForeground(preferred: options.bundleID) else {
-            forceApply = false
-            discardPending("no supported app is focused")
-            print("\(stamp()) ignored \(update.kind.rawValue) \(value) (no supported app is focused)")
+            suspendPending("no supported app is focused")
+            print("\(stamp()) deferred \(update.kind.rawValue) \(value) (no supported app is focused)")
             fflush(stdout)
             return
         }
-        acceptTarget()
-        // Batch paired knob turns using the shared model settle time.
-        // PUSH uses the same short settle so the app can render its current UI.
-        settleAt = ProcessInfo.processInfo.systemUptime + Keys.modelTiming
-        retryAt = 0
-        lastFailure = nil
+        beginApplyingToFocusedApp()
         print("\(stamp()) rx \(update.kind.rawValue) \(value)")
         fflush(stdout)
     }
 
-    private func acceptTarget() {
-        applyFailures = 0
-        if targetFocus?.isCurrent != true {
-            discardPending("target app changed")
-            targetFocus = FocusOperation(preferred: options.bundleID)
-        }
+    private func replaceDesiredWithPanelState() {
         desired = [:]
         if let model = receivedModel { desired[.model] = model }
         if let thinking = receivedThinking { desired[.thinking] = thinking }
         generation &+= 1
+    }
+
+    /// The dial is authoritative. Keep its most recent complete state while
+    /// unsupported apps are frontmost, then reconcile it only once a supported
+    /// app is confirmed foreground.
+    private func beginApplyingToFocusedApp(force: Bool = false) {
+        guard !desired.isEmpty, DeskFront.isForeground(preferred: options.bundleID) else { return }
+        let continuingTarget = targetFocus?.isCurrent == true
+        if !continuingTarget {
+            targetFocus = FocusOperation(preferred: options.bundleID)
+        }
+        guard targetFocus != nil else { return }
+        applyFailures = 0
+        forceApply = forceApply || force || !continuingTarget
+        // Batch paired knob turns and wait for the firmware's FRONT update to
+        // restore the focused app's saved panel state before posting keys.
+        settleAt = ProcessInfo.processInfo.systemUptime + Keys.modelTiming
+        retryAt = 0
+        lastFailure = nil
+    }
+
+    /// Interrupting an apply must never forget the dial's desired state. A
+    /// later supported-app focus creates a fresh FocusOperation and retries it.
+    private func suspendPending(_ reason: String) {
+        if targetFocus != nil && !desired.isEmpty {
+            print("\(stamp()) deferred target (\(reason))")
+            fflush(stdout)
+        }
+        targetFocus = nil
+        generation &+= 1
+        retryAt = 0
+        lastFailure = nil
+        forceApply = true
+    }
+
+    private func suspendAfterFocusLoss(_ reason: String) {
+        suspendPending(reason)
+        // Focus may leave and return during one apply; make that return visible
+        // to noteFront() so it starts a fresh, foreground-bound operation.
+        lastFront = false
+        lastFrontPID = nil
     }
 
     private func discardPending(_ reason: String) {
@@ -131,14 +162,14 @@ final class BridgeRuntime {
             }
             if raw == "PUSH" {
                 guard DeskFront.isForeground(preferred: options.bundleID) else {
-                    discardPending("SYNC received without focus")
+                    forceApply = true
+                    suspendPending("SYNC received without focus")
+                    print("\(stamp()) deferred PUSH (no supported app is focused)")
+                    fflush(stdout)
                     continue
                 }
-                acceptTarget()
                 forceApply = true
-                settleAt = ProcessInfo.processInfo.systemUptime + Keys.modelTiming
-                retryAt = 0
-                lastFailure = nil
+                beginApplyingToFocusedApp()
                 print("\(stamp()) rx PUSH")
                 fflush(stdout)
                 continue
@@ -172,11 +203,10 @@ final class BridgeRuntime {
     private func applyPending() {
         guard !desired.isEmpty, let focus = targetFocus else { return }
         guard AXTrust.isTrusted(prompt: false) else {
-            discardPending("Accessibility unavailable for keyboard control")
             return
         }
         guard focus.isCurrent else {
-            discardPending("target app left the foreground")
+            suspendAfterFocusLoss("target app left the foreground")
             return
         }
         let now = ProcessInfo.processInfo.systemUptime
@@ -247,8 +277,8 @@ final class BridgeRuntime {
         if case .failed(let message) = guardedResult, generation == revision {
             applyFailures += 1
             if applyFailures >= 3 {
-                fputs("chatgpt-bridge: \(message); stopped after 3 attempts until a new dial update or Sync\n", stderr)
-                discardPending("\(focus.displayName) apply failed")
+                fputs("chatgpt-bridge: \(message); stopped until the next supported-app focus or dial update\n", stderr)
+                suspendPending("\(focus.displayName) apply failed")
             } else {
                 if message != lastFailure {
                     fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)
@@ -258,10 +288,10 @@ final class BridgeRuntime {
             }
         }
         if guardInterrupted, targetFocus === focus {
-            discardPending("input guard or apply interrupted")
+            suspendPending("input guard or apply interrupted")
         }
         if !focus.isCurrent, targetFocus === focus {
-            discardPending("target app left the foreground")
+            suspendAfterFocusLoss("target app left the foreground")
         }
         fflush(stdout)
     }
@@ -275,6 +305,13 @@ final class BridgeRuntime {
             lastFrontPID = pid
             print("\(stamp()) \(DeskFront.label(preferred: options.bundleID))")
             fflush(stdout)
+            if front {
+                // Reapply even if this process was previously cached: the user
+                // may have changed the app directly while it was unfocused.
+                beginApplyingToFocusedApp(force: true)
+            } else {
+                suspendPending("no supported app is focused")
+            }
         }
     }
 

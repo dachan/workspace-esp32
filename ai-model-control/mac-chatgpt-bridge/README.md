@@ -3,8 +3,8 @@
 macOS helper for the AI model control panel's encoders. Foreground is one
 `NSWorkspace.frontmostApplication` read. It never activates ChatGPT, Cursor, or OpenCode.
 While one of those apps is focused it focuses the prompt via Accessibility,
-then posts that app's keyboard shortcuts; otherwise it drops the ESP32's
-model and thinking state instead of holding it for later.
+then posts that app's keyboard shortcuts; otherwise it retains the ESP32's
+model and thinking state until a supported app is focused again.
 
 ## What it does
 
@@ -45,18 +45,18 @@ model and thinking state instead of holding it for later.
      both changed), then Left, Up, Right directly into Reasoning, Down to
      the level, and Return once, then Escape twice to close the menus. An effort-only change skips model selection.
 5. If none of ChatGPT, Cursor, or OpenCode is focused: leave the ESP32 display/NVS as
-   the source of truth and discard the change. Nothing is applied when one of
-   those apps later becomes frontmost, and the helper never activates either
-   app. The helper also sends `FRONT Cursor`, `FRONT ChatGPT`, `FRONT OpenCode`, or `FRONT None`
+   the source of truth and retain its latest model and thinking state. No shortcuts are
+   posted while an unsupported app is frontmost; when a supported app returns, the helper
+   applies the retained state after its normal settle delay without activating that app. The helper also sends `FRONT Cursor`, `FRONT ChatGPT`, `FRONT OpenCode`, or `FRONT None`
    so the panel lockup matches the focused app and can idle to a clock
    screensaver when none is focused.
 
 Shortcut sequences stay bound to the process that was focused when they began.
 Losing focus, including switching between ChatGPT, Codex, Cursor, and OpenCode,
-interrupts the sequence and discards the setting. A superseded sequence, or one
+interrupts the sequence but retains the ESP32 target for a later supported-app focus. A superseded sequence, or one
 that failed while the app stayed focused, is retried at two-second intervals while that app remains frontmost, up to
 three failed attempts per target. This limit applies to all apps and input-filter
-creation failures; another dial update or Sync starts a fresh attempt budget. Interrupted pickers are dismissed before retrying in that process, tracking
+creation failures; a later supported-app focus, dial update, or Sync starts a fresh attempt budget. Interrupted pickers are dismissed before retrying in that process, tracking
 both Cursor menu layers and each Escape already posted. ChatGPT thinking retries
 start from the absolute Light clamp. Logs say “posted” when the current generation's
 key sequence completes; the helper does not read back the app's selected value.
@@ -74,9 +74,9 @@ and applied-value caches, so the reconnect snapshot is accepted even when its
 revision is unchanged. Frames from a poll that ended in a disconnect are discarded.
 Current firmware retransmits until ACK and answers SYNC with its state, so a
 bridge restart or device reset recovers the panel state without another knob
-movement; whether it is applied still depends on ChatGPT, Cursor, or OpenCode being
-focused at that moment. Older firmware still works, but cannot replay missing
-changes. If the device path changes, restart with the new `--port`.
+movement; if no supported app is focused when it arrives, the bridge retains it until one is.
+Older firmware still works, but cannot replay missing changes. If the device path
+changes, restart with the new `--port`.
 
 See the [firmware protocol](../README.md#protocol-usb-serial-115200) for frame
 formats and compatibility details. Buffers and bytes processed per poll are
