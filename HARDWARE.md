@@ -153,6 +153,6 @@ I2C pins; they are a different interface.
 - LD2450 wiring: 5V→5V, GND→GND, TX→GPIO4 (UART RX), RX→GPIO5 (UART TX); GPIO3 unused
 - Touch: none
 - Firmware: `radar/ESP32_MINI-no_display-Radar_Sensor`; `RADAR_LINK_ROLE=transmitter`, `RADAR_BOARD=supermini`, `sdkconfig.defaults.supermini`
-- Mac USB serial: `/dev/cu.usbmodem21201` (re-verify if the CDC address changes after replug)
+- Mac USB serial: unknown (last seen `/dev/cu.usbmodem21201` on 2026-09-11; that CDC path is now claimed by `ESP32_MINI-128_tft_240x240-AI_Model_Control-New` as of 2026-09-15 — re-identify when this board is plugged in)
 - Last verified: 2026-09-11 — full flash of `ESP32_MINI-no_display-Radar_Sensor` to `/dev/cu.usbmodem21201` (hash verified). Chip matched ESP32-S3 QFN56 rev v0.2, 4 MB flash + 2 MB PSRAM, MAC `d4:05:92:47:d1:6c`. Firmware SHA-256 `eb56b7f5397b7bd595c860c1bca7c86b062827a329baeffb4ed6358f7df089ce`. Boot log showed `headless LD2450 ESP-NOW transmitter start (Super Mini)` then `ESP_ERR_NOT_FOUND` because the LD2450 was not attached yet.
-- Notes: this board currently enumerates on the CDC path previously used by the 3.5" desk panel. Do not flash the 16 MB transmitter or ST7796 desk image here.
+- Notes: do not assume this board still owns `/dev/cu.usbmodem21201`. Do not flash the 16 MB transmitter or ST7796 desk image here.

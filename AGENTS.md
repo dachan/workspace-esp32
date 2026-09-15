@@ -61,9 +61,9 @@ Mac folder). Detail for keystroke recipes, InputGuard, NVS defaults, ST7796
 MADCTL lock, and logo codegen lives in `ai-model-control/README.md`.
 
 Firmware settle **0.4 s** after the last rotary detent before sending
-`SET`/`STATE`. The bridge settles **0.25 s** more after the last received
+`SET`/`STATE`. The bridge settles **0.20 s** more after the last received
 change, then applies only fields that differ. Model picker / confirmation
-waits are **0.25 s**; every bridge-posted keystroke is separated by **0.05 s**.
+waits are **0.20 s**; every bridge-posted keystroke is separated by **0.05 s**.
 
 The helper **never activates** ChatGPT, Cursor, or OpenCode. Encoder lines
 apply only while that app is already focused; otherwise they are dropped —

@@ -209,7 +209,7 @@ control by Accessibility, chooses **Select model**, and presses the exact model 
 While Cursor is focused it opens the model list with Command-/ (first Down
 is Auto), then reopens it for Effort with Left, Up, Right, then Down-only to
 the level; Return selects, then Escape twice closes the menus. The bridge
-settles 0.25 s after the last received change, applies model and effort in one
+settles 0.20 s after the last received change, applies model and effort in one
 pass using a single latest-target worker. New generations supersede older
 operations. Fields are marked unknown before posting keys, so partial or
 interrupted operations cannot suppress the final correction when a dial returns

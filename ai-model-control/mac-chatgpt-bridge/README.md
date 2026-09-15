@@ -21,7 +21,7 @@ model and thinking state until a supported app is focused again.
    Command-L only when the Agents panel is missing (Cmd+L toggles it closed
    if it is already open), otherwise AX-focus `aislash-editor-input`;
    ChatGPT/Codex by message-box identity — then apply using that app's shortcuts.
-   Applies start 0.25 s after the last
+   Applies start 0.20 s after the last
    received change. One worker retains the latest complete model/effort target,
    with a generation that changes on every accepted update or bridge SYNC.
    Serial is drained during delays; a newer generation aborts and re-targets,
