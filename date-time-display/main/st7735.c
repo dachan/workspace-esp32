@@ -30,6 +30,9 @@ static const char *TAG = "st7735";
 #define FLUID_TINT_COUNT 16
 #define FLUID_TINT_LIGHTEN_MAX 64
 #define FLUID_PALETTE_UPDATE_INTERVAL 16
+#define FLUID_MIN_COLOR_DISTANCE 96
+#define FLUID_TARGET_ATTEMPTS 32
+#define FLUID_FALLBACK_HUE_STEP 30
 #define FLUID_HUE_SUM_MAX (3 * (FLUID_TABLE_SIZE - 1))
 #define FPS_GLYPH_WIDTH 3
 #define FPS_GLYPH_HEIGHT 5
@@ -138,12 +141,9 @@ static uint32_t fluid_random_next(void)
     return value;
 }
 
-static fluid_palette_color_t random_pastel_color(void)
+static fluid_palette_color_t pastel_color_from_hsv(uint16_t hue, uint8_t saturation,
+                                                    uint8_t value)
 {
-    /* HSV with high value and restrained saturation keeps every target light. */
-    uint16_t hue = fluid_random_next() % 360;
-    uint8_t saturation = 32 + fluid_random_next() % 33;
-    uint8_t value = 244 + fluid_random_next() % 12;
     uint8_t minimum = ((uint16_t)value * (255 - saturation)) / 255;
     uint8_t chroma = value - minimum;
     uint8_t offset = ((uint16_t)(hue % 60) * chroma) / 60;
@@ -163,6 +163,55 @@ static fluid_palette_color_t random_pastel_color(void)
     default:
         return (fluid_palette_color_t){value, minimum, second};
     }
+}
+
+static fluid_palette_color_t random_pastel_color(void)
+{
+    /* HSV with high value and restrained saturation keeps every target light. */
+    return pastel_color_from_hsv(fluid_random_next() % 360,
+                                 32 + fluid_random_next() % 33,
+                                 244 + fluid_random_next() % 12);
+}
+
+static uint16_t fluid_color_distance(fluid_palette_color_t first,
+                                     fluid_palette_color_t second)
+{
+    uint8_t red = first.red > second.red ? first.red - second.red : second.red - first.red;
+    uint8_t green = first.green > second.green ? first.green - second.green
+                                                : second.green - first.green;
+    uint8_t blue = first.blue > second.blue ? first.blue - second.blue : second.blue - first.blue;
+    return red + green + blue;
+}
+
+static fluid_palette_color_t distinct_random_pastel_color(fluid_palette_color_t reference)
+{
+    fluid_palette_color_t best = reference;
+    uint16_t best_distance = 0;
+    for (int attempt = 0; attempt < FLUID_TARGET_ATTEMPTS; ++attempt) {
+        fluid_palette_color_t candidate = random_pastel_color();
+        uint16_t distance = fluid_color_distance(reference, candidate);
+        if (distance >= FLUID_MIN_COLOR_DISTANCE) {
+            return candidate;
+        }
+        if (distance > best_distance) {
+            best = candidate;
+            best_distance = distance;
+        }
+    }
+
+    /* A deterministic hue sweep guarantees a separated light-pastel fallback. */
+    for (uint16_t hue = 0; hue < 360; hue += FLUID_FALLBACK_HUE_STEP) {
+        fluid_palette_color_t candidate = pastel_color_from_hsv(hue, 64, 255);
+        uint16_t distance = fluid_color_distance(reference, candidate);
+        if (distance >= FLUID_MIN_COLOR_DISTANCE) {
+            return candidate;
+        }
+        if (distance > best_distance) {
+            best = candidate;
+            best_distance = distance;
+        }
+    }
+    return best;
 }
 
 static fluid_palette_color_t blend_pastel_colors(uint16_t progress)
@@ -185,7 +234,7 @@ static void update_fluid_palette(void)
             s_fluid_random_state = 0x6d2b79f5u;
         }
         s_fluid_base_color = random_pastel_color();
-        s_fluid_target_color = random_pastel_color();
+        s_fluid_target_color = distinct_random_pastel_color(s_fluid_base_color);
         s_fluid_morph_progress = 0;
         for (int sum = 0; sum <= FLUID_HUE_SUM_MAX; ++sum) {
             s_fluid_average[sum] = sum / 3;
@@ -193,7 +242,7 @@ static void update_fluid_palette(void)
         s_fluid_palette_ready = true;
     } else if (s_fluid_morph_progress > 255) {
         s_fluid_base_color = s_fluid_target_color;
-        s_fluid_target_color = random_pastel_color();
+        s_fluid_target_color = distinct_random_pastel_color(s_fluid_base_color);
         s_fluid_morph_progress = 0;
     }
     fluid_palette_color_t base = blend_pastel_colors(s_fluid_morph_progress);
