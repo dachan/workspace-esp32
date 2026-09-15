@@ -161,8 +161,8 @@ esp_err_t ssd1306_render(const char *date, const char *time_text)
     const int time_scale = 2;
     const int line_gap = 6;
     const int group_height = 7 * date_scale + line_gap + 7 * time_scale;
-    const int date_y = (OLED_HEIGHT - group_height) / 2;
-    const int time_y = date_y + 7 * date_scale + line_gap;
+    const int time_y = (OLED_HEIGHT - group_height) / 2;
+    const int date_y = time_y + 7 * time_scale + line_gap;
 
     clear_buffer();
     draw_text(date, (OLED_WIDTH - text_width(date, date_scale)) / 2,
