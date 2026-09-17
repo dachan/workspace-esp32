@@ -81,10 +81,13 @@ Desk pose and locked ST7796 view mapping: see `HARDWARE.md` and
 `ai-model-control/README.md`.
 
 ```bash
-chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodem21201
+chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodemXXXX
 ```
 
-Requires Accessibility for the launching app (key posting and prompt focus).
+Pick `XXXX` from [HARDWARE.md](HARDWARE.md) for the board on the desk — macOS
+renumbers `/dev/cu.usbmodem*` after replug, so do not copy an old CDC path from
+memory or from a prior AGENTS example. Requires Accessibility for the launching
+app (key posting and prompt focus).
 
 ## Hardware inventory (keep current)
 
