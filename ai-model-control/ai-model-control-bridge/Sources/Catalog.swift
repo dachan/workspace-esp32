@@ -16,7 +16,7 @@ enum Catalog {
         "GPT-5.6 Sol",
         "GPT-5.6 Luna",
     ]
-    // Keep aligned with firmware catalog.c `rig_models`.
+    // OpenRouter Latest aliases after Rig `modelDisplayName` (live catalog).
     static let rigModels = [
         "Grok Latest",
         "GPT Astra Latest",
@@ -26,7 +26,7 @@ enum Catalog {
         "Claude Sonnet Latest",
         "Claude Opus Latest",
         "Claude Fable Latest",
-        "DeepSeek Flash Latest",
+        "Flash Latest",
         "Gemini Flash Latest",
         "Gemini Pro Latest",
         "Kimi Latest",
@@ -150,10 +150,16 @@ enum Catalog {
     }
 
     static func rigModelIndex(_ raw: String) -> Int? {
-        if let exact = index(raw, in: rigModels, aliases: [:]) {
+        let stripped = rigDisplayName(raw)
+        if let exact = rigModels.firstIndex(where: {
+            $0.caseInsensitiveCompare(raw) == .orderedSame
+                || $0.caseInsensitiveCompare(stripped) == .orderedSame
+        }) {
             return exact
         }
-        return rigPanelName(slug: raw, name: raw).flatMap { rigModels.firstIndex(of: $0) }
+        return rigPanelName(slug: raw, name: raw).flatMap { name in
+            rigModels.firstIndex { $0.caseInsensitiveCompare(name) == .orderedSame }
+        }
     }
 
     static func rigCanonicalSlug(_ panelName: String) -> String? {
@@ -295,8 +301,9 @@ enum Catalog {
     static func rigEnabledMask<T: Collection>(from models: T) -> UInt64
     where T.Element == RigClient.Model {
         var mask: UInt64 = 0
-        for (index, name) in rigModels.enumerated() where index < 64 {
-            if models.contains(where: { rigPanelName(slug: $0.slug, name: $0.name) == name }) {
+        for (index, slot) in rigSlots.enumerated() where index < 64 {
+            let id = normalizeSlug(slot.slug)
+            if models.contains(where: { normalizeSlug($0.slug) == id }) {
                 mask |= 1 << UInt64(index)
             }
         }
@@ -304,9 +311,13 @@ enum Catalog {
     }
 
     static func rigPanelModel(from focus: RigClient.Focus, active: [RigClient.Model]) -> String {
-        if let hit = rigPanelName(slug: focus.main, name: focus.name) { return hit }
-        if let option = active.first(where: { $0.slug.caseInsensitiveCompare(focus.main) == .orderedSame }) {
-            if let hit = rigPanelName(slug: option.slug, name: option.name) { return hit }
+        if let latest = rigLatestName(forSlug: focus.main) { return latest }
+        let stripped = rigDisplayName(focus.name ?? "", slug: focus.main)
+        if !stripped.isEmpty { return stripped }
+        if let option = active.first(where: { normalizeSlug($0.slug) == normalizeSlug(focus.main) }) {
+            if let latest = rigLatestName(forSlug: option.slug) { return latest }
+            let named = rigDisplayName(option.name, slug: option.slug)
+            if !named.isEmpty { return named }
         }
         return rigModels[0]
     }
@@ -325,31 +336,20 @@ enum Catalog {
     }
 
     static func rigPanelName(slug: String, name: String?) -> String? {
-        let folded = "\(slug) \(name ?? "")".lowercased().replacingOccurrences(of: " ", with: "-")
-        if folded.contains("grok") { return "Grok Latest" }
-        if folded.contains("astra") { return "GPT Astra Latest" }
-        if folded.contains("gpt-sol") || folded.contains("sol-latest") || (folded.contains("sol") && !folded.contains("sonnet")) {
-            return "GPT Sol Latest"
-        }
-        if folded.contains("terra") { return "GPT Terra Latest" }
-        if folded.contains("luna") { return "GPT Luna Latest" }
-        if folded.contains("sonnet") { return "Claude Sonnet Latest" }
-        if folded.contains("opus") { return "Claude Opus Latest" }
-        if folded.contains("fable") { return "Claude Fable Latest" }
-        if folded.contains("deepseek") { return "DeepSeek Flash Latest" }
-        if folded.contains("gemini") && folded.contains("flash") { return "Gemini Flash Latest" }
-        if folded.contains("gemini") && folded.contains("pro") { return "Gemini Pro Latest" }
-        if folded.contains("kimi") { return "Kimi Latest" }
-        return rigModels.first {
-            folded.contains($0.lowercased().replacingOccurrences(of: " ", with: "-"))
-        }
+        if let latest = rigLatestName(forSlug: slug) { return latest }
+        let shown = rigDisplayName(name ?? "", slug: slug)
+        return shown.isEmpty ? nil : shown
     }
 
     static func enabledSlug(forPanel name: String, in models: [RigClient.Model]) -> String? {
         if let exact = models.first(where: { $0.slug.caseInsensitiveCompare(name) == .orderedSame }) {
             return exact.slug
         }
-        if let named = models.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+        if let named = models.first(where: {
+            $0.name.caseInsensitiveCompare(name) == .orderedSame
+                || rigDisplayName($0.name, slug: $0.slug)
+                    .caseInsensitiveCompare(rigDisplayName(name)) == .orderedSame
+        }) {
             return named.slug
         }
         if let mapped = models.first(where: { rigPanelName(slug: $0.slug, name: $0.name) == name }) {
@@ -378,7 +378,7 @@ enum Catalog {
         .init(name: "Claude Sonnet Latest", slug: "~anthropic/claude-sonnet-latest"),
         .init(name: "Claude Opus Latest", slug: "~anthropic/claude-opus-latest"),
         .init(name: "Claude Fable Latest", slug: "~anthropic/claude-fable-latest"),
-        .init(name: "DeepSeek Flash Latest", slug: "~deepseek/deepseek-flash-latest"),
+        .init(name: "Flash Latest", slug: "~deepseek/deepseek-flash-latest"),
         .init(name: "Gemini Flash Latest", slug: "~google/gemini-flash-latest"),
         .init(name: "Gemini Pro Latest", slug: "~google/gemini-pro-latest"),
         .init(name: "Kimi Latest", slug: "~moonshotai/kimi-latest"),
@@ -390,5 +390,84 @@ enum Catalog {
             return index
         }
         return aliases[name.lowercased()]
+    }
+
+    /// Same rules as Rig `modelDisplayName` on the OpenRouter catalog.
+    static func rigDisplayName(_ raw: String, slug: String? = nil) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+        var provider: String?
+        var model = trimmed
+        if let colon = trimmed.range(of: ":"),
+           trimmed.distance(from: trimmed.startIndex, to: colon.lowerBound) <= 40,
+           colon.upperBound < trimmed.endIndex,
+           trimmed[colon.upperBound] == " "
+        {
+            provider = String(trimmed[..<colon.lowerBound]).trimmingCharacters(in: .whitespaces)
+            model = String(trimmed[trimmed.index(after: colon.upperBound)...]).trimmingCharacters(in: .whitespaces)
+        }
+        model = stripLeadingProvider(model, provider)
+        if let slug {
+            let key = openRouterProvider(slug)
+            model = stripLeadingProvider(model, providerLabels[key] ?? key)
+        }
+        if !model.isEmpty { return model }
+        if let slug { return slug.split(separator: "/").last.map(String.init) ?? trimmed }
+        return trimmed
+    }
+
+    static func rigLatestName(forSlug slug: String) -> String? {
+        let id = normalizeSlug(slug)
+        return rigSlots.first { normalizeSlug($0.slug) == id }?.name
+    }
+
+    private static func normalizeSlug(_ slug: String) -> String {
+        slug.trimmingCharacters(in: CharacterSet(charactersIn: "~")).lowercased()
+    }
+
+    private static func openRouterProvider(_ slug: String) -> String {
+        let normalized = normalizeSlug(slug)
+        let raw = normalized.split(separator: "/", maxSplits: 1).first.map(String.init) ?? normalized
+        return raw.drop { !$0.isLetter && !$0.isNumber }.isEmpty ? raw : String(raw.drop { !$0.isLetter && !$0.isNumber })
+    }
+
+    private static let providerLabels: [String: String] = [
+        "01-ai": "01.AI",
+        "ai21": "AI21",
+        "amazon": "Amazon",
+        "anthropic": "Anthropic",
+        "arcee-ai": "Arcee",
+        "cognitivecomputations": "Cognitive Computations",
+        "cohere": "Cohere",
+        "deepseek": "DeepSeek",
+        "google": "Google",
+        "groq": "Groq",
+        "huggingface": "Hugging Face",
+        "ibm": "IBM",
+        "inception": "Inception",
+        "meta": "Meta",
+        "meta-llama": "Meta",
+        "microsoft": "Microsoft",
+        "minimax": "MiniMax",
+        "mistralai": "Mistral",
+        "moonshotai": "Moonshot",
+        "morph": "Morph",
+        "nvidia": "NVIDIA",
+        "openai": "OpenAI",
+        "openrouter": "OpenRouter",
+        "perplexity": "Perplexity",
+        "qwen": "Qwen",
+        "x-ai": "xAI",
+        "z-ai": "Z.ai",
+    ]
+
+    private static func stripLeadingProvider(_ model: String, _ provider: String?) -> String {
+        let label = provider?.trimmingCharacters(in: .whitespaces) ?? ""
+        guard !label.isEmpty else { return model }
+        let prefix = label + " "
+        if model.count > prefix.count, model.lowercased().hasPrefix(prefix.lowercased()) {
+            return String(model.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        }
+        return model
     }
 }

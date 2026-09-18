@@ -74,7 +74,8 @@ without posting keys. Press either encoder to send `PUSH` plus new `STATE`
 revisions and force the current model and effort into the focused app.
 While Rig is focused the helper reads `models.active` / `agent.focus` and
 sends `CONFIG RIG_MODELS` plus host `MODEL` / `THINKING` so the panel shows
-Latest aliases and the live composer, then writes back with `agent.setFocus`.
+OpenRouter titles with the `Provider: ` prefix removed (same rule as the
+composer), then writes back with `agent.setFocus`.
 
 **Encoders.** Thinking uses polled falling-CLK decode (two detents = one
 level). The model knob uses PCNT hardware quadrature — a polled decode

@@ -2,6 +2,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <strings.h>
 
 #include "front_title.h"
@@ -15,7 +17,9 @@ static const char *const chatgpt_models[] = {
 static const char *const opencode_models[] = {
     "GPT-6 Astra", "GPT-5.6 Terra", "GPT-5.6 Sol", "GPT-5.6 Luna",
 };
-/* Keep aligned with Swift Catalog.rigModels and Rig Latest display names. */
+/* Encoder slots are OpenRouter Latest aliases. Labels match Rig
+ * modelDisplayName on the live catalog (`Provider: Model`, then drop a
+ * duplicated provider token). */
 static const char *const rig_models[] = {
     "Grok Latest",
     "GPT Astra Latest",
@@ -25,7 +29,7 @@ static const char *const rig_models[] = {
     "Claude Sonnet Latest",
     "Claude Opus Latest",
     "Claude Fable Latest",
-    "DeepSeek Flash Latest",
+    "Flash Latest",
     "Gemini Flash Latest",
     "Gemini Pro Latest",
     "Kimi Latest",
@@ -114,6 +118,82 @@ static int table_count(const char *const *names, int n, const char *name)
         if (strcasecmp(name, names[i]) == 0) {
             return i;
         }
+    }
+    return -1;
+}
+
+static bool starts_with_token(const char *text, const char *token, const char **rest)
+{
+    size_t n = token ? strlen(token) : 0;
+    if (!text || n == 0 || strncasecmp(text, token, n) != 0 || text[n] != ' ' || !text[n + 1]) {
+        return false;
+    }
+    *rest = text + n + 1;
+    while (**rest == ' ' || **rest == '\t') {
+        (*rest)++;
+    }
+    return **rest != '\0';
+}
+
+/* OpenRouter titles are `Provider: Model`. Drop that prefix, then the same
+ * token if it is repeated (`DeepSeek: DeepSeek Flash Latest` → Flash Latest).
+ * GPT/Claude/Gemini stay; they are not the catalog provider. */
+void catalog_rig_display_name(const char *name, char *out, size_t out_sz)
+{
+    if (!out || out_sz == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (!name) {
+        return;
+    }
+    while (*name == ' ' || *name == '\t') {
+        name++;
+    }
+    const char *rest = name;
+    char provider[40];
+    provider[0] = '\0';
+    const char *colon = strchr(name, ':');
+    if (colon && colon > name && (colon - name) <= 40 && colon[1] == ' ') {
+        size_t plen = (size_t)(colon - name);
+        memcpy(provider, name, plen);
+        provider[plen] = '\0';
+        rest = colon + 2;
+        while (*rest == ' ' || *rest == '\t') {
+            rest++;
+        }
+    }
+    const char *stripped = rest;
+    if (provider[0]) {
+        starts_with_token(rest, provider, &stripped);
+    }
+    snprintf(out, out_sz, "%s", stripped);
+    size_t n = strlen(out);
+    while (n && (out[n - 1] == ' ' || out[n - 1] == '\t')) {
+        out[--n] = '\0';
+    }
+}
+
+static int rig_full_index(const char *name)
+{
+    if (!name || !name[0]) {
+        return -1;
+    }
+    int full = table_count(rig_models, COUNT(rig_models), name);
+    if (full >= 0) {
+        return full;
+    }
+    char stripped[96];
+    catalog_rig_display_name(name, stripped, sizeof(stripped));
+    if (stripped[0]) {
+        full = table_count(rig_models, COUNT(rig_models), stripped);
+        if (full >= 0) {
+            return full;
+        }
+    }
+    if (strcasecmp(name, "DeepSeek Flash Latest") == 0
+        || strcasecmp(stripped, "DeepSeek Flash Latest") == 0) {
+        return table_count(rig_models, COUNT(rig_models), "Flash Latest");
     }
     return -1;
 }
@@ -358,7 +438,7 @@ int catalog_model_index_for(desk_app_t app, const char *name)
         return table_count(opencode_models, COUNT(opencode_models), name);
     }
     if (app == DESK_RIG) {
-        return rig_enabled_index(table_count(rig_models, COUNT(rig_models), name));
+        return rig_enabled_index(rig_full_index(name));
     }
     return catalog_model_index_in(app == DESK_CURSOR, name);
 }
@@ -452,7 +532,7 @@ bool catalog_model_known(const char *name)
     }
     return cursor_index(name) >= 0
         || table_count(opencode_models, COUNT(opencode_models), name) >= 0
-        || table_count(rig_models, COUNT(rig_models), name) >= 0;
+        || rig_full_index(name) >= 0;
 }
 
 const char *catalog_default_model(void)

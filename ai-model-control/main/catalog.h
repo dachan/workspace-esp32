@@ -5,6 +5,11 @@
 
 #include "front_title.h"
 
+#include <stddef.h>
+
+/* OpenRouter `Provider: Model` → model, then drop a duplicated provider token. */
+void catalog_rig_display_name(const char *name, char *out, size_t out_sz);
+
 int catalog_model_count(void);
 int catalog_model_count_in(bool cursor);
 const char *catalog_model_at(int index);

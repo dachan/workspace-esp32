@@ -79,8 +79,25 @@ static bool clamp_front_model(model_fields_t *fields)
     if (!fields->has_model) {
         return false;
     }
-    if (catalog_model_index(fields->model) >= 0) {
-        return false;
+    int index = catalog_model_index(fields->model);
+    if (index >= 0) {
+        const char *canonical = catalog_model_at(index);
+        if (strcmp(fields->model, canonical) == 0) {
+            return false;
+        }
+        snprintf(fields->model, sizeof(fields->model), "%s", canonical);
+        fields->has_model = 1;
+        return true;
+    }
+    if (front_title_app() == DESK_RIG && fields->model[0]) {
+        char shown[sizeof(fields->model)];
+        catalog_rig_display_name(fields->model, shown, sizeof(shown));
+        if (!shown[0] || strcmp(fields->model, shown) == 0) {
+            return false;
+        }
+        snprintf(fields->model, sizeof(fields->model), "%s", shown);
+        fields->has_model = 1;
+        return true;
     }
     snprintf(fields->model, sizeof(fields->model), "%s", catalog_default_model());
     fields->has_model = 1;

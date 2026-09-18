@@ -64,12 +64,26 @@ static int handle_line(const char *line, model_fields_t *fields)
     if (strncmp(line, "MODEL ", 6) == 0 || strncmp(line, "MODEL\t", 6) == 0) {
         model_fields_t parsed;
         model_parse_name(line + 6, &parsed);
-        int model = catalog_model_index(parsed.model);
-        if (model < 0) {
-            ESP_LOGW(TAG, "ignore unknown MODEL");
-            return 0;
+        if (front_title_app() == DESK_RIG) {
+            char shown[MODEL_PARSE_MAX];
+            catalog_rig_display_name(parsed.model, shown, sizeof(shown));
+            int model = catalog_model_index(shown[0] ? shown : parsed.model);
+            if (model >= 0) {
+                snprintf(parsed.model, sizeof(parsed.model), "%s", catalog_model_at(model));
+            } else if (shown[0]) {
+                snprintf(parsed.model, sizeof(parsed.model), "%s", shown);
+            } else {
+                ESP_LOGW(TAG, "ignore unknown MODEL");
+                return 0;
+            }
+        } else {
+            int model = catalog_model_index(parsed.model);
+            if (model < 0) {
+                ESP_LOGW(TAG, "ignore unknown MODEL");
+                return 0;
+            }
+            snprintf(parsed.model, sizeof(parsed.model), "%s", catalog_model_at(model));
         }
-        snprintf(parsed.model, sizeof(parsed.model), "%s", catalog_model_at(model));
         if (parsed.has_thinking) {
             int level = catalog_thinking_level(parsed.model, parsed.thinking);
             if (level > 0) {
