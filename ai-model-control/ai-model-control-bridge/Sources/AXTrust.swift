@@ -18,7 +18,7 @@ enum AXTrust {
         fputs(
             """
             Accessibility is not granted for this process (\(process)).
-            Key posting needs it on the app that launches chatgpt-bridge
+            Key posting needs it on the app that launches ai-model-control-bridge
             (Terminal, iTerm, Cursor, …):
               System Settings → Privacy & Security → Accessibility
             Foreground detection does not need this permission.

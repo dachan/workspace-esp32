@@ -16,6 +16,24 @@ enum Catalog {
         "GPT-5.6 Sol",
         "GPT-5.6 Luna",
     ]
+    // Keep aligned with firmware catalog.c `rig_models`.
+    static let rigModels = [
+        "Grok Latest",
+        "GPT Astra Latest",
+        "GPT Sol Latest",
+        "GPT Terra Latest",
+        "GPT Luna Latest",
+        "Claude Sonnet Latest",
+        "Claude Opus Latest",
+        "Claude Fable Latest",
+        "DeepSeek Flash Latest",
+        "Gemini Flash Latest",
+        "Gemini Pro Latest",
+        "Kimi Latest",
+    ]
+    static let rigThinking = [
+        "Auto", "None", "Light", "Medium", "High", "Extra High", "Max",
+    ]
 
     private struct CursorModel {
         let name: String
@@ -131,6 +149,17 @@ enum Catalog {
         ])
     }
 
+    static func rigModelIndex(_ raw: String) -> Int? {
+        if let exact = index(raw, in: rigModels, aliases: [:]) {
+            return exact
+        }
+        return rigPanelName(slug: raw, name: raw).flatMap { rigModels.firstIndex(of: $0) }
+    }
+
+    static func rigCanonicalSlug(_ panelName: String) -> String? {
+        rigSlots.first { $0.name.caseInsensitiveCompare(panelName) == .orderedSame }?.slug
+    }
+
     /// Command-apostrophe's native list is the reverse of the encoder order.
     static func openCodePickerIndex(_ raw: String) -> Int? {
         openCodeModelIndex(raw).map { openCodeModels.count - 1 - $0 }
@@ -168,7 +197,7 @@ enum Catalog {
     }
 
     static func modelIndex(_ raw: String) -> Int? {
-        chatgptModelIndex(raw) ?? cursorModelIndex(raw) ?? openCodeModelIndex(raw)
+        chatgptModelIndex(raw) ?? cursorModelIndex(raw) ?? openCodeModelIndex(raw) ?? rigModelIndex(raw)
     }
 
     // Keep these small protocol tables aligned with firmware catalog.c.
@@ -217,7 +246,11 @@ enum Catalog {
     }
 
     static func thinkingIndex(_ raw: String) -> Int? {
-        chatgptThinkingIndex(raw) ?? cursorThinkingIndex(raw)
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let index = rigThinking.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
+            return index
+        }
+        return chatgptThinkingIndex(raw) ?? cursorThinkingIndex(raw)
     }
 
     static func chatgptModelName(_ raw: String) -> String? {
@@ -232,8 +265,12 @@ enum Catalog {
         openCodeModelIndex(raw).map { openCodeModels[$0] }
     }
 
+    static func rigModelName(_ raw: String) -> String? {
+        rigModelIndex(raw).map { rigModels[$0] }
+    }
+
     static func modelName(_ raw: String) -> String? {
-        chatgptModelName(raw) ?? cursorModelName(raw) ?? openCodeModelName(raw)
+        chatgptModelName(raw) ?? cursorModelName(raw) ?? openCodeModelName(raw) ?? rigModelName(raw)
     }
 
     static func chatgptThinkingName(_ raw: String) -> String? {
@@ -246,11 +283,106 @@ enum Catalog {
 
     static func thinkingName(_ raw: String) -> String? {
         let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let exact = rigThinking.first(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
+            return exact
+        }
         if cursorThinking.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
             return cursorThinkingName(raw)
         }
         return chatgptThinkingName(raw) ?? cursorThinkingName(raw)
     }
+
+    static func rigEnabledMask<T: Collection>(from models: T) -> UInt64
+    where T.Element == RigClient.Model {
+        var mask: UInt64 = 0
+        for (index, name) in rigModels.enumerated() where index < 64 {
+            if models.contains(where: { rigPanelName(slug: $0.slug, name: $0.name) == name }) {
+                mask |= 1 << UInt64(index)
+            }
+        }
+        return mask == 0 ? 1 : mask
+    }
+
+    static func rigPanelModel(from focus: RigClient.Focus, active: [RigClient.Model]) -> String {
+        if let hit = rigPanelName(slug: focus.main, name: focus.name) { return hit }
+        if let option = active.first(where: { $0.slug.caseInsensitiveCompare(focus.main) == .orderedSame }) {
+            if let hit = rigPanelName(slug: option.slug, name: option.name) { return hit }
+        }
+        return rigModels[0]
+    }
+
+    static func rigPanelThinking(from effort: String) -> String {
+        switch effort.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "auto": return "Auto"
+        case "none": return "None"
+        case "low", "light", "minimal": return "Light"
+        case "medium": return "Medium"
+        case "high": return "High"
+        case "xhigh", "x-high": return "Extra High"
+        case "max": return "Max"
+        default: return "Auto"
+        }
+    }
+
+    static func rigPanelName(slug: String, name: String?) -> String? {
+        let folded = "\(slug) \(name ?? "")".lowercased().replacingOccurrences(of: " ", with: "-")
+        if folded.contains("grok") { return "Grok Latest" }
+        if folded.contains("astra") { return "GPT Astra Latest" }
+        if folded.contains("gpt-sol") || folded.contains("sol-latest") || (folded.contains("sol") && !folded.contains("sonnet")) {
+            return "GPT Sol Latest"
+        }
+        if folded.contains("terra") { return "GPT Terra Latest" }
+        if folded.contains("luna") { return "GPT Luna Latest" }
+        if folded.contains("sonnet") { return "Claude Sonnet Latest" }
+        if folded.contains("opus") { return "Claude Opus Latest" }
+        if folded.contains("fable") { return "Claude Fable Latest" }
+        if folded.contains("deepseek") { return "DeepSeek Flash Latest" }
+        if folded.contains("gemini") && folded.contains("flash") { return "Gemini Flash Latest" }
+        if folded.contains("gemini") && folded.contains("pro") { return "Gemini Pro Latest" }
+        if folded.contains("kimi") { return "Kimi Latest" }
+        return rigModels.first {
+            folded.contains($0.lowercased().replacingOccurrences(of: " ", with: "-"))
+        }
+    }
+
+    static func enabledSlug(forPanel name: String, in models: [RigClient.Model]) -> String? {
+        if let exact = models.first(where: { $0.slug.caseInsensitiveCompare(name) == .orderedSame }) {
+            return exact.slug
+        }
+        if let named = models.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+            return named.slug
+        }
+        if let mapped = models.first(where: { rigPanelName(slug: $0.slug, name: $0.name) == name }) {
+            return mapped.slug
+        }
+        if let canonical = rigCanonicalSlug(name),
+           models.contains(where: { $0.slug.caseInsensitiveCompare(canonical) == .orderedSame })
+        {
+            return canonical
+        }
+        return nil
+    }
+
+    private struct RigSlot {
+        let name: String
+        let slug: String
+    }
+
+    // Keep aligned with firmware `rig_models` and Rig Latest aliases.
+    private static let rigSlots: [RigSlot] = [
+        .init(name: "Grok Latest", slug: "~x-ai/grok-latest"),
+        .init(name: "GPT Astra Latest", slug: "~openai/gpt-astra-latest"),
+        .init(name: "GPT Sol Latest", slug: "~openai/gpt-sol-latest"),
+        .init(name: "GPT Terra Latest", slug: "~openai/gpt-terra-latest"),
+        .init(name: "GPT Luna Latest", slug: "~openai/gpt-luna-latest"),
+        .init(name: "Claude Sonnet Latest", slug: "~anthropic/claude-sonnet-latest"),
+        .init(name: "Claude Opus Latest", slug: "~anthropic/claude-opus-latest"),
+        .init(name: "Claude Fable Latest", slug: "~anthropic/claude-fable-latest"),
+        .init(name: "DeepSeek Flash Latest", slug: "~deepseek/deepseek-flash-latest"),
+        .init(name: "Gemini Flash Latest", slug: "~google/gemini-flash-latest"),
+        .init(name: "Gemini Pro Latest", slug: "~google/gemini-pro-latest"),
+        .init(name: "Kimi Latest", slug: "~moonshotai/kimi-latest"),
+    ]
 
     private static func index(_ raw: String, in names: [String], aliases: [String: Int]) -> Int? {
         let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)

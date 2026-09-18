@@ -13,6 +13,8 @@ final class SerialSession {
     let baud: Int
     private let chatGPTThinkingMask: UInt64
     private let cursorModelMask: UInt64
+    private var rigModelMask: UInt64
+    private var rigModelMaskSent: UInt64?
     private var fd: Int32 = -1
     private(set) var connectionGeneration: UInt64 = 0
     var isConnected: Bool { fd >= 0 }
@@ -24,6 +26,10 @@ final class SerialSession {
     private var nextTimeAt: TimeInterval = 0
     private var panelFrontWanted: String?
     private var panelFrontSent: String?
+    private var hostModelWanted: String?
+    private var hostThinkingWanted: String?
+    private var hostModelSent: String?
+    private var hostThinkingSent: String?
     private var acknowledgements: [SettingKind: UInt64] = [:]
     private var outgoing: [UInt8] = []
     private var outgoingOffset = 0
@@ -33,12 +39,14 @@ final class SerialSession {
         port: String,
         baud: Int,
         chatGPTThinkingMask: UInt64 = Catalog.defaultChatGPTThinkingMask,
-        cursorModelMask: UInt64 = 0xFF
+        cursorModelMask: UInt64 = 0xFF,
+        rigModelMask: UInt64 = 0xFFF
     ) {
         self.port = port
         self.baud = baud
         self.chatGPTThinkingMask = chatGPTThinkingMask
         self.cursorModelMask = cursorModelMask
+        self.rigModelMask = rigModelMask
     }
 
     private func open() throws {
@@ -64,7 +72,7 @@ final class SerialSession {
         nextTimeAt = 0
         panelFrontSent = nil
         lastConnectionError = nil
-        fputs("chatgpt-bridge: serial connected; requesting current dial state\n", stderr)
+        fputs("ai-model-control-bridge: serial connected; requesting current dial state\n", stderr)
         print("BRIDGE_STATUS SERIAL_CONNECTED")
         fflush(stdout)
     }
@@ -81,6 +89,9 @@ final class SerialSession {
         outgoingOffset = 0
         acknowledgements.removeAll()
         configurationStep = 0
+        rigModelMaskSent = nil
+        hostModelSent = nil
+        hostThinkingSent = nil
     }
 
     func readLines() -> [String] {
@@ -120,7 +131,7 @@ final class SerialSession {
                     if byte == 0 || pending.count >= SerialBridge.maxLineBytes {
                         pending.removeAll(keepingCapacity: true)
                         discardLine = true
-                        fputs("chatgpt-bridge: discard malformed or oversized serial line\n", stderr)
+                        fputs("ai-model-control-bridge: discard malformed or oversized serial line\n", stderr)
                     } else {
                         pending.append(byte)
                     }
@@ -143,10 +154,26 @@ final class SerialSession {
         panelFrontSent = nil
         nextTimeAt = 0
         configurationStep = 0
+        rigModelMaskSent = nil
+        hostModelSent = nil
+        hostThinkingSent = nil
     }
 
     func setPanelFront(_ title: String) {
         panelFrontWanted = title
+    }
+
+    func setRigModelMask(_ mask: UInt64) {
+        let next = mask == 0 ? 1 : mask
+        if next != rigModelMask {
+            rigModelMask = next
+            rigModelMaskSent = nil
+        }
+    }
+
+    func setHostPanel(model: String, thinking: String) {
+        hostModelWanted = model
+        hostThinkingWanted = thinking
     }
 
     func flushWrites() {
@@ -160,6 +187,12 @@ final class SerialSession {
                 } else if let wanted = panelFrontWanted, wanted != panelFrontSent {
                     line = "FRONT \(wanted)"
                     panelFrontSent = wanted
+                    hostModelSent = nil
+                    hostThinkingSent = nil
+                    if wanted != "Rig" {
+                        hostModelWanted = nil
+                        hostThinkingWanted = nil
+                    }
                 } else if syncPending {
                     // READY retries recover a reset without periodic state polling.
                     line = "SYNC"
@@ -171,6 +204,16 @@ final class SerialSession {
                 } else if configurationStep == 1 {
                     line = "CONFIG CURSOR_MODELS \(String(format: "%016llx", cursorModelMask))"
                     configurationStep = 2
+                } else if configurationStep == 2 || rigModelMaskSent != rigModelMask {
+                    line = "CONFIG RIG_MODELS \(String(format: "%016llx", rigModelMask))"
+                    configurationStep = 3
+                    rigModelMaskSent = rigModelMask
+                } else if let model = hostModelWanted, model != hostModelSent, panelFrontSent == "Rig" {
+                    line = "MODEL \(model)"
+                    hostModelSent = model
+                } else if let thinking = hostThinkingWanted, thinking != hostThinkingSent, panelFrontSent == "Rig" {
+                    line = "THINKING \(thinking)"
+                    hostThinkingSent = thinking
                 } else if ProcessInfo.processInfo.systemUptime >= nextTimeAt {
                     let unix = Int64(Date().timeIntervalSince1970)
                     let tzMin = TimeZone.current.secondsFromGMT() / 60
@@ -204,7 +247,7 @@ final class SerialSession {
         close()
         reconnectAt = ProcessInfo.processInfo.systemUptime + 2
         if message != lastConnectionError {
-            fputs("chatgpt-bridge: \(message); retrying configured port every 2 seconds\n", stderr)
+            fputs("ai-model-control-bridge: \(message); retrying configured port every 2 seconds\n", stderr)
             lastConnectionError = message
             print("BRIDGE_STATUS SERIAL_UNAVAILABLE")
             fflush(stdout)

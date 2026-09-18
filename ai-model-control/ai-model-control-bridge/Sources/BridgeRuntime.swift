@@ -33,6 +33,9 @@ final class BridgeRuntime {
     private var bootID: UInt64?
     private var connectionGeneration: UInt64 = 0
     private var applyOnConnectPending: Bool
+    private var lastRigPushAt: TimeInterval = 0
+    private var lastRigPanel: (model: String, thinking: String, mask: UInt64)?
+    private var lastRigError: String?
 
     init(options: Options) {
         self.options = options
@@ -52,7 +55,7 @@ final class BridgeRuntime {
     private func receive(_ update: SerialUpdate) {
         let legacyIntent = update.revision == nil
         guard let value = update.kind.canonicalName(update.value) else {
-            fputs("chatgpt-bridge: ignore unknown \(update.kind.rawValue) \(update.value)\n", stderr)
+            fputs("ai-model-control-bridge: ignore unknown \(update.kind.rawValue) \(update.value)\n", stderr)
             return
         }
         // ACK means received, never confirmation of application UI state.
@@ -211,6 +214,10 @@ final class BridgeRuntime {
 
     private func applyPending() {
         guard !desired.isEmpty, let focus = targetFocus else { return }
+        if focus.kind == .rig {
+            applyRig(focus: focus)
+            return
+        }
         guard AXTrust.isTrusted(prompt: false) else {
             return
         }
@@ -286,11 +293,11 @@ final class BridgeRuntime {
         if case .failed(let message) = guardedResult, generation == revision {
             applyFailures += 1
             if applyFailures >= 3 {
-                fputs("chatgpt-bridge: \(message); stopped until the next supported-app focus or dial update\n", stderr)
+                fputs("ai-model-control-bridge: \(message); stopped until the next supported-app focus or dial update\n", stderr)
                 suspendPending("\(focus.displayName) apply failed")
             } else {
                 if message != lastFailure {
-                    fputs("chatgpt-bridge: \(message); retrying while focused\n", stderr)
+                    fputs("ai-model-control-bridge: \(message); retrying while focused\n", stderr)
                 }
                 lastFailure = message
                 retryAt = ProcessInfo.processInfo.systemUptime + 2
@@ -305,6 +312,54 @@ final class BridgeRuntime {
         fflush(stdout)
     }
 
+    private func applyRig(focus: FocusOperation) {
+        guard focus.isCurrent else {
+            suspendAfterFocusLoss("target app left the foreground")
+            return
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now >= retryAt, now >= settleAt else { return }
+        let snapshot = desired
+        let pid = focus.pid
+        if forceApply {
+            lastApplied.removeValue(forKey: pid)
+            forceApply = false
+        }
+        let needsApply = snapshot.contains { kind, value in lastApplied[pid]?[kind] != value }
+        guard needsApply else { return }
+        let result = RigApply.apply(model: snapshot[.model], thinking: snapshot[.thinking])
+        switch result {
+        case .applied(let path):
+            lastApplied[pid] = snapshot
+            lastFailure = nil
+            retryAt = 0
+            applyFailures = 0
+            if let model = snapshot[.model] {
+                print("\(stamp()) posted model \(model) via \(path)")
+            }
+            if let thinking = snapshot[.thinking] {
+                print("\(stamp()) posted thinking \(thinking) via \(path)")
+            }
+        case .interrupted:
+            suspendPending("Rig apply interrupted")
+        case .failed(let message):
+            applyFailures += 1
+            if applyFailures >= 3 {
+                fputs("ai-model-control-bridge: \(message); stopped until the next supported-app focus or dial update\n", stderr)
+                suspendPending("Rig apply failed")
+            } else {
+                if message != lastFailure {
+                    fputs("ai-model-control-bridge: \(message); retrying while focused\n", stderr)
+                }
+                lastFailure = message
+                retryAt = ProcessInfo.processInfo.systemUptime + 2
+            }
+        }
+        if !focus.isCurrent, targetFocus === focus {
+            suspendAfterFocusLoss("target app left the foreground")
+        }
+    }
+
     private func noteFront() {
         let app = DeskFront.frontmost()
         let front = app.map { DeskFront.isTarget($0, preferred: options.bundleID) } ?? false
@@ -317,11 +372,51 @@ final class BridgeRuntime {
             if targetFocus != nil {
                 suspendPending(front ? "focused app changed" : "no supported app is focused")
             }
+            lastRigPanel = nil
+            lastRigPushAt = 0
+        }
+        pushRigToPanel(app: app)
+    }
+
+    private func pushRigToPanel(app: NSRunningApplication?) {
+        guard let session else { return }
+        guard let app, DeskFront.kind(of: app) == .rig else {
+            lastRigPanel = nil
+            return
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        if lastRigPanel != nil, now - lastRigPushAt < 0.4 {
+            return
+        }
+        lastRigPushAt = now
+        do {
+            let active = try RigClient.modelsActive()
+            let focus = try RigClient.focus()
+            let mask = Catalog.rigEnabledMask(from: active.models)
+            let model = Catalog.rigPanelModel(from: focus, active: active.models)
+            let thinking = Catalog.rigPanelThinking(from: focus.effort)
+            session.setRigModelMask(mask)
+            if lastRigPanel?.model != model || lastRigPanel?.thinking != thinking || lastRigPanel?.mask != mask {
+                session.setHostPanel(model: model, thinking: thinking)
+                lastApplied[app.processIdentifier] = [.model: model, .thinking: thinking]
+                receivedModel = model
+                receivedThinking = thinking
+                print("\(stamp()) panel Rig \(model) \(thinking)")
+                fflush(stdout)
+            }
+            lastRigPanel = (model, thinking, mask)
+            lastRigError = nil
+        } catch {
+            let message = error.localizedDescription
+            if message != lastRigError {
+                fputs("ai-model-control-bridge: could not read Rig focus (\(message))\n", stderr)
+                lastRigError = message
+            }
         }
     }
 
     func run() -> Never {
-        print("watching ChatGPT / Cursor / OpenCode foreground\(session.map { "; listening on \($0.port)" } ?? "") (Ctrl+C to stop)")
+        print("watching ChatGPT / Cursor / OpenCode / Rig foreground\(session.map { "; listening on \($0.port)" } ?? "") (Ctrl+C to stop)")
         fflush(stdout)
         while true {
             drainSerial()
@@ -335,7 +430,7 @@ final class BridgeRuntime {
 
 func runWatch(options: Options) -> Int32 {
     if options.listen && options.port == nil {
-        fputs("chatgpt-bridge: --listen needs --port\n", stderr)
+        fputs("ai-model-control-bridge: --listen needs --port\n", stderr)
         return 2
     }
     // Watching the frontmost app and forwarding FRONT state only use NSWorkspace.

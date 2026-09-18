@@ -2,7 +2,7 @@
 
 #include <stdbool.h>
 
-typedef enum { DESK_CHATGPT, DESK_CURSOR, DESK_OPENCODE } desk_app_t;
+typedef enum { DESK_CHATGPT, DESK_CURSOR, DESK_OPENCODE, DESK_RIG } desk_app_t;
 desk_app_t front_title_app(void);
 
 bool front_title_apply_line(const char *line);

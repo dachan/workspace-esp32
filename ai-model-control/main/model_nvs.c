@@ -39,7 +39,7 @@ typedef struct __attribute__((packed)) {
 } effort_blob_t;
 
 static effort_blob_t s_effort;
-static char s_last_model[3][EFFORT_MODEL_MAX];
+static char s_last_model[4][EFFORT_MODEL_MAX];
 
 static void copy_trunc(char *dst, size_t dst_sz, const char *src)
 {
@@ -119,6 +119,7 @@ int model_nvs_load(model_fields_t *out)
         seed_factory_for(DESK_CHATGPT);
         seed_factory_for(DESK_CURSOR);
         seed_factory_for(DESK_OPENCODE);
+        seed_factory_for(DESK_RIG);
         return 0;
     }
 
@@ -145,6 +146,7 @@ int model_nvs_load(model_fields_t *out)
     load_last_model(h, KEY_LAST_G, s_last_model[0], sizeof(s_last_model[0]));
     load_last_model(h, KEY_LAST_C, s_last_model[1], sizeof(s_last_model[1]));
     load_last_model(h, "last_o", s_last_model[2], sizeof(s_last_model[2]));
+    load_last_model(h, "last_r", s_last_model[3], sizeof(s_last_model[3]));
 
     uint64_t enabled = 0;
     len = sizeof(enabled);
@@ -164,6 +166,7 @@ int model_nvs_load(model_fields_t *out)
     seed_factory_for(DESK_CHATGPT);
     seed_factory_for(DESK_CURSOR);
     seed_factory_for(DESK_OPENCODE);
+    seed_factory_for(DESK_RIG);
     // The last displayed pair has no app identity; retain the per-app effort slots.
     if (out->has_model) {
         ESP_LOGI(TAG, "loaded cache model='%s' thinking='%s' efforts=%u last_g='%s' last_c='%s'",
@@ -215,6 +218,9 @@ esp_err_t model_nvs_save(const model_fields_t *fields)
     }
     if (err == ESP_OK && s_last_model[2][0]) {
         err = nvs_set_str(h, "last_o", s_last_model[2]);
+    }
+    if (err == ESP_OK && s_last_model[3][0]) {
+        err = nvs_set_str(h, "last_r", s_last_model[3]);
     }
     if (err == ESP_OK) {
         uint64_t enabled = catalog_cursor_enabled_mask();

@@ -1,4 +1,4 @@
-# AI model control bridge (`mac-chatgpt-bridge`)
+# AI model control bridge (`ai-model-control-bridge`)
 
 macOS helper for the AI model control panel's encoders. Foreground is one
 `NSWorkspace.frontmostApplication` read. It never activates ChatGPT, Cursor, or OpenCode.
@@ -46,9 +46,9 @@ while a supported app is already focused. Focus changes only update the panel.
    - Cursor effort: Command-/ (reopened after selecting a model when
      both changed), then Left, Up, Right directly into Reasoning, Down to
      the level, and Return once, then Escape twice to close the menus. An effort-only change skips model selection.
-5. If none of ChatGPT, Cursor, or OpenCode is focused: retain the ESP32 state
+5. If none of ChatGPT, Cursor, OpenCode, or Rig is focused: retain the ESP32 state
    but drop its application intent. Returning focus never posts keys. The helper
-   still sends `FRONT Cursor`, `FRONT ChatGPT`, `FRONT OpenCode`, or
+   still sends `FRONT Cursor`, `FRONT ChatGPT`, `FRONT OpenCode`, `FRONT Rig`, or
    `FRONT None` so the panel lockup and remembered state match the focused app
    and can idle to a clock screensaver when none is focused.
 
@@ -124,7 +124,7 @@ or Apply Dial to Focused App to try again. A newer dial state can supersede the 
 When creating the filter fails, the bridge posts no keys and reports a permission
 error (check Accessibility and Input Monitoring for the launching app).
 
-With a supported app focused, `chatgpt-bridge --check-input-guard` checks whether
+With a supported app focused, `ai-model-control-bridge --check-input-guard` checks whether
 the filter can be enabled and immediately releases it without posting keys.
 This confirms availability, not physical input suppression or the app's selection.
 
@@ -147,15 +147,15 @@ sending the panel's focused-app state and drops keyboard-control requests.
 3. Confirm:
 
 ```sh
-cd ai-model-control/mac-chatgpt-bridge
-swift run chatgpt-bridge --check-ax
-swift run chatgpt-bridge --front
+cd ai-model-control/ai-model-control-bridge
+swift run ai-model-control-bridge --check-ax
+swift run ai-model-control-bridge --front
 ```
 
 ## AI model control
 
 ```bash
-chatgpt-bridge --watch --port "$ESP_PORT"
+ai-model-control-bridge --watch --port "$ESP_PORT"
 ```
 
 `--send-serial` is accepted for existing launch commands; it has no effect.
@@ -165,15 +165,15 @@ verified device path. `--bundle-id` accepts `com.openai.chat`,
 rates and setting names fail validation.
 
 ```sh
-cd ai-model-control/mac-chatgpt-bridge
+cd ai-model-control/ai-model-control-bridge
 swift build -c release
-"$(swift build -c release --show-bin-path)/chatgpt-bridge" \
+"$(swift build -c release --show-bin-path)/ai-model-control-bridge" \
   --watch --port "$ESP_PORT"
 ```
 
 ```sh
-swift run chatgpt-bridge --hid-info
-swift run chatgpt-bridge --list-ports
+swift run ai-model-control-bridge --hid-info
+swift run ai-model-control-bridge --list-ports
 ```
 
 `Options.swift` owns CLI parsing; `BridgeRuntime.swift` owns the foreground and
@@ -187,7 +187,7 @@ the previous helper and relaunch it from the same Accessibility-authorized app.
 ## Model Dial app
 
 `model-dial` is the macOS menu-bar wrapper for this bridge. It starts and
-supervises `chatgpt-bridge`, remembers a selected USB serial path, and can register itself to start at login. The bridge
+supervises `ai-model-control-bridge`, remembers a selected USB serial path, and can register itself to start at login. The bridge
 still reconnects independently when a device temporarily disappears at the same
 path. The **Device** menu lets you choose among connected serial devices. With
 no saved choice, a single candidate is selected automatically; multiple candidates
@@ -210,13 +210,13 @@ an old helper cannot overwrite the replacement's status. **Refresh Cursor Models
 reads only Cursor's model catalog and overrides in the background, with a
 three-second timeout; it
 retains saved choices if the read fails or preferences changed while it ran.
-**Apply Dial to Focused App** is available only while a supported app is focused
-and Accessibility permission is granted.
+**Apply Dial to Focused App** is available while a supported app is focused.
+Rig does not need Accessibility; ChatGPT, Cursor, and OpenCode still do.
 
 Build an unsigned local app bundle, optionally with the firmware app binary:
 
 ```sh
-cd ai-model-control/mac-chatgpt-bridge
+cd ai-model-control/ai-model-control-bridge
 ./scripts/package-app.sh --firmware ../build-v0.90-event-sync/ai-model-control.bin
 open "dist/Model Dial.app"
 ```

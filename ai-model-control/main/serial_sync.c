@@ -135,6 +135,18 @@ bool serial_sync_handle_line(const char *line)
         }
         return true;
     }
+    const char *rig_prefix = "CONFIG RIG_MODELS ";
+    if (strncmp(line, rig_prefix, strlen(rig_prefix)) == 0) {
+        char *end = NULL;
+        const char *value = line + strlen(rig_prefix);
+        uint64_t mask = strtoull(value, &end, 16);
+        if (end != value && *end == '\0') {
+            uint64_t before = catalog_rig_enabled_mask();
+            catalog_rig_set_enabled_mask(mask);
+            s_config_changed |= before != catalog_rig_enabled_mask();
+        }
+        return true;
+    }
     if (strncmp(line, "ACK ", 4) == 0) {
         char kind[9], extra;
         uint64_t revision;

@@ -149,6 +149,20 @@ static void draw_app_thinking_bar(int x, int y, int w, int h, const model_fields
     draw_thinking_bar(x, y, w, h, level, segs > 0 ? segs : 1, track, fill);
 }
 
+static const logo_t *front_logo(bool icon)
+{
+    switch (front_title_app()) {
+    case DESK_OPENCODE:
+        return icon ? &logo_opencode_icon : &logo_opencode;
+    case DESK_CURSOR:
+        return icon ? &logo_cursor_icon : &logo_cursor;
+    case DESK_RIG:
+        return NULL;
+    default:
+        return icon ? &logo_openai_icon : &logo_openai;
+    }
+}
+
 #if defined(AI_MODEL_PROFILE_SUPERMINI)
 static void draw_centered(int y, const char *s, uint16_t fg, uint16_t bg, int scale)
 {
@@ -218,10 +232,13 @@ static esp_err_t ui_render_round(const model_fields_t *fields)
     /* One fill: an inset card shows as a box on the round glass. */
     display_fill(bg);
 
-    const logo_t *logo = front_title_app() == DESK_OPENCODE ? &logo_opencode_icon
-        : front_title_is_cursor() ? &logo_cursor_icon : &logo_openai_icon;
-    display_blit_alpha((DISPLAY_WIDTH - logo->width) / 2, 12,
-                       logo->width, logo->height, logo->alpha, text, bg);
+    const logo_t *logo = front_logo(true);
+    if (logo) {
+        display_blit_alpha((DISPLAY_WIDTH - logo->width) / 2, 12,
+                           logo->width, logo->height, logo->alpha, text, bg);
+    } else {
+        draw_centered(12, "Rig", text, bg, 2);
+    }
 
     const int model_scale = 2;
     const int think_scale = 1;
@@ -280,10 +297,13 @@ esp_err_t ui_render(const model_fields_t *fields)
     const int have_clock = clock_format(time_text, sizeof(time_text))
         && clock_format_date(date_text, sizeof(date_text));
     /* Brand lockup sits on the same baseline the title text used. */
-    const logo_t *logo = front_title_app() == DESK_OPENCODE ? &logo_opencode
-        : front_title_is_cursor() ? &logo_cursor : &logo_openai;
-    display_blit_alpha(pad, header_y + title_h - logo->baseline, logo->width, logo->height,
-                       logo->alpha, text, card);
+    const logo_t *logo = front_logo(false);
+    if (logo) {
+        display_blit_alpha(pad, header_y + title_h - logo->baseline, logo->width, logo->height,
+                           logo->alpha, text, card);
+    } else {
+        font_draw_text(pad, header_y, "Rig", text, card, title_scale);
+    }
     if (have_clock) {
         const int right = DISPLAY_WIDTH - pad;
         const int gap = 6 * title_scale;

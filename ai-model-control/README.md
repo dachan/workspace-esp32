@@ -10,8 +10,8 @@ ESP32-S3 AI model control panel for **model** and **thinking** selection across
 ChatGPT, Cursor, and OpenCode
 on the desk-mounted 3.5" ST7796U panel. Rotary encoders change both locally
 (display + NVS). After **0.4 s** with no further changes, the firmware sends
-the latest complete state plus `APPLY` to `mac-chatgpt-bridge/` only while
-ChatGPT, Cursor, or OpenCode is already foreground. Focus changes restore the
+the latest complete state plus `APPLY` to `ai-model-control-bridge/` only while
+ChatGPT, Cursor, OpenCode, or Rig is already foreground. Focus changes restore the
 app-specific panel state without posting keys. Pressing either encoder sends
 the complete current state plus `PUSH`, which forces model and effort into
 the currently focused supported app.
@@ -28,6 +28,9 @@ Mac → ESP: SYNC
 ESP → Mac: ENABLED <16-hex Cursor enable mask>
 Mac → ESP: CONFIG CHATGPT_EFFORTS <16-hex effort mask>
 Mac → ESP: CONFIG CURSOR_MODELS <16-hex model mask>
+Mac → ESP: CONFIG RIG_MODELS <16-hex Latest-alias mask>
+Mac → ESP: MODEL <Rig display name>
+Mac → ESP: THINKING <Rig effort name>
 ESP → Mac: STATE <16-hex revision> MODEL <name>
 ESP → Mac: STATE <16-hex revision> THINKING <level>
 ESP → Mac: APPLY
@@ -58,18 +61,19 @@ the USB device path to disappear.
 
 Mac also sends `TIME <unix-seconds> <tz-offset-minutes>` on connect and every
 30 s so the panel can show a local clock. Firmware ticks minutes from that
-snapshot; it does not use Wi-Fi or SNTP. The helper also sends `FRONT Cursor`,
-`FRONT ChatGPT`, `FRONT OpenCode`, or `FRONT None` when the focused app changes so the
+snapshot; it does not use Wi-Fi or SNTP. the helper also sends `FRONT Cursor`,
+`FRONT ChatGPT`, `FRONT OpenCode`, `FRONT Rig`, or `FRONT None` when the focused app changes so the
 header brand lockup and app-specific panel state match without applying anything
 to the desktop app. `FRONT None` keeps the last app's catalog and logo; it
 does not fall back to ChatGPT. After each SYNC the helper resends FRONT so a
 firmware restart recovers focus. `FRONT None` immediately switches the panel to
-its date/time clock. Until Cursor, ChatGPT, or OpenCode is focused again, encoder
+its date/time clock. Until Cursor, ChatGPT, OpenCode, or Rig is focused again, encoder
 and touch controls are ignored so they cannot change a stored dial selection.
 
 A five-second press-and-hold anywhere on the glass starts a five-point touch
 calibration. The Model Dial helper's **Apply Dial to Focused App** menu item
 asks the bridge to apply the current panel model and thinking to the focused app.
+Rig uses `agent.setFocus` and does not need Accessibility; ChatGPT, Cursor, and OpenCode still do.
 **Refresh Cursor Models** only refreshes the dial's Cursor model list. The Model Dial
 Settings window controls which ChatGPT effort levels and Cursor models are
 available on the encoders; the bridge sends those masks to the panel on every
@@ -239,7 +243,7 @@ keystrokes use a shared 0.05 s gap. A five-second hold on the glass starts
 touch calibration.
 
 ```bash
-chatgpt-bridge --watch --port "$ESP_PORT"
+ai-model-control-bridge --watch --port "$ESP_PORT"
 ```
 
 Requires Accessibility for the launching app (key posting and prompt focus).
@@ -285,7 +289,7 @@ serial supersession and release the filter on every exit. Escape, focus loss, di
 independent five-second watchdog cancel the target. The `--check-input-guard`
 diagnostic acquires/releases without posting keys. A build or availability
 check does not verify physical input suppression. See also
-[input guard](mac-chatgpt-bridge/README.md#input-guard).
+[input guard](ai-model-control-bridge/README.md#input-guard).
 
 **Prompt focus.** Before posting shortcuts: Cursor Command-L only if Agents
 is not already open (Cmd+L toggles the sidepanel and would close it);
@@ -314,8 +318,7 @@ identity — never by screen coordinates.
 ## Build / flash (Mac only)
 
 After a directory rename, use a fresh build directory: ESP-IDF/CMake caches
-absolute source paths. The Mac helper keeps its existing `mac-chatgpt-bridge`
-folder and `chatgpt-bridge` command for compatibility.
+absolute source paths. The Mac helper is `ai-model-control-bridge/`.
 
 Activate the local ESP-IDF environment and set `ESP_PORT` to the verified device.
 From this project directory:
@@ -344,13 +347,13 @@ sends the current model and effort as a forced `PUSH`.
 
 The Mac helper temporarily filters user input to the focused app during each
 model/thinking apply. Escape cancels; focus loss or a five-second timeout releases
-the filter; another dial movement or Apply Dial to Focused App is required to retry. See [input guard](mac-chatgpt-bridge/README.md#input-guard)
+the filter; another dial movement or Apply Dial to Focused App is required to retry. See [input guard](ai-model-control-bridge/README.md#input-guard)
 for permissions, held-input handling, and the availability check.
 
 ```sh
-cd mac-chatgpt-bridge
+cd ai-model-control-bridge
 swift build -c release
-"$(swift build -c release --show-bin-path)/chatgpt-bridge" \
+"$(swift build -c release --show-bin-path)/ai-model-control-bridge" \
   --watch --port "$ESP_PORT"
 ```
 
@@ -358,8 +361,8 @@ swift build -c release
 
 - `main/main.c`: focused-app input coordination, immediate no-focus clock view, and save/paint retries.
 - `main/ui.c`: drawing including the idle screensaver; `display.c`: SPI and DMA ownership; `canvas.c`/`font.c`: pixels/text.
-- `main/front_title.c`: Mac `FRONT Cursor` / `FRONT ChatGPT` / `FRONT None`;
-  None keeps the last app and does not restore ChatGPT.
+- `main/front_title.c`: Mac `FRONT Cursor` / `FRONT ChatGPT` / `FRONT OpenCode` / `FRONT Rig` / `FRONT None`;
+  None keeps the last app and does not restore ChatGPT. Rig reuses the ChatGPT encoder list and draws a text lockup.
 - `main/logo.c`: header brand masks generated from `assets/` by
   `scripts/generate_logos.py`; re-run it (needs Pillow) after changing the
   artwork or its target height, and commit the result.
@@ -405,7 +408,7 @@ separately from ChatGPT and Cursor. Thinking remains local to the panel and does
 not synchronize with OpenCode. `FRONT None` retains that state. An older saved
 OpenCode model outside this set resets to GPT-5.6 Luna when OpenCode next becomes
 focused.
-See the [OpenCode bridge mapping](mac-chatgpt-bridge/README.md#opencode) for
+See the [OpenCode bridge mapping](ai-model-control-bridge/README.md#opencode) for
 model availability, effort mappings, and integration limits.
 
 The event-driven recovery build retains version 0.90 by user request. Older

@@ -74,9 +74,9 @@ static bool apply_model_delta(model_fields_t *fields, int delta)
     return true;
 }
 
-static bool clamp_cursor_model(model_fields_t *fields)
+static bool clamp_front_model(model_fields_t *fields)
 {
-    if (!front_title_is_cursor() || !fields->has_model) {
+    if (!fields->has_model) {
         return false;
     }
     if (catalog_model_index(fields->model) >= 0) {
@@ -169,6 +169,14 @@ void app_main(void)
         touch_sample_t touch = {0};
         touch_poll(&touch);
         TickType_t now = xTaskGetTickCount();
+        model_fields_t incoming = fields;
+        int host_updated = serial_model_poll(&incoming);
+        if (host_updated && !hold_rx) {
+            fields = incoming;
+            adapt_fields_for_front(&fields);
+            model_nvs_remember(&fields);
+            serial_sync_update(&fields, false);
+        }
         bool focused = front_title_is_focused();
         bool focus_gained = focused && !was_focused;
         desk_app_t app = front_title_app();
@@ -183,13 +191,15 @@ void app_main(void)
                 if (front_ready) {
                     model_nvs_remember_for(&fields, previous_app);
                 }
-                model_nvs_restore_for(&fields, app);
-                clamp_cursor_model(&fields);
+                if (!host_updated || hold_rx) {
+                    model_nvs_restore_for(&fields, app);
+                }
+                clamp_front_model(&fields);
                 adapt_fields_for_front(&fields);
                 model_nvs_remember_for(&fields, app);
                 previous_app = app;
                 front_ready = true;
-                serial_sync_update(&fields, true);
+                serial_sync_update(&fields, !host_updated);
             }
         }
         bool controls_enabled = focused && !focus_gained;
@@ -226,15 +236,8 @@ void app_main(void)
         if (hold_rx && (TickType_t)(now - local_changed_at) >= pdMS_TO_TICKS(8400)) {
             hold_rx = false;
         }
-        model_fields_t incoming = fields;
-        if (serial_model_poll(&incoming) && !hold_rx) {
-            fields = incoming;
-            adapt_fields_for_front(&fields);
-            model_nvs_remember(&fields);
-            serial_sync_update(&fields, false);
-        }
         if (serial_sync_take_config_changed()) {
-            clamp_cursor_model(&fields);
+            clamp_front_model(&fields);
             adapt_fields_for_front(&fields);
             model_nvs_remember(&fields);
             save_pending = true;

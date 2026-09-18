@@ -1,6 +1,9 @@
 .DS_Store
 **/.build/
 **/build*/
+# idf.py -B <MCU>-<DISPLAY>-<PROGRAM> trees (CMake, objects, sdkconfig, dist).
+**/ESP32_S3-*/
+**/ESP32_MINI-*/
 **/managed_components/
 **/sdkconfig
 **/sdkconfig.old

@@ -16,7 +16,8 @@ bin="$(swift build -c release --show-bin-path)"
 app="$output/Model Dial.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/Firmware"
 install -m 755 "$bin/model-dial" "$app/Contents/MacOS/model-dial"
-install -m 755 "$bin/chatgpt-bridge" "$app/Contents/MacOS/chatgpt-bridge"
+install -m 755 "$bin/ai-model-control-bridge" "$app/Contents/MacOS/ai-model-control-bridge"
+rm -f "$app/Contents/MacOS/chatgpt-bridge"
 
 plist="$app/Contents/Info.plist"
 if [ ! -f "$plist" ]; then plutil -create xml1 "$plist"; fi

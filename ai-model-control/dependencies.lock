@@ -46,11 +46,11 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 6.0.2
+    version: 5.5.5
 direct_dependencies:
 - espressif/esp_lcd_gc9a01
 - espressif/esp_lcd_st7796
 - idf
 manifest_hash: 0bc2e939b2ea5746966b65d6bd83dd97eb7289893ec9043546be99d68dfe41ee
 target: esp32s3
-version: 3.0.0
+version: 2.0.0

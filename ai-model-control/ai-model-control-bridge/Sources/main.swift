@@ -31,7 +31,7 @@ func run() -> Int32 {
     if options.checkInputGuard {
         guard AXTrust.require(prompt: true),
               let focus = FocusOperation(preferred: options.bundleID) else {
-            fputs("chatgpt-bridge: focus a supported app to check its input guard\n", stderr)
+            fputs("ai-model-control-bridge: focus a supported app to check its input guard\n", stderr)
             return 2
         }
         let result = InputGuard.protect(focus: focus) { _ in
@@ -44,18 +44,25 @@ func run() -> Int32 {
         return DeskFront.isForeground(preferred: options.bundleID) ? 0 : 1
     }
     if options.setModel != nil || options.setThinking != nil {
-        guard AXTrust.require(prompt: true) else { return 2 }
         guard let focus = FocusOperation(preferred: options.bundleID) else { return 1 }
-        let result = InputGuard.protect(focus: focus) { inputGuard in
-            if let name = options.setModel {
-                let result = Switcher.model(name, preferredBundleID: options.bundleID)
-                if case .applied = result {} else { return result }
+        if focus.kind != .rig {
+            guard AXTrust.require(prompt: true) else { return 2 }
+        }
+        let result: Switcher.Result
+        if focus.kind == .rig {
+            result = RigApply.apply(model: options.setModel, thinking: options.setThinking)
+        } else {
+            result = InputGuard.protect(focus: focus) { inputGuard in
+                if let name = options.setModel {
+                    let result = Switcher.model(name, preferredBundleID: options.bundleID)
+                    if case .applied = result {} else { return result }
+                }
+                guard inputGuard.isValid else { return .interrupted }
+                if let level = options.setThinking {
+                    return Switcher.thinking(level, model: options.setModel, preferredBundleID: options.bundleID)
+                }
+                return .applied(path: "guarded model selection")
             }
-            guard inputGuard.isValid else { return .interrupted }
-            if let level = options.setThinking {
-                return Switcher.thinking(level, model: options.setModel, preferredBundleID: options.bundleID)
-            }
-            return .applied(path: "guarded model selection")
         }
         let status = report(result)
         if status != 0 { return status }
@@ -78,9 +85,9 @@ func report(_ result: Switcher.Result) -> Int32 {
         print("applied via \(path)")
         return 0
     case .interrupted:
-        fputs("chatgpt-bridge: operation interrupted by focus loss, Escape, or input guard timeout\n", stderr)
+        fputs("ai-model-control-bridge: operation interrupted by focus loss, Escape, or input guard timeout\n", stderr)
     case .failed(let message):
-        fputs("chatgpt-bridge: \(message)\n", stderr)
+        fputs("ai-model-control-bridge: \(message)\n", stderr)
     }
     return 1
 }
@@ -89,6 +96,6 @@ exit(run())
 #else
 import Foundation
 
-fputs("chatgpt-bridge is macOS-only.\n", stderr)
+fputs("ai-model-control-bridge is macOS-only.\n", stderr)
 exit(1)
 #endif

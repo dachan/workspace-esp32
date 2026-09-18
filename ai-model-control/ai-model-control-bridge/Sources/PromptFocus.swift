@@ -71,6 +71,8 @@ enum PromptFocus {
             }
             if desc.contains("do anything") || placeholder.contains("do anything") { return 80 }
             return 0
+        case .rig:
+            return 0
         }
     }
 

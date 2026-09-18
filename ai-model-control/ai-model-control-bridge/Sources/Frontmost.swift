@@ -8,6 +8,7 @@ enum DeskKind {
     case chatGPT
     case cursor
     case openCode
+    case rig
 }
 
 enum DeskFront {
@@ -17,14 +18,29 @@ enum DeskFront {
     ]
     static let cursorID = "com.todesktop.230313mzl4w4u92"
     static let openCodeID = "ai.opencode.desktop"
-    static let bundleIDs: Set<String> = chatGPTIDs.union([cursorID, openCodeID])
+    static let rigID = "dev.rig.desktop"
+    static let bundleIDs: Set<String> = chatGPTIDs.union([cursorID, openCodeID, rigID])
 
     static func kind(of app: NSRunningApplication) -> DeskKind? {
-        guard let id = app.bundleIdentifier else { return nil }
+        guard let id = app.bundleIdentifier else { return isRigApp(app) ? .rig : nil }
         if chatGPTIDs.contains(id) { return .chatGPT }
         if id == cursorID { return .cursor }
         if id == openCodeID { return .openCode }
+        if id == rigID || isRigApp(app) { return .rig }
         return nil
+    }
+
+    static func isRigApp(_ app: NSRunningApplication) -> Bool {
+        if app.bundleIdentifier == rigID { return true }
+        if app.localizedName == "Rig" { return RigClient.isAvailable() }
+        // electron-vite `npm run dev` is `com.github.Electron` named Electron.
+        if app.bundleIdentifier == "com.github.Electron",
+           let path = (app.executableURL ?? app.bundleURL)?.path,
+           path.localizedCaseInsensitiveContains("/rig/")
+        {
+            return RigClient.isAvailable()
+        }
+        return false
     }
 
     static func displayName(for app: NSRunningApplication) -> String {
@@ -33,13 +49,16 @@ enum DeskFront {
         case "com.openai.codex": return "Codex"
         case cursorID: return "Cursor"
         case openCodeID: return "OpenCode"
-        default: return app.localizedName ?? "?"
+        case rigID: return "Rig"
+        default: return isRigApp(app) ? "Rig" : (app.localizedName ?? "?")
         }
     }
 
     static func isTarget(_ app: NSRunningApplication, preferred: String?) -> Bool {
-        guard let id = app.bundleIdentifier, bundleIDs.contains(id) else { return false }
-        return preferred == nil || preferred == id
+        guard let kind = kind(of: app) else { return false }
+        guard let preferred else { return true }
+        if preferred == rigID { return kind == .rig }
+        return app.bundleIdentifier == preferred
     }
 
     static func frontmost() -> NSRunningApplication? {
@@ -61,6 +80,7 @@ enum DeskFront {
             return "None"
         }
         if kind(of: app) == .openCode { return "OpenCode" }
+        if kind(of: app) == .rig { return "Rig" }
         return kind(of: app) == .cursor ? "Cursor" : "ChatGPT"
     }
 
@@ -70,7 +90,7 @@ enum DeskFront {
         if let app, isTarget(app, preferred: preferred) {
             return "\(displayName(for: app)) foreground"
         }
-        return "ChatGPT/Cursor/OpenCode background (\(name))"
+        return "ChatGPT/Cursor/OpenCode/Rig background (\(name))"
     }
 }
 

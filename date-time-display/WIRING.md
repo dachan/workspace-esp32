@@ -113,8 +113,15 @@ idf.py -B ESP32_S3-13_tft_240x240+096_oled_128x64-Date_Time \
   -p "$ESP_PORT" build flash monitor
 ```
 
-After flashing, send `TIME YYYY-MM-DD HH:MM:SS` over the 115200-baud USB
-serial console, or use the joystick controls above. The value is saved in NVS
+After flashing, provision Wi-Fi over the 115200-baud USB serial console with
+`WIFI <ssid> <password>` (neither may contain spaces), then restart the board.
+Credentials are stored in the board's NVS, never in this repository. It will
+then synchronize from NTP automatically and retain the last synchronized time
+as an offline fallback. `WIFI STATUS` reports whether credentials are present;
+`WIFI CLEAR` erases them.
+
+Without Wi-Fi, send `TIME YYYY-MM-DD HH:MM:SS` over USB or use the joystick
+controls above. The value is saved in NVS
 and the OLED shows the centered `HH:MM` time above the centered date, updating once per
 second. Both text lines follow an eight-position ±2-pixel shift pattern that advances
 every 30 minutes to spread OLED wear. The TFT independently shows a never-ending

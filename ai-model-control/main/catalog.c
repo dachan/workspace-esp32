@@ -15,8 +15,26 @@ static const char *const chatgpt_models[] = {
 static const char *const opencode_models[] = {
     "GPT-6 Astra", "GPT-5.6 Terra", "GPT-5.6 Sol", "GPT-5.6 Luna",
 };
+/* Keep aligned with Swift Catalog.rigModels and Rig Latest display names. */
+static const char *const rig_models[] = {
+    "Grok Latest",
+    "GPT Astra Latest",
+    "GPT Sol Latest",
+    "GPT Terra Latest",
+    "GPT Luna Latest",
+    "Claude Sonnet Latest",
+    "Claude Opus Latest",
+    "Claude Fable Latest",
+    "DeepSeek Flash Latest",
+    "Gemini Flash Latest",
+    "Gemini Pro Latest",
+    "Kimi Latest",
+};
 static const char *const chatgpt_thinking[] = {
     "Light", "Medium", "High", "Extra High", "Max", "Ultra",
+};
+static const char *const rig_thinking[] = {
+    "Auto", "None", "Light", "Medium", "High", "Extra High", "Max",
 };
 static const char *const cursor_thinking[] = {
     "None", "Minimal", "Low", "Medium", "High", "Extra High", "Max",
@@ -101,6 +119,8 @@ static int table_count(const char *const *names, int n, const char *name)
 }
 
 static uint64_t s_enabled = CURSOR_ENABLED_DEFAULT;
+#define RIG_ENABLED_DEFAULT ((1ull << COUNT(rig_models)) - 1ull)
+static uint64_t s_rig_enabled = RIG_ENABLED_DEFAULT;
 static uint64_t s_chatgpt_thinking_enabled = 0x0Full;
 static const char *s_chatgpt_thinking_active[COUNT(chatgpt_thinking)];
 static int s_chatgpt_thinking_active_count;
@@ -230,7 +250,54 @@ static const char *const *active_thinking(const char *model, int *count)
         *count = 0;
         return chatgpt_thinking;
     }
+    if (front_title_app() == DESK_RIG) {
+        *count = COUNT(rig_thinking);
+        return rig_thinking;
+    }
     return thinking_table(front_title_is_cursor(), model, count);
+}
+
+static uint64_t rig_mask_limit(void)
+{
+    return COUNT(rig_models) >= 64 ? ~0ull : ((1ull << COUNT(rig_models)) - 1ull);
+}
+
+static bool rig_on(int full)
+{
+    if (full < 0 || full >= COUNT(rig_models) || full >= 64) {
+        return false;
+    }
+    return (s_rig_enabled & (1ull << full)) != 0;
+}
+
+static int rig_enabled_count(void)
+{
+    int n = 0;
+    for (int i = 0; i < COUNT(rig_models); i++) {
+        if (rig_on(i)) n++;
+    }
+    return n > 0 ? n : COUNT(rig_models);
+}
+
+static int rig_full_at_enabled(int enabled_index)
+{
+    int n = 0;
+    for (int i = 0; i < COUNT(rig_models); i++) {
+        if (!rig_on(i)) continue;
+        if (n == enabled_index) return i;
+        n++;
+    }
+    return 0;
+}
+
+static int rig_enabled_index(int full)
+{
+    if (!rig_on(full)) return -1;
+    int n = 0;
+    for (int i = 0; i < full; i++) {
+        if (rig_on(i)) n++;
+    }
+    return n;
 }
 
 int catalog_model_count(void)
@@ -240,8 +307,9 @@ int catalog_model_count(void)
 
 int catalog_model_count_for(desk_app_t app)
 {
-    return app == DESK_OPENCODE ? COUNT(opencode_models)
-        : catalog_model_count_in(app == DESK_CURSOR);
+    if (app == DESK_OPENCODE) return COUNT(opencode_models);
+    if (app == DESK_RIG) return rig_enabled_count();
+    return catalog_model_count_in(app == DESK_CURSOR);
 }
 
 int catalog_model_count_in(bool cursor)
@@ -261,6 +329,10 @@ const char *catalog_model_at_for(desk_app_t app, int index)
     if (app == DESK_OPENCODE) {
         if (index < 0 || index >= COUNT(opencode_models)) return opencode_models[0];
         return opencode_models[index];
+    }
+    if (app == DESK_RIG) {
+        if (index < 0 || index >= rig_enabled_count()) return rig_models[rig_full_at_enabled(0)];
+        return rig_models[rig_full_at_enabled(index)];
     }
     return catalog_model_at_in(app == DESK_CURSOR, index);
 }
@@ -284,6 +356,9 @@ int catalog_model_index_for(desk_app_t app, const char *name)
 {
     if (app == DESK_OPENCODE) {
         return table_count(opencode_models, COUNT(opencode_models), name);
+    }
+    if (app == DESK_RIG) {
+        return rig_enabled_index(table_count(rig_models, COUNT(rig_models), name));
     }
     return catalog_model_index_in(app == DESK_CURSOR, name);
 }
@@ -319,6 +394,20 @@ void catalog_chatgpt_set_thinking_mask(uint64_t mask)
     const uint64_t limit = (1ull << COUNT(chatgpt_thinking)) - 1ull;
     s_chatgpt_thinking_enabled = mask & limit;
     refresh_chatgpt_thinking();
+}
+
+uint64_t catalog_rig_enabled_mask(void)
+{
+    uint64_t mask = s_rig_enabled & rig_mask_limit();
+    return mask ? mask : 1ull;
+}
+
+void catalog_rig_set_enabled_mask(uint64_t mask)
+{
+    s_rig_enabled = mask & rig_mask_limit();
+    if (s_rig_enabled == 0) {
+        s_rig_enabled = 1ull;
+    }
 }
 
 int catalog_cursor_slot_count(void)
@@ -362,7 +451,8 @@ bool catalog_model_known(const char *name)
         return true;
     }
     return cursor_index(name) >= 0
-        || table_count(opencode_models, COUNT(opencode_models), name) >= 0;
+        || table_count(opencode_models, COUNT(opencode_models), name) >= 0
+        || table_count(rig_models, COUNT(rig_models), name) >= 0;
 }
 
 const char *catalog_default_model(void)
@@ -373,6 +463,10 @@ const char *catalog_default_model(void)
 const char *catalog_default_model_for(desk_app_t app)
 {
     if (app == DESK_OPENCODE) return "GPT-5.6 Luna";
+    if (app == DESK_RIG) {
+        const char *want = "Grok Latest";
+        return catalog_model_index_for(app, want) >= 0 ? want : catalog_model_at_for(app, 0);
+    }
     return catalog_default_model_in(app == DESK_CURSOR);
 }
 
@@ -393,6 +487,9 @@ int catalog_thinking_count_for(desk_app_t app, const char *model)
 {
     if (app == DESK_OPENCODE) {
         return 0;
+    }
+    if (app == DESK_RIG) {
+        return COUNT(rig_thinking);
     }
     return catalog_thinking_count_in(app == DESK_CURSOR, model);
 }
@@ -416,6 +513,12 @@ int catalog_thinking_level(const char *model, const char *name)
         return index + 1;
     }
     if (count == 0) return 0;
+    if (front_title_app() == DESK_RIG) {
+        if (strcasecmp(name, "Low") == 0 || strcasecmp(name, "Minimal") == 0) {
+            return catalog_thinking_level(model, "Light");
+        }
+        return 0;
+    }
     if (!front_title_is_cursor()) {
         int full = table_count(chatgpt_thinking, COUNT(chatgpt_thinking), name);
         if (full >= 0) {
@@ -478,6 +581,9 @@ const char *catalog_default_thinking_for(desk_app_t app, const char *model)
     if (app == DESK_OPENCODE) {
         return "Unsupported";
     }
+    if (app == DESK_RIG) {
+        return "Auto";
+    }
     return catalog_default_thinking_in(app == DESK_CURSOR, model);
 }
 
@@ -498,5 +604,6 @@ bool catalog_thinking_known(const char *name)
     if (table_count(chatgpt_thinking, COUNT(chatgpt_thinking), name) >= 0) {
         return true;
     }
-    return table_count(cursor_thinking, COUNT(cursor_thinking), name) >= 0;
+    return table_count(cursor_thinking, COUNT(cursor_thinking), name) >= 0
+        || table_count(rig_thinking, COUNT(rig_thinking), name) >= 0;
 }
