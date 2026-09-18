@@ -17,7 +17,7 @@ Firmware source and VERSION remain unchanged under the v0.90 release freeze.
 | P2 | Pipe callbacks treated arbitrary chunks as whole UTF-8 messages and retained callbacks at EOF; the persistent log grew without limit. | Assemble bounded complete lines, remove EOF callbacks, rotate at 2 MiB with one previous file, and correct shell quoting for Open Log. |
 | P2 | ChatGPT picker geometry was force-cast and used without validating AX value types or dimensions. | Validate types, successful extraction, finite coordinates, and positive dimensions before clicking. |
 
-Paths in this table are relative to `mac-chatgpt-bridge/`. Process supervision,
+Paths in this table are relative to `ai-model-control-bridge/`. Process supervision,
 Cursor catalog reading, and output framing now have separate focused files.
 
 ## Remaining findings
@@ -68,7 +68,7 @@ full order, the shortcut offset and clamp must use that full native order.
 
 ## Validation and limits
 
-Both `chatgpt-bridge` and `model-dial` were compiled using `swift build -c release`
+Both `ai-model-control-bridge` and `model-dial` were compiled using `swift build -c release`
 on the Mac. The final diff is checked for whitespace errors. No tests were
 created, modified or run, per repository instructions.
 

@@ -32,8 +32,8 @@ final class DialController {
     }
 
     var canApplyDialToFocusedApp: Bool {
-        wantsBridge && port != nil && !isSyncing && AXIsProcessTrusted()
-            && focusedTargetName != nil
+        wantsBridge && port != nil && !isSyncing && focusedTargetName != nil
+            && (AXIsProcessTrusted() || focusedTargetName == "Rig")
     }
 
     var availablePorts: [String] { ports() }
@@ -192,7 +192,7 @@ final class DialController {
         }
         guard let executable = bridgeExecutable() else {
             status = "Unavailable"
-            message = "The bundled chatgpt-bridge executable is missing."
+            message = "The bundled ai-model-control-bridge executable is missing."
             recordBridgeEvent(message!)
             return
         }
@@ -339,10 +339,10 @@ final class DialController {
     }
 
     private func bridgeExecutable() -> URL? {
-        let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/chatgpt-bridge")
+        let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/ai-model-control-bridge")
         if FileManager.default.isExecutableFile(atPath: bundled.path) { return bundled }
         let sibling = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
-            .appendingPathComponent("chatgpt-bridge")
+            .appendingPathComponent("ai-model-control-bridge")
         return FileManager.default.isExecutableFile(atPath: sibling.path) ? sibling : nil
     }
 
@@ -366,7 +366,17 @@ final class DialController {
         case "com.openai.chat", "com.openai.codex": return "ChatGPT"
         case "com.todesktop.230313mzl4w4u92": return "Cursor"
         case "ai.opencode.desktop": return "OpenCode"
-        default: return nil
+        case "dev.rig.desktop": return "Rig"
+        default:
+            let app = NSWorkspace.shared.frontmostApplication
+            if app?.localizedName == "Rig" { return "Rig" }
+            if app?.bundleIdentifier == "com.github.Electron",
+               let path = (app?.executableURL ?? app?.bundleURL)?.path,
+               path.localizedCaseInsensitiveContains("/rig/")
+            {
+                return "Rig"
+            }
+            return nil
         }
     }
 }

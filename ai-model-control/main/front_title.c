@@ -19,6 +19,9 @@ bool front_title_apply_line(const char *line)
     } else if (strcmp(line, "FRONT OpenCode") == 0) {
         focused = true;
         app = DESK_OPENCODE;
+    } else if (strcmp(line, "FRONT Rig") == 0) {
+        focused = true;
+        app = DESK_RIG;
     } else if (strcmp(line, "FRONT None") == 0) {
         focused = false;
     } else {

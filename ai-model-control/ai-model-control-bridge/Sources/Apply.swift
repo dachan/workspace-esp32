@@ -17,7 +17,10 @@ enum Switcher {
         pulse: (() -> Bool)? = nil
     ) -> Result {
         guard let focus = FocusOperation(preferred: preferredBundleID) else {
-            return .failed("ChatGPT, Cursor, or OpenCode is not focused")
+            return .failed("ChatGPT, Cursor, OpenCode, or Rig is not focused")
+        }
+        if focus.kind == .rig {
+            return RigApply.apply(model: raw, thinking: nil)
         }
         return InputGuard.protect(focus: focus) { inputGuard in
             let upstream = wrappedPulse(focus: focus, upstream: pulse)
@@ -25,6 +28,8 @@ enum Switcher {
             switch focus.kind {
             case .openCode:
                 return OpenCodeApply.model(raw, focus: focus, pulse: pulse)
+            case .rig:
+                return RigApply.apply(model: raw, thinking: nil)
             case .chatGPT:
                 guard let name = Catalog.chatgptModelName(raw) else {
                     return .failed("unknown model \(raw)")
@@ -52,10 +57,13 @@ enum Switcher {
         pulse: (() -> Bool)? = nil
     ) -> Result {
         guard let focus = FocusOperation(preferred: preferredBundleID) else {
-            return .failed("ChatGPT, Cursor, or OpenCode is not focused")
+            return .failed("ChatGPT, Cursor, OpenCode, or Rig is not focused")
         }
         if focus.kind == .openCode {
             return .applied(path: "OpenCode effort sync unsupported; skipped")
+        }
+        if focus.kind == .rig {
+            return RigApply.apply(model: model, thinking: raw)
         }
         return InputGuard.protect(focus: focus) { inputGuard in
             let upstream = wrappedPulse(focus: focus, upstream: pulse)
@@ -89,6 +97,8 @@ enum Switcher {
                 return cursorSelectEffort(
                     name: name, focus: focus, preferred: preferredBundleID, pulse: pulse
                 )
+            case .rig:
+                return RigApply.apply(model: model, thinking: raw)
             }
         }
     }
@@ -100,7 +110,7 @@ enum Switcher {
         preferred: String?,
         pulse: @escaping () -> Bool
     ) -> Result {
-        fputs("chatgpt-bridge: ChatGPT model via accessibility Select model \(name)\n", stderr)
+        fputs("ai-model-control-bridge: ChatGPT model via accessibility Select model \(name)\n", stderr)
         if let stopped = dismissInterruptedPicker(pid: focus.pid, pulse: pulse) {
             return stopped
         }
@@ -120,7 +130,7 @@ enum Switcher {
         if CursorPicker.matches(name, focus: focus, effort: false) {
             return .applied(path: "Accessibility already selected model")
         }
-        fputs("chatgpt-bridge: Cursor model via keyboard \(name)\n", stderr)
+        fputs("ai-model-control-bridge: Cursor model via keyboard \(name)\n", stderr)
         if let stopped = cursorSelectModel(
             name: name, focus: focus, preferred: preferred, pulse: pulse
         ) {
@@ -139,7 +149,7 @@ enum Switcher {
         pulse: @escaping () -> Bool
     ) -> Result {
         fputs(
-            "chatgpt-bridge: reasoning absolute set via Ctrl+Shift+, then up to \(name)\n",
+            "ai-model-control-bridge: reasoning absolute set via Ctrl+Shift+, then up to \(name)\n",
             stderr
         )
         if let stopped = dismissInterruptedPicker(pid: focus.pid, pulse: pulse) {
@@ -200,7 +210,7 @@ enum Switcher {
         if CursorPicker.matches(name, focus: focus, effort: true) {
             return .applied(path: "Accessibility already selected effort")
         }
-        fputs("chatgpt-bridge: Cursor effort via keyboard \(name)\n", stderr)
+        fputs("ai-model-control-bridge: Cursor effort via keyboard \(name)\n", stderr)
         if let stopped = openCursorPopover(focus: focus, preferred: preferred, pulse: pulse) {
             return stopped
         }
@@ -244,6 +254,8 @@ enum Switcher {
             if PromptFocus.ensure(pid: focus.pid, kind: focus.kind) == .missing {
                 return nil
             }
+        case .rig:
+            break
         }
         guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else { return .interrupted }
         guard DeskFront.isForeground(preferred: preferred) else {

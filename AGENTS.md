@@ -42,8 +42,8 @@ Hard lanes for this repo:
 - When the user asks to **flash** or run the Mac bridge helper, use the **Mac
   workstation clone** and the connected serial device there. Do not flash from
   Hetzner.
-- Do not keep a separate standalone `mac-chatgpt-bridge` folder on the Mac;
-  use `ai-model-control/mac-chatgpt-bridge/` inside this repo.
+- Do not keep a separate standalone `ai-model-control-bridge` folder on the Mac;
+  use `ai-model-control/ai-model-control-bridge/` inside this repo.
 - Keep Mac and server on the same branch/commit after every change:
   edit on Hetzner codex → commit/push → pull on Mac (and flash from Mac when
   hardware work is requested).
@@ -52,11 +52,11 @@ Hard lanes for this repo:
   `main` and any branch that still has unmerged commits. Do not leave merged
   feature branches around.
 
-## AI model control (encoders → ChatGPT / Cursor / OpenCode)
+## AI model control (encoders → ChatGPT / Cursor / OpenCode / Rig)
 
 On-device UI is `ai-model-control/` (3.5" ST7796 480x320). Edit on Hetzner
 codex, push, pull the Mac, then flash on the Mac. The Mac helper is
-`ai-model-control/mac-chatgpt-bridge/` (macOS CLI only; never a standalone
+`ai-model-control/ai-model-control-bridge/` (macOS CLI only; never a standalone
 Mac folder). Detail for keystroke recipes, InputGuard, NVS defaults, ST7796
 MADCTL lock, and logo codegen lives in `ai-model-control/README.md`.
 
@@ -66,12 +66,15 @@ explicit intent and applies only fields that differ. Model picker /
 confirmation waits are **0.15 s**; every bridge-posted keystroke is separated
 by **0.05 s**.
 
-The helper **never activates** ChatGPT, Cursor, or OpenCode. Encoder lines
+The helper **never activates** ChatGPT, Cursor, OpenCode, or Rig. Encoder lines
 apply only while that app is already focused; otherwise they are dropped —
 no activate, no CANCEL, no deferred apply when focus returns. Focus lost
 mid-apply drops the change. App focus and connection snapshots update state
 without posting keys. Press either encoder to send `PUSH` plus new `STATE`
 revisions and force the current model and effort into the focused app.
+While Rig is focused the helper reads `models.active` / `agent.focus` and
+sends `CONFIG RIG_MODELS` plus host `MODEL` / `THINKING` so the panel shows
+Latest aliases and the live composer, then writes back with `agent.setFocus`.
 
 **Encoders.** Thinking uses polled falling-CLK decode (two detents = one
 level). The model knob uses PCNT hardware quadrature — a polled decode
@@ -81,7 +84,7 @@ Desk pose and locked ST7796 view mapping: see `HARDWARE.md` and
 `ai-model-control/README.md`.
 
 ```bash
-chatgpt-bridge --watch --send-serial --port /dev/cu.usbmodemXXXX
+ai-model-control-bridge --watch --send-serial --port /dev/cu.usbmodemXXXX
 ```
 
 Pick `XXXX` from [HARDWARE.md](HARDWARE.md) for the board on the desk — macOS
@@ -131,8 +134,8 @@ is documented in `radar/README.md`.
 
 ## Model Dial desktop app
 
-`ai-model-control/mac-chatgpt-bridge` includes `model-dial`, a macOS menu-bar
-wrapper around the `chatgpt-bridge` executable. Keep the bridge CLI available
+`ai-model-control/ai-model-control-bridge` includes `model-dial`, a macOS menu-bar
+wrapper around the `ai-model-control-bridge` executable. Keep the bridge CLI available
 for diagnostics. The app discovers compatible USB serial paths, owns one bridge
 child process, can register at user login, and flashes only the application
 partition when the user explicitly selects an image and esptool. Do not claim
@@ -143,7 +146,8 @@ notarization, a bundled flasher, and signed firmware artifacts.
 
 Keep `ai-model-control/VERSION` at **0.90**. The user explicitly authorized
 rebuilding and reflashing the event-driven serial recovery and intent-driven
-synchronization changes while retaining this version number. Focus never posts
+synchronization changes, and `FRONT Rig` (Rig lockup plus ChatGPT encoder reuse),
+while retaining this version number. Focus never posts
 keys, settled rotation sends `APPLY`, and either encoder click sends `PUSH`.
 These exceptions do not authorize other firmware changes.
 Firmware repeats `READY <16-hex boot id>` until SYNC. The bridge sends SYNC

@@ -58,32 +58,32 @@ func parseOptions(_ args: [String]) -> Options? {
             break // Compatibility with existing launch commands.
         case "--set-model":
             guard let raw = takeValue(), let value = Catalog.modelName(raw) else {
-                fputs("chatgpt-bridge: --set-model needs a supported model name\n", stderr)
+                fputs("ai-model-control-bridge: --set-model needs a supported model name\n", stderr)
                 return nil
             }
             options.setModel = value
         case "--set-thinking":
             guard let raw = takeValue(), let value = Catalog.thinkingName(raw) else {
-                fputs("chatgpt-bridge: --set-thinking needs a supported level\n", stderr)
+                fputs("ai-model-control-bridge: --set-thinking needs a supported level\n", stderr)
                 return nil
             }
             options.setThinking = value
         case "--port":
             guard let value = takeValue(), !value.isEmpty, !value.hasPrefix("--") else {
-                fputs("chatgpt-bridge: --port needs a device path\n", stderr)
+                fputs("ai-model-control-bridge: --port needs a device path\n", stderr)
                 return nil
             }
             options.port = value
         case "--baud":
             guard let value = takeValue(), let parsed = Int(value), SerialSession.supportedBauds.contains(parsed) else {
-                fputs("chatgpt-bridge: --baud must be 9600, 57600, 115200, or 230400\n", stderr)
+                fputs("ai-model-control-bridge: --baud must be 9600, 57600, 115200, or 230400\n", stderr)
                 return nil
             }
             options.baud = parsed
         case "--bundle-id":
             guard let value = takeValue(), DeskFront.bundleIDs.contains(value) else {
                 fputs(
-                    "chatgpt-bridge: --bundle-id must be com.openai.chat, com.openai.codex, or com.todesktop.230313mzl4w4u92\n",
+                    "ai-model-control-bridge: --bundle-id must be com.openai.chat, com.openai.codex, com.todesktop.230313mzl4w4u92, or dev.rig.desktop\n",
                     stderr
                 )
                 return nil
@@ -91,22 +91,22 @@ func parseOptions(_ args: [String]) -> Options? {
             options.bundleID = value
         case "--chatgpt-effort-mask":
             guard let value = takeValue(), let mask = parseMask(value) else {
-                fputs("chatgpt-bridge: --chatgpt-effort-mask needs a hexadecimal mask\n", stderr)
+                fputs("ai-model-control-bridge: --chatgpt-effort-mask needs a hexadecimal mask\n", stderr)
                 return nil
             }
             options.chatGPTThinkingMask = mask
         case "--cursor-model-mask":
             guard let value = takeValue(), let mask = parseMask(value) else {
-                fputs("chatgpt-bridge: --cursor-model-mask needs a hexadecimal mask\n", stderr)
+                fputs("ai-model-control-bridge: --cursor-model-mask needs a hexadecimal mask\n", stderr)
                 return nil
             }
             options.cursorModelMask = mask
         case "--json", "--dump-ax", "--list-candidates", "--interval",
              "--max-depth", "--max-nodes":
-            fputs("chatgpt-bridge: \(arg) was removed in the keyboard-only rewrite\n", stderr)
+            fputs("ai-model-control-bridge: \(arg) was removed in the keyboard-only rewrite\n", stderr)
             return nil
         default:
-            fputs("chatgpt-bridge: unknown option \(arg)\n", stderr)
+            fputs("ai-model-control-bridge: unknown option \(arg)\n", stderr)
             return nil
         }
         index += 1
@@ -116,15 +116,16 @@ func parseOptions(_ args: [String]) -> Options? {
 
 func usage() -> String {
     """
-    Usage: chatgpt-bridge [options]
+    Usage: ai-model-control-bridge [options]
 
     Apply ESP32 encoder SET MODEL / SET THINKING with keyboard
-    shortcuts, only while ChatGPT, Cursor, or OpenCode is already the foreground app.
+    shortcuts, only while ChatGPT, Cursor, OpenCode, or Rig is already the foreground app.
     ChatGPT: accessibility model control → Select model → exact label; thinking Ctrl+Shift+, / .
     Cursor: Command-/ model first, then Command-/ again for Effort.
+    Rig: models.active / agent.focus / agent.setFocus on the local Rig socket.
 
     Options:
-      --front             Print whether ChatGPT, Cursor, or OpenCode is foreground and exit
+      --front             Print whether ChatGPT, Cursor, OpenCode, or Rig is foreground and exit
       --watch             Follow foreground + optional serial SET lines
       --listen            Read SET MODEL / SET THINKING from --port
                           (implied by --watch --port)
@@ -132,9 +133,9 @@ func usage() -> String {
       --port PATH         USB serial device
       --baud N            Serial baud (default 115200)
       --list-ports        List likely USB serial devices
-      --set-model NAME    One-shot: select NAME if ChatGPT, Cursor, or OpenCode is focused
-      --set-thinking LVL  One-shot: set reasoning if ChatGPT, Cursor, or OpenCode is focused
-      --bundle-id ID      Force ChatGPT, Codex, Cursor, or OpenCode
+      --set-model NAME    One-shot: select NAME if ChatGPT, Cursor, OpenCode, or Rig is focused
+      --set-thinking LVL  One-shot: set reasoning if ChatGPT, Cursor, OpenCode, or Rig is focused
+      --bundle-id ID      Force ChatGPT, Codex, Cursor, OpenCode, or Rig
       --chatgpt-effort-mask HEX  Enabled ChatGPT effort levels (default 0x0f)
       --cursor-model-mask HEX   Enabled Cursor model entries (Auto is always on)
       --hid-info          Describe the keyboard control path
