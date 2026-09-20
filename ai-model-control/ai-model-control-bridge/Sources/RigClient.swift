@@ -28,19 +28,17 @@ enum RigClient {
 
     static func isAvailable() -> Bool { socketPath() != nil }
 
+    private static var lastActive: ActiveModels?
+
     static func modelsActive() throws -> ActiveModels {
-        let raw = try call("models.active")
-        guard let object = raw as? [String: Any] else { throw Error(errorDescription: "models.active returned empty") }
-        let main = object["main"] as? String ?? ""
-        let models = (object["models"] as? [[String: Any]] ?? []).compactMap { row -> Model? in
-            guard let slug = row["slug"] as? String else { return nil }
-            return Model(
-                slug: slug,
-                name: row["name"] as? String ?? slug,
-                efforts: row["efforts"] as? [String] ?? []
-            )
+        do {
+            let next = try parseActive(call("models.active"))
+            lastActive = next
+            return next
+        } catch {
+            if let lastActive { return lastActive }
+            throw error
         }
-        return ActiveModels(main: main, models: models)
     }
 
     static func focus() throws -> Focus {
@@ -70,6 +68,25 @@ enum RigClient {
             name: object["name"] as? String,
             efforts: object["efforts"] as? [String] ?? []
         )
+    }
+
+    private static func parseActive(_ raw: Any?) throws -> ActiveModels {
+        if raw == nil || raw is NSNull {
+            throw Error(errorDescription: "Open a project folder in Rig")
+        }
+        guard let object = raw as? [String: Any] else {
+            throw Error(errorDescription: "models.active returned empty")
+        }
+        let main = object["main"] as? String ?? ""
+        let models = (object["models"] as? [[String: Any]] ?? []).compactMap { row -> Model? in
+            guard let slug = row["slug"] as? String else { return nil }
+            return Model(
+                slug: slug,
+                name: row["name"] as? String ?? slug,
+                efforts: row["efforts"] as? [String] ?? []
+            )
+        }
+        return ActiveModels(main: main, models: models)
     }
 
     private static func socketPath() -> String? {
@@ -105,7 +122,7 @@ enum RigClient {
             }
         }
         guard connected == 0 else { throw Error(errorDescription: "Could not connect to Rig") }
-        var timeout = timeval(tv_sec: 2, tv_usec: 0)
+        var timeout = timeval(tv_sec: 5, tv_usec: 0)
         _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
         _ = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
         let payload: [String: Any] = ["jsonrpc": "2.0", "id": 1, "method": method, "params": params]

@@ -22,18 +22,12 @@ final class DialController {
     private var wantsBridge = true
     private var stopping = false
     private var restartAt: TimeInterval = 0
-    private var applyOnNextStart = false
     private(set) var selectedPort = UserDefaults.standard.string(forKey: "selectedSerialPort")
 
     var statusSummary: String {
         guard wantsBridge else { return "Bridge off" }
         if !AXIsProcessTrusted() { return "Accessibility permission needed" }
         return status
-    }
-
-    var canApplyDialToFocusedApp: Bool {
-        wantsBridge && port != nil && !isSyncing && focusedTargetName != nil
-            && (AXIsProcessTrusted() || focusedTargetName == "Rig")
     }
 
     var availablePorts: [String] { ports() }
@@ -107,9 +101,8 @@ final class DialController {
         }
     }
 
-    func restartBridge(applyOnConnect: Bool = false) {
+    func restartBridge() {
         guard wantsBridge else { return }
-        applyOnNextStart = applyOnNextStart || applyOnConnect
         restartAt = ProcessInfo.processInfo.systemUptime + 0.2
         status = "Restarting"
         recordBridgeEvent("Bridge restart requested")
@@ -119,34 +112,24 @@ final class DialController {
         }
     }
 
-    func applyDialToFocusedApp() {
-        guard canApplyDialToFocusedApp else { return }
-        let app = focusedTargetName ?? "supported app"
-        message = "Requesting the panel's current state for \(app)"
-        recordBridgeEvent("Apply Dial to Focused App requested for \(app)")
-        restartBridge(applyOnConnect: true)
-    }
-
-    func syncApps() {
+    func syncApps() async {
         guard wantsBridge, !isSyncing else { return }
         isSyncing = true
         status = "Refreshing Cursor models"
         let originalMask = preferences.cursorModelMask
-        Task {
-            let result = await Task.detached(priority: .utility) { CursorModelSync.readMask() }.value
-            defer { isSyncing = false }
-            guard wantsBridge else { return }
-            switch result {
-            case .success(let mask):
-                // A preference edit made while reading Cursor takes precedence.
-                if preferences.cursorModelMask == originalMask, preferences.syncCursorModels(mask) {
-                    recordBridgeEvent("Cursor models updated from Cursor")
-                }
-            case .failure(let error):
-                recordBridgeEvent("Cursor sync: \(error.localizedDescription); saved selection retained")
+        let result = await Task.detached(priority: .utility) { CursorModelSync.readMask() }.value
+        defer { isSyncing = false }
+        guard wantsBridge else { return }
+        switch result {
+        case .success(let mask):
+            // A preference edit made while reading Cursor takes precedence.
+            if preferences.cursorModelMask == originalMask, preferences.syncCursorModels(mask) {
+                recordBridgeEvent("Cursor models updated from Cursor")
             }
-            restartBridge()
+        case .failure(let error):
+            recordBridgeEvent("Cursor sync: \(error.localizedDescription); saved selection retained")
         }
+        restartBridge()
     }
 
     func openBridgeLog() {
@@ -196,14 +179,12 @@ final class DialController {
             recordBridgeEvent(message!)
             return
         }
-        var arguments = [
+        let arguments = [
             "--watch", "--send-serial", "--port", candidate,
             "--chatgpt-effort-mask", maskArgument(preferences.chatGPTThinkingMask),
             "--cursor-model-mask", maskArgument(preferences.cursorModelMask),
+            "--dial-swap", preferences.swapDials ? "1" : "0",
         ]
-        if applyOnNextStart {
-            arguments.append("--apply-on-connect")
-        }
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
@@ -230,7 +211,6 @@ final class DialController {
         do {
             bridge = process
             try process.run()
-            applyOnNextStart = false
             port = candidate
             status = "Connecting to panel"
             message = "Bridge started on \(candidate)"
@@ -285,8 +265,7 @@ final class DialController {
         if text.contains("dropped APPLY") || text.contains("dropped PUSH") {
             status = "Apply dropped — focus a supported app"
         }
-        if text.contains(" rx APPLY") || text.contains(" rx PUSH")
-            || text.contains(" rx Apply Dial to Focused App") {
+        if text.contains(" rx APPLY") || text.contains(" rx PUSH") {
             status = "Applying dial to focused app"
         }
         if text.contains(" posted ") { status = "Command sent — verify app setting" }
@@ -359,25 +338,6 @@ final class DialController {
         let prefixes = ["cu.usbmodem", "cu.usbserial", "cu.wchusbserial", "cu.SLAB_USBtoUART"]
         return names.filter { name in prefixes.contains(where: { name.hasPrefix($0) }) }
             .map { "/dev/\($0)" }.sorted()
-    }
-
-    private var focusedTargetName: String? {
-        switch NSWorkspace.shared.frontmostApplication?.bundleIdentifier {
-        case "com.openai.chat", "com.openai.codex": return "ChatGPT"
-        case "com.todesktop.230313mzl4w4u92": return "Cursor"
-        case "ai.opencode.desktop": return "OpenCode"
-        case "dev.rig.desktop": return "Rig"
-        default:
-            let app = NSWorkspace.shared.frontmostApplication
-            if app?.localizedName == "Rig" { return "Rig" }
-            if app?.bundleIdentifier == "com.github.Electron",
-               let path = (app?.executableURL ?? app?.bundleURL)?.path,
-               path.localizedCaseInsensitiveContains("/rig/")
-            {
-                return "Rig"
-            }
-            return nil
-        }
     }
 }
 #endif

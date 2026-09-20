@@ -90,14 +90,7 @@ static bool clamp_front_model(model_fields_t *fields)
         return true;
     }
     if (front_title_app() == DESK_RIG && fields->model[0]) {
-        char shown[sizeof(fields->model)];
-        catalog_rig_display_name(fields->model, shown, sizeof(shown));
-        if (!shown[0] || strcmp(fields->model, shown) == 0) {
-            return false;
-        }
-        snprintf(fields->model, sizeof(fields->model), "%s", shown);
-        fields->has_model = 1;
-        return true;
+        return false;
     }
     snprintf(fields->model, sizeof(fields->model), "%s", catalog_default_model());
     fields->has_model = 1;
@@ -275,7 +268,8 @@ void app_main(void)
             save_pending = fields.has_model;
             paint_pending = true;
         }
-        if (clock_needs_paint() || front_title_needs_paint() || ui_needs_pixel_shift()) {
+        if (clock_needs_paint() || front_title_needs_paint() || ui_needs_pixel_shift()
+            || (!screensaver_on && ui_needs_marquee())) {
             paint_pending = true;
         }
         now = xTaskGetTickCount();

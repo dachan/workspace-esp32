@@ -39,14 +39,17 @@ Hard lanes for this repo:
   as `codex` for any server-side browse/write of this tree.
 - After server changes land on GitHub, **pull on the Mac**
   (`~/Development/workspace-esp32`) so the workstation clone stays in sync.
-- When the user asks to **flash** or run the Mac bridge helper, use the **Mac
-  workstation clone** and the connected serial device there. Do not flash from
-  Hetzner.
+- After any ESP32 firmware, catalog, or on-device UI change, **flash immediately**
+  on the Mac. Do not wait for the user to say flash. Identify the board by MAC
+  from [HARDWARE.md](HARDWARE.md) (not a remembered `/dev/cu.usbmodem*` path).
+  Quit Model Dial first if it holds the CDC port. Prefer `app-flash` so NVS is
+  preserved. Then relaunch Model Dial and record the new SHA in HARDWARE.md.
+  Do not flash a board that is not attached or that this change did not target.
 - Do not keep a separate standalone `ai-model-control-bridge` folder on the Mac;
   use `ai-model-control/ai-model-control-bridge/` inside this repo.
 - Keep Mac and server on the same branch/commit after every change:
-  edit on Hetzner codex → commit/push → pull on Mac (and flash from Mac when
-  hardware work is requested).
+  edit on Hetzner codex → commit/push → pull on Mac → flash the targeted
+  attached board from Mac after every firmware change.
 - After a branch merges into `main`, delete it from local and remote
   (`git branch -d <branch>` and `git push origin --delete <branch>`). Keep
   `main` and any branch that still has unmerged commits. Do not leave merged
@@ -54,11 +57,33 @@ Hard lanes for this repo:
 
 ## AI model control (encoders → ChatGPT / Cursor / OpenCode / Rig)
 
-On-device UI is `ai-model-control/` (3.5" ST7796 480x320). Edit on Hetzner
-codex, push, pull the Mac, then flash on the Mac. The Mac helper is
+On-device UI is `ai-model-control/` (3.5" ST7796 480x320 and SuperMini round).
+Edit on Hetzner codex, push, pull the Mac, then **flash the attached board on
+the Mac without waiting to be asked**. The Mac helper is
 `ai-model-control/ai-model-control-bridge/` (macOS CLI only; never a standalone
 Mac folder). Detail for keystroke recipes, InputGuard, NVS defaults, ST7796
 MADCTL lock, and logo codegen lives in `ai-model-control/README.md`.
+
+When a previously working bridge path regresses, identify the exact state or
+control-flow change from the diff and bridge log before changing process
+architecture or permission identity. The menu app launching the separate
+`ai-model-control-bridge` child is an established working design. Fix the
+smallest confirmed regression first; do not replace that design based only on
+an unverified TCC hypothesis.
+
+Never run the `model-dial` app executable directly with CLI flags such as
+`--help` or `--check-ax`: it launches a second menu app and bridge, which
+contends for the serial port. Run diagnostics through the bundled
+`ai-model-control-bridge` executable. Launch Model Dial only through
+LaunchServices (`open -a` or `open <app path>`) after terminating the existing
+app.
+
+Never overwrite the installed Model Dial app with an ad-hoc-signed rebuild:
+that changes its macOS privacy identity and revokes Accessibility. Before
+packaging on the Mac, choose a valid stable code-signing identity from
+`security find-identity -v -p codesigning`, pass it through
+`MODEL_DIAL_SIGNING_IDENTITY`, and verify the installed bundle satisfies its
+designated requirement.
 
 Firmware settles **0.4 s** after the last rotary detent, sends complete
 `STATE` frames, then `APPLY`. The bridge settles **0.20 s** after that
@@ -74,13 +99,19 @@ without posting keys. Press either encoder to send `PUSH` plus new `STATE`
 revisions and force the current model and effort into the focused app.
 While Rig is focused the helper reads `models.active` / `agent.focus` and
 sends `CONFIG RIG_MODELS` plus host `MODEL` / `THINKING` so the panel shows
-OpenRouter titles with the `Provider: ` prefix removed (same rule as the
-composer), then writes back with `agent.setFocus`.
+the slug provider plus short name, no colon and no `Latest`
+(`~openai/gpt-astra-latest` → OpenAI Astra; a pinned
+slug such as `anthropic/claude-sonnet-4.6` → Anthropic Sonnet 4.6), then
+writes back with `agent.setFocus`.
 
-**Encoders.** Thinking uses polled falling-CLK decode (two detents = one
-level). The model knob uses PCNT hardware quadrature — a polled decode
-misreads it because display flush delays the poll past the CLK/DT phase
-difference. Keep firmware `main/catalog.c` and Swift `Catalog.swift` aligned.
+**Encoders.** Default: left changes the model, right changes effort. Settings
+→ Dials → Swap Dials flips them. Thinking uses polled falling-CLK decode on
+the 3.5" (two detents = one level). The SuperMini assigns the model decode
+to the left knob and effort burst decode to the right. The model knob uses
+PCNT hardware quadrature — a polled decode misreads it because display flush
+delays the poll past the CLK/DT phase difference. Keep firmware
+`main/catalog.c` and Swift `Catalog.swift` aligned. Rig models walk
+A–Z by the full provider-plus-name label.
 Desk pose and locked ST7796 view mapping: see `HARDWARE.md` and
 `ai-model-control/README.md`.
 
@@ -156,6 +187,9 @@ on connection and READY, never periodically. ENABLED is sent for SYNC and
 model-list changes; STATE retries until ACK. Retain the 30-second TIME refresh.
 
 ## Build and flash
+
+After a firmware change, build and flash in the same turn. Identify the live
+board by MAC before choosing a port.
 
 Use a local ESP-IDF installation without embedding its path in scripts or docs:
 

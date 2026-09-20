@@ -1,11 +1,14 @@
 #include "serial_sync.h"
 
+#include <ctype.h>
 #include <inttypes.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "catalog.h"
+#include "encoder.h"
 #include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -96,6 +99,23 @@ void serial_sync_cancel_intent(void)
     s_intent = SYNC_INTENT_NONE;
 }
 
+static int parse_hex_bytes(const char *s, uint8_t *out, int max)
+{
+    int n = 0;
+    while (n < max && s && *s) {
+        while (*s == ' ') {
+            s++;
+        }
+        if (!isxdigit((unsigned char)s[0]) || !isxdigit((unsigned char)s[1])) {
+            break;
+        }
+        char buf[3] = { s[0], s[1], 0 };
+        out[n++] = (uint8_t)strtoul(buf, NULL, 16);
+        s += 2;
+    }
+    return n;
+}
+
 bool serial_sync_handle_line(const char *line)
 {
     if (strcmp(line, "SYNC") == 0) {
@@ -123,6 +143,14 @@ bool serial_sync_handle_line(const char *line)
         }
         return true;
     }
+    const char *dial_swap_prefix = "CONFIG DIAL_SWAP ";
+    if (strncmp(line, dial_swap_prefix, strlen(dial_swap_prefix)) == 0) {
+        const char *value = line + strlen(dial_swap_prefix);
+        if (value[0] == '0' || value[0] == '1') {
+            encoder_set_swap(value[0] == '1');
+        }
+        return true;
+    }
     const char *cursor_prefix = "CONFIG CURSOR_MODELS ";
     if (strncmp(line, cursor_prefix, strlen(cursor_prefix)) == 0) {
         char *end = NULL;
@@ -144,6 +172,62 @@ bool serial_sync_handle_line(const char *line)
             uint64_t before = catalog_rig_enabled_mask();
             catalog_rig_set_enabled_mask(mask);
             s_config_changed |= before != catalog_rig_enabled_mask();
+        }
+        return true;
+    }
+    if (strcmp(line, "CONFIG RIG_CLEAR") == 0) {
+        catalog_rig_catalog_begin();
+        return true;
+    }
+    const char *rig_add_prefix = "CONFIG RIG_ADD ";
+    if (strncmp(line, rig_add_prefix, strlen(rig_add_prefix)) == 0) {
+        const char *value = line + strlen(rig_add_prefix);
+        uint8_t masks[1];
+        int n = parse_hex_bytes(value, masks, 1);
+        if (n == 1) {
+            const char *name = value;
+            while (*name && !isspace((unsigned char)*name)) {
+                name++;
+            }
+            while (*name && isspace((unsigned char)*name)) {
+                name++;
+            }
+            if (*name) {
+                catalog_rig_catalog_add(name, masks[0]);
+            }
+        }
+        return true;
+    }
+    if (strcmp(line, "CONFIG RIG_END") == 0) {
+        catalog_rig_catalog_commit();
+        s_config_changed = true;
+        return true;
+    }
+    const char *rig_efforts_prefix = "CONFIG RIG_EFFORTS ";
+    if (strncmp(line, rig_efforts_prefix, strlen(rig_efforts_prefix)) == 0) {
+        uint8_t masks[16];
+        int n = parse_hex_bytes(line + strlen(rig_efforts_prefix), masks, (int)sizeof(masks));
+        if (n > 0) {
+            catalog_rig_set_effort_masks(masks, n);
+            s_config_changed = true;
+        }
+        return true;
+    }
+    const char *rig_host_prefix = "CONFIG RIG_HOST_EFFORTS ";
+    if (strncmp(line, rig_host_prefix, strlen(rig_host_prefix)) == 0) {
+        const char *value = line + strlen(rig_host_prefix);
+        uint8_t masks[1];
+        int n = parse_hex_bytes(value, masks, 1);
+        if (n == 1) {
+            const char *name = value;
+            while (*name && !isspace((unsigned char)*name)) {
+                name++;
+            }
+            while (*name && isspace((unsigned char)*name)) {
+                name++;
+            }
+            catalog_rig_set_host_effort_mask(*name ? name : NULL, masks[0]);
+            s_config_changed = true;
         }
         return true;
     }

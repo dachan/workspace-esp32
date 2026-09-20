@@ -32,14 +32,15 @@ final class BridgeRuntime {
     private var forceApply = false
     private var bootID: UInt64?
     private var connectionGeneration: UInt64 = 0
-    private var applyOnConnectPending: Bool
     private var lastRigPushAt: TimeInterval = 0
     private var lastRigPanel: (model: String, thinking: String, mask: UInt64)?
     private var lastRigError: String?
+    /// Skip Rig→panel MODEL/THINKING while a dial apply is settling or just posted.
+    private var suppressHostPushUntil: TimeInterval = 0
+    private var axPrompted = false
 
     init(options: Options) {
         self.options = options
-        applyOnConnectPending = options.applyOnConnect
         Catalog.setChatGPTThinkingMask(options.chatGPTThinkingMask)
         Catalog.setCursorEnabledMask(options.cursorModelMask)
         session = options.port.map {
@@ -47,7 +48,8 @@ final class BridgeRuntime {
                 port: $0,
                 baud: options.baud,
                 chatGPTThinkingMask: options.chatGPTThinkingMask,
-                cursorModelMask: options.cursorModelMask
+                cursorModelMask: options.cursorModelMask,
+                dialSwap: options.dialSwap
             )
         }
     }
@@ -75,15 +77,7 @@ final class BridgeRuntime {
         fflush(stdout)
         if legacyIntent {
             requestApply(force: false, source: "legacy SET")
-        } else {
-            applyInitialSnapshotIfRequested()
         }
-    }
-
-    private func applyInitialSnapshotIfRequested() {
-        guard applyOnConnectPending, receivedModel != nil, receivedThinking != nil else { return }
-        applyOnConnectPending = false
-        requestApply(force: true, source: "Apply Dial to Focused App")
     }
 
     private func requestApply(force: Bool, source: String) {
@@ -218,8 +212,16 @@ final class BridgeRuntime {
             applyRig(focus: focus)
             return
         }
-        guard AXTrust.isTrusted(prompt: false) else {
-            return
+        if !AXTrust.isTrusted(prompt: false) {
+            if !axPrompted {
+                axPrompted = true
+                _ = AXTrust.isTrusted(prompt: true)
+                let message = "Accessibility is not granted; ChatGPT / Cursor / OpenCode keys are skipped. Enable Model Dial in System Settings → Privacy & Security → Accessibility."
+                fputs("ai-model-control-bridge: \(message)\n", stderr)
+                print("\(stamp()) \(message)")
+                fflush(stdout)
+            }
+            if !AXTrust.isTrusted(prompt: false) { return }
         }
         guard focus.isCurrent else {
             suspendAfterFocusLoss("target app left the foreground")
@@ -334,6 +336,12 @@ final class BridgeRuntime {
             lastFailure = nil
             retryAt = 0
             applyFailures = 0
+            lastRigPanel = (
+                snapshot[.model] ?? lastRigPanel?.model ?? "",
+                snapshot[.thinking] ?? lastRigPanel?.thinking ?? "",
+                lastRigPanel?.mask ?? 0
+            )
+            suppressHostPushUntil = ProcessInfo.processInfo.systemUptime + 1.5
             if let model = snapshot[.model] {
                 print("\(stamp()) posted model \(model) via \(path)")
             }
@@ -385,19 +393,31 @@ final class BridgeRuntime {
             return
         }
         let now = ProcessInfo.processInfo.systemUptime
-        if lastRigPanel != nil, now - lastRigPushAt < 0.4 {
-            return
-        }
-        lastRigPushAt = now
+        let dialAhead =
+            (desired[.model].map { $0 != lastRigPanel?.model } ?? false)
+            || (desired[.thinking].map { $0 != lastRigPanel?.thinking } ?? false)
+        let holdHost = now < suppressHostPushUntil
+            || (targetFocus != nil && now < settleAt + 1.25)
+            || dialAhead
         do {
             let active = try RigClient.modelsActive()
             let focus = try RigClient.focus()
             let mask = Catalog.rigEnabledMask(from: active.models)
             let model = Catalog.rigPanelModel(from: focus, active: active.models)
+            let masks = Catalog.rigEffortMasks(from: active.models)
+            let effortMask = Catalog.rigEffortMask(from: focus.efforts)
             let thinking = Catalog.rigPanelThinking(from: focus.effort)
+            let catalog = Catalog.rigCatalogEntries(from: active.models)
+            session.setRigCatalog(catalog)
             session.setRigModelMask(mask)
+            session.setRigEffortMasks(masks)
+            if holdHost { return }
+            if lastRigPanel != nil, now - lastRigPushAt < 0.4 {
+                return
+            }
+            lastRigPushAt = now
+            session.setHostPanel(model: model, thinking: thinking, effortMask: effortMask)
             if lastRigPanel?.model != model || lastRigPanel?.thinking != thinking || lastRigPanel?.mask != mask {
-                session.setHostPanel(model: model, thinking: thinking)
                 lastApplied[app.processIdentifier] = [.model: model, .thinking: thinking]
                 receivedModel = model
                 receivedThinking = thinking

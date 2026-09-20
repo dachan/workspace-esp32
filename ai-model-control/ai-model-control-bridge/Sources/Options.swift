@@ -10,7 +10,6 @@ struct Options {
     var front = false
     var watch = false
     var listen = false
-    var applyOnConnect = false
     var setModel: String?
     var setThinking: String?
     var port: String?
@@ -18,6 +17,7 @@ struct Options {
     var bundleID: String?
     var chatGPTThinkingMask = Catalog.defaultChatGPTThinkingMask
     var cursorModelMask: UInt64 = 0xFF
+    var dialSwap = false
 }
 
 private func parseMask(_ raw: String) -> UInt64? {
@@ -52,8 +52,6 @@ func parseOptions(_ args: [String]) -> Options? {
             options.watch = true
         case "--listen":
             options.listen = true
-        case "--apply-on-connect":
-            options.applyOnConnect = true
         case "--send-serial":
             break // Compatibility with existing launch commands.
         case "--set-model":
@@ -101,6 +99,12 @@ func parseOptions(_ args: [String]) -> Options? {
                 return nil
             }
             options.cursorModelMask = mask
+        case "--dial-swap":
+            guard let value = takeValue(), value == "0" || value == "1" else {
+                fputs("ai-model-control-bridge: --dial-swap needs 0 or 1\n", stderr)
+                return nil
+            }
+            options.dialSwap = value == "1"
         case "--json", "--dump-ax", "--list-candidates", "--interval",
              "--max-depth", "--max-nodes":
             fputs("ai-model-control-bridge: \(arg) was removed in the keyboard-only rewrite\n", stderr)
@@ -129,7 +133,6 @@ func usage() -> String {
       --watch             Follow foreground + optional serial SET lines
       --listen            Read SET MODEL / SET THINKING from --port
                           (implied by --watch --port)
-      --apply-on-connect  Apply the first complete panel snapshot if an app is focused
       --port PATH         USB serial device
       --baud N            Serial baud (default 115200)
       --list-ports        List likely USB serial devices
@@ -138,6 +141,7 @@ func usage() -> String {
       --bundle-id ID      Force ChatGPT, Codex, Cursor, OpenCode, or Rig
       --chatgpt-effort-mask HEX  Enabled ChatGPT effort levels (default 0x0f)
       --cursor-model-mask HEX   Enabled Cursor model entries (Auto is always on)
+      --dial-swap 0|1     1 swaps the knobs (left effort, right model)
       --hid-info          Describe the keyboard control path
       --check-ax          Check Accessibility permission and exit
       --check-input-guard Check input filter availability for the focused app; no keys posted

@@ -7,7 +7,7 @@
 
 #include <stddef.h>
 
-/* OpenRouter `Provider: Model` → model, then drop a duplicated provider token. */
+/* Drop a leading `Provider: ` or `Provider ` when matching host names to panel labels. */
 void catalog_rig_display_name(const char *name, char *out, size_t out_sz);
 
 int catalog_model_count(void);
@@ -40,6 +40,13 @@ void catalog_chatgpt_set_thinking_mask(uint64_t mask);
 
 uint64_t catalog_rig_enabled_mask(void);
 void catalog_rig_set_enabled_mask(uint64_t mask);
+
+void catalog_rig_catalog_begin(void);
+void catalog_rig_catalog_add(const char *name, uint8_t effort_mask);
+void catalog_rig_catalog_commit(void);
+
+void catalog_rig_set_effort_masks(const uint8_t *masks, int n);
+void catalog_rig_set_host_effort_mask(const char *model, uint8_t mask);
 
 int catalog_thinking_count(const char *model);
 int catalog_thinking_count_in(bool cursor, const char *model);

@@ -23,9 +23,74 @@ static int current_shift(void)
         % (sizeof(shift_positions) / sizeof(shift_positions[0]));
 }
 
+static char s_marquee_text[MODEL_PARSE_MAX];
+static int s_marquee_overflow;
+static int s_marquee_drawn_off = -1;
+static int64_t s_marquee_t0;
+static bool s_marquee_active;
+
+static int marquee_offset(int overflow)
+{
+    if (overflow <= 0) {
+        return 0;
+    }
+    const int64_t now = esp_timer_get_time();
+    const int64_t hold = 1000000;
+    const int speed = 36;
+    const int64_t scroll_us = (int64_t)overflow * 1000000 / speed;
+    const int64_t cycle = hold + scroll_us + hold + scroll_us;
+    int64_t t = (now - s_marquee_t0) % cycle;
+    if (t < hold) {
+        return 0;
+    }
+    t -= hold;
+    if (t < scroll_us) {
+        return (int)(t * speed / 1000000);
+    }
+    t -= scroll_us;
+    if (t < hold) {
+        return overflow;
+    }
+    t -= hold;
+    int back = overflow - (int)(t * speed / 1000000);
+    return back < 0 ? 0 : back;
+}
+
 bool ui_needs_pixel_shift(void)
 {
     return current_shift() != drawn_shift;
+}
+
+bool ui_needs_marquee(void)
+{
+    return s_marquee_active && s_marquee_overflow > 0
+        && marquee_offset(s_marquee_overflow) != s_marquee_drawn_off;
+}
+
+static void draw_scrolling_line(int x, int y, int max_w, const char *text, uint16_t fg, uint16_t bg, int scale, bool center)
+{
+    const char *s = text ? text : "";
+    const int tw = font_text_width(s, scale);
+    if (tw <= max_w) {
+        s_marquee_active = false;
+        s_marquee_overflow = 0;
+        s_marquee_drawn_off = -1;
+        const int dx = center ? (max_w - tw) / 2 : 0;
+        font_draw_text(x + dx, y, s, fg, bg, scale);
+        return;
+    }
+    if (strcmp(s_marquee_text, s) != 0) {
+        strncpy(s_marquee_text, s, sizeof(s_marquee_text) - 1);
+        s_marquee_text[sizeof(s_marquee_text) - 1] = '\0';
+        s_marquee_t0 = esp_timer_get_time();
+        s_marquee_drawn_off = -1;
+    }
+    s_marquee_overflow = tw - max_w;
+    s_marquee_active = true;
+    const int off = marquee_offset(s_marquee_overflow);
+    s_marquee_drawn_off = off;
+    display_fill_rect(x, y, max_w, 7 * scale, bg);
+    font_draw_text_clip(x - off, y, x, max_w, s, fg, bg, scale);
 }
 
 static esp_err_t flush_shifted(uint16_t background)
@@ -142,11 +207,14 @@ static void draw_app_thinking_bar(int x, int y, int w, int h, const model_fields
 {
     const char *model = fields->has_model ? fields->model : NULL;
     const int segs = catalog_thinking_count(model);
+    if (segs <= 0) {
+        return;
+    }
     int level = 0;
-    if (fields->has_model && fields->has_thinking && segs > 0) {
+    if (fields->has_model && fields->has_thinking) {
         level = catalog_thinking_level(model, fields->thinking);
     }
-    draw_thinking_bar(x, y, w, h, level, segs > 0 ? segs : 1, track, fill);
+    draw_thinking_bar(x, y, w, h, level, segs, track, fill);
 }
 
 static const logo_t *front_logo(bool icon)
@@ -168,57 +236,6 @@ static void draw_centered(int y, const char *s, uint16_t fg, uint16_t bg, int sc
 {
     const int w = font_text_width(s ? s : "", scale);
     font_draw_text((DISPLAY_WIDTH - w) / 2, y, s ? s : "", fg, bg, scale);
-}
-
-static void draw_wrapped_centered(int y, int max_w, const char *text, uint16_t fg, uint16_t bg, int scale)
-{
-    char line[MODEL_PARSE_MAX];
-    int line_len = 0;
-    int line_w = 0;
-    int cy = y;
-    const int line_h = 8 * scale;
-    const char *p = text ? text : "";
-
-    while (*p) {
-        while (*p == ' ') {
-            p++;
-        }
-        if (!*p) {
-            break;
-        }
-        size_t wi = 0;
-        char word[MODEL_PARSE_MAX];
-        while (p[wi] && p[wi] != ' ' && wi + 1 < sizeof(word)) {
-            word[wi] = p[wi];
-            wi++;
-        }
-        word[wi] = '\0';
-        p += wi;
-
-        const int ww = font_text_width(word, scale);
-        const int space = line_len > 0 ? 6 * scale : 0;
-        if (line_len > 0 && line_w + space + ww > max_w) {
-            line[line_len] = '\0';
-            draw_centered(cy, line, fg, bg, scale);
-            cy += line_h + scale;
-            line_len = 0;
-            line_w = 0;
-        }
-        if (line_len + (line_len > 0 ? 1 : 0) + (int)wi + 1 >= (int)sizeof(line)) {
-            continue;
-        }
-        if (line_len > 0) {
-            line[line_len++] = ' ';
-            line_w += 6 * scale;
-        }
-        memcpy(line + line_len, word, wi);
-        line_len += (int)wi;
-        line_w += ww;
-    }
-    if (line_len > 0) {
-        line[line_len] = '\0';
-        draw_centered(cy, line, fg, bg, scale);
-    }
 }
 
 static esp_err_t ui_render_round(const model_fields_t *fields)
@@ -249,10 +266,14 @@ static esp_err_t ui_render_round(const model_fields_t *fields)
     const int model_y = (DISPLAY_HEIGHT - block_h) / 2;
     const int thinking_y = model_y + model_h + pair_gap;
 
+    const int name_w = DISPLAY_WIDTH - 16;
+    const int name_x = (DISPLAY_WIDTH - name_w) / 2;
+    const int bar_w = DISPLAY_WIDTH - 32;
+    const int bar_x = (DISPLAY_WIDTH - bar_w) / 2;
     if (!fields->has_model) {
         draw_centered(model_y, "WAITING", muted, bg, model_scale);
     } else {
-        draw_wrapped_centered(model_y, 184, fields->model, text, bg, model_scale);
+        draw_scrolling_line(name_x, model_y, name_w, fields->model, text, bg, model_scale, true);
     }
 
     const char *thinking = !fields->has_model ? "-"
@@ -260,7 +281,9 @@ static esp_err_t ui_render_round(const model_fields_t *fields)
         : fields->has_thinking ? fields->thinking : "-";
     draw_centered(thinking_y, thinking, fields->has_model ? thinking_text : muted, bg, think_scale);
 
-    draw_app_thinking_bar(28, thinking_y + think_h + 12, 184, 8, fields, track, text);
+    if (fields->has_model && catalog_thinking_count(fields->model) > 0) {
+        draw_app_thinking_bar(bar_x, thinking_y + think_h + 12, bar_w, 8, fields, track, text);
+    }
 
     draw_centered(DISPLAY_HEIGHT - 15, FIRMWARE_BUILD_STRING, muted, bg, 1);
 
@@ -336,7 +359,7 @@ esp_err_t ui_render(const model_fields_t *fields)
         font_draw_text(20, thinking_value_y, "-", muted, card, thinking_scale);
         draw_app_thinking_bar(20, bar_y, value_w, bar_h, fields, track, text);
     } else {
-        draw_wrapped(20, model_value_y, value_w, fields->model, text, card, 2);
+        draw_scrolling_line(20, model_value_y, value_w, fields->model, text, card, 2, false);
         const char *thinking = catalog_thinking_count(fields->model) == 0
             ? "Unsupported" : (fields->has_thinking ? fields->thinking : "-");
         draw_wrapped(20, thinking_value_y, value_w, thinking, text, card, thinking_scale);

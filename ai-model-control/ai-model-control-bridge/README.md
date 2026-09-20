@@ -54,10 +54,10 @@ while a supported app is already focused. Focus changes only update the panel.
 
 Shortcut sequences stay bound to the process that was focused when they began.
 Losing focus, including switching between ChatGPT, Codex, Cursor, and OpenCode,
-interrupts the sequence and requires another dial movement or Apply Dial to Focused App. A superseded sequence, or one
+interrupts the sequence and requires another dial movement or encoder click. A superseded sequence, or one
 that failed while the app stayed focused, is retried at two-second intervals while that app remains frontmost, up to
 three failed attempts per target. This limit applies to all apps and input-filter
-creation failures; a later dial update or Apply Dial to Focused App starts a fresh attempt budget. Interrupted pickers are dismissed before retrying in that process, tracking
+creation failures; a later dial update starts a fresh attempt budget. Interrupted pickers are dismissed before retrying in that process, tracking
 both Cursor menu layers and each Escape already posted. ChatGPT thinking retries
 start from the absolute Light clamp. Logs say “posted” when the current generation's
 key sequence completes; the helper does not read back the app's selected value.
@@ -75,8 +75,7 @@ and applied-value caches, so the reconnect snapshot is accepted even when its
 revision is unchanged. Frames from a poll that ended in a disconnect are discarded.
 Current firmware retransmits until ACK and answers SYNC with its state, so a
 bridge restart or device reset recovers the panel state without applying it.
-Apply Dial to Focused App explicitly applies the first complete restart snapshot;
-Refresh Cursor Models only refreshes the dial's Cursor model list.
+Settings → Cursor → Refresh Cursor Models only refreshes the dial's Cursor model list.
 Older firmware still works, but cannot replay missing changes. If the device path
 changes, restart with the new `--port`.
 
@@ -119,8 +118,8 @@ interrupts the apply.
 
 Escape cancels the transaction. The filter is removed on every exit; an independent
 five-second watchdog disables it even if an Accessibility call stalls. Focus loss,
-Escape, or filter failure/timeout during an apply drops that target; use the dial
-or Apply Dial to Focused App to try again. A newer dial state can supersede the current sequence.
+Escape, or filter failure/timeout during an apply drops that target; move or
+click the dial to try again. A newer dial state can supersede the current sequence.
 When creating the filter fails, the bridge posts no keys and reports a permission
 error (check Accessibility and Input Monitoring for the launching app).
 
@@ -206,11 +205,10 @@ checkmarks. Login registration failures are surfaced, including macOS approval.
 
 Restarts retain ownership of the old helper until it exits; an unresponsive child
 is killed after one second. Quitting also releases the owned helper. Output from
-an old helper cannot overwrite the replacement's status. **Refresh Cursor Models**
-reads only Cursor's model catalog and overrides in the background, with a
-three-second timeout; it
+an old helper cannot overwrite the replacement's status. The Settings window's
+Cursor section can refresh Cursor's model catalog and overrides in the
+background, with a three-second timeout; it
 retains saved choices if the read fails or preferences changed while it ran.
-**Apply Dial to Focused App** is available while a supported app is focused.
 Rig does not need Accessibility; ChatGPT, Cursor, and OpenCode still do.
 
 Build an unsigned local app bundle, optionally with the firmware app binary:

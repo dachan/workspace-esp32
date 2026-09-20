@@ -101,6 +101,15 @@ static const uint8_t s_font5x7[] = {
     0x08, 0x08, 0x2A, 0x1C, 0x08,
 };
 
+static int glyph_advance(char c, int scale)
+{
+    /* Space is empty; keep it tighter than a 5-column glyph plus gap. */
+    if (c == ' ') {
+        return 3 * scale;
+    }
+    return 6 * scale;
+}
+
 static const uint8_t *glyph(char c)
 {
     if (c < 32 || c > 126) {
@@ -129,15 +138,17 @@ int font_text_width(const char *text, int scale)
     if (scale < 1) {
         scale = 1;
     }
+    int w = 0;
     int n = 0;
     while (text && *text) {
+        w += glyph_advance(*text, scale);
         n++;
         text++;
     }
     if (n == 0) {
         return 0;
     }
-    return n * 6 * scale - scale;
+    return w - scale;
 }
 
 void font_draw_text(int x, int y, const char *text, uint16_t fg, uint16_t bg, int scale)
@@ -147,8 +158,48 @@ void font_draw_text(int x, int y, const char *text, uint16_t fg, uint16_t bg, in
     }
     int cx = x;
     while (text && *text) {
-        font_draw_char(cx, y, *text, fg, bg, scale);
-        cx += 6 * scale;
+        if (*text != ' ') {
+            font_draw_char(cx, y, *text, fg, bg, scale);
+        }
+        cx += glyph_advance(*text, scale);
+        text++;
+    }
+}
+
+void font_draw_text_clip(int x, int y, int clip_x, int clip_w, const char *text, uint16_t fg, uint16_t bg, int scale)
+{
+    if (scale < 1) {
+        scale = 1;
+    }
+    if (clip_w <= 0) {
+        return;
+    }
+    const int clip_r = clip_x + clip_w;
+    int cx = x;
+    while (text && *text) {
+        if (*text != ' ') {
+            const uint8_t *g = glyph(*text);
+            for (int col = 0; col < 5; col++) {
+                uint8_t bits = g[col];
+                int px = cx + col * scale;
+                int pw = scale;
+                if (px < clip_x) {
+                    pw -= clip_x - px;
+                    px = clip_x;
+                }
+                if (px + pw > clip_r) {
+                    pw = clip_r - px;
+                }
+                if (pw <= 0) {
+                    continue;
+                }
+                for (int row = 0; row < 7; row++) {
+                    uint16_t colour = (bits & (1u << row)) ? fg : bg;
+                    display_fill_rect(px, y + row * scale, pw, scale, colour);
+                }
+            }
+        }
+        cx += glyph_advance(*text, scale);
         text++;
     }
 }

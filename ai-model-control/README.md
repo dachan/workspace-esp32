@@ -28,6 +28,7 @@ Mac → ESP: SYNC
 ESP → Mac: ENABLED <16-hex Cursor enable mask>
 Mac → ESP: CONFIG CHATGPT_EFFORTS <16-hex effort mask>
 Mac → ESP: CONFIG CURSOR_MODELS <16-hex model mask>
+Mac → ESP: CONFIG DIAL_SWAP <0|1>
 Mac → ESP: CONFIG RIG_MODELS <16-hex Latest-alias mask>
 Mac → ESP: MODEL <Rig display name>
 Mac → ESP: THINKING <Rig effort name>
@@ -46,10 +47,7 @@ keys on their own. A settled rotation follows its complete state with `APPLY`;
 an encoder click follows fresh revisions for both fields with `PUSH`.
 `APPLY` uses the per-process cache, while `PUSH` forces both fields.
 
-The Model Dial helper's Apply Dial to Focused App menu item restarts the bridge,
-requests the panel's current MODEL/THINKING revisions, and explicitly applies
-that first complete snapshot to the focused app. Refresh Cursor Models only
-updates the dial's Cursor model list.
+Settings → Cursor → Refresh Cursor Models only updates the dial's Cursor model list.
 
 Each changed field gets a new revision, including after firmware restart.
 Unacknowledged state retries every 0.5 s; a full USB transmit buffer retries after
@@ -71,13 +69,14 @@ its date/time clock. Until Cursor, ChatGPT, OpenCode, or Rig is focused again, e
 and touch controls are ignored so they cannot change a stored dial selection.
 
 A five-second press-and-hold anywhere on the glass starts a five-point touch
-calibration. The Model Dial helper's **Apply Dial to Focused App** menu item
-asks the bridge to apply the current panel model and thinking to the focused app.
+calibration.
 Rig uses `agent.setFocus` and does not need Accessibility; ChatGPT, Cursor, and OpenCode still do.
-**Refresh Cursor Models** only refreshes the dial's Cursor model list. The Model Dial
-Settings window controls which ChatGPT effort levels and Cursor models are
-available on the encoders; the bridge sends those masks to the panel on every
-connection. A release is confirmed after 150 ms without contact so a transient
+The Model Dial Settings window controls which ChatGPT effort levels and Cursor
+models are available on the encoders, and which knob changes the model versus
+effort (left is model by default). Its Cursor section can refresh the model
+list from Cursor; the bridge sends those masks and the dial mapping to the
+panel on every connection. Rig models are sent A–Z by the full provider-plus-name
+label. A release is confirmed after 150 ms without contact so a transient
 FT6336 read error cannot create a false release.
 
 Before the first `SYNC`, firmware uses the legacy `SET MODEL <name>` and
@@ -209,9 +208,7 @@ idf.py -B ESP32_MINI-128_tft_240x240-AI_Model_Control-New \
 ```
 
 The round target has no touch calibration or glass SYNC control. Press either
-encoder to sync the displayed model and effort to the focused app; the Model
-Dial helper's Apply Dial to Focused App command provides the same explicit
-action from macOS.
+encoder to sync the displayed model and effort to the focused app.
 
 ## Desk control (encoders → ChatGPT / Cursor)
 
@@ -233,8 +230,8 @@ interrupted operations cannot suppress the final correction when a dial returns
 to an earlier value. Model changes always invalidate effort; otherwise an
 effort-only change skips model selection. Completed values are cached per Mac
 process. Supported-app focus only changes the panel catalog and restores its
-remembered values; it never posts keys. Apply Dial to Focused App and either
-encoder click force both current panel values. Switching ChatGPT ↔
+remembered values; it never posts keys. Either encoder click forces both
+current panel values. Switching ChatGPT ↔
 Cursor restores that app's last model and effort on the panel. When neither is
 focused, encoder changes remain authoritative on the ESP32 but their apply intent
 is dropped rather than deferred. Focus loss interrupts the current apply.
@@ -347,7 +344,7 @@ sends the current model and effort as a forced `PUSH`.
 
 The Mac helper temporarily filters user input to the focused app during each
 model/thinking apply. Escape cancels; focus loss or a five-second timeout releases
-the filter; another dial movement or Apply Dial to Focused App is required to retry. See [input guard](ai-model-control-bridge/README.md#input-guard)
+the filter; another dial movement or encoder click is required to retry. See [input guard](ai-model-control-bridge/README.md#input-guard)
 for permissions, held-input handling, and the availability check.
 
 ```sh

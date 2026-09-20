@@ -89,17 +89,30 @@ final class BridgePreferences: ObservableObject {
 
     @Published private(set) var chatGPTThinkingMask: UInt64
     @Published private(set) var cursorModelMask: UInt64
+    @Published var swapDials: Bool {
+        didSet {
+            guard swapDials != oldValue else { return }
+            defaults.set(swapDials, forKey: swapKey)
+            onChange?()
+        }
+    }
     var onChange: (() -> Void)?
 
     private let defaults = UserDefaults.standard
     private let chatGPTKey = "chatGPTThinkingMask"
     private let cursorKey = "cursorModelMask"
+    private let swapKey = "swapDials"
 
     init() {
-        chatGPTThinkingMask = Self.readMask(defaults: defaults, key: chatGPTKey, fallback: Self.defaultChatGPTThinkingMask)
-        cursorModelMask = Self.readMask(defaults: defaults, key: cursorKey, fallback: Self.defaultCursorModelMask)
-        chatGPTThinkingMask = Self.normalizedEffortMask(chatGPTThinkingMask)
-        cursorModelMask = Self.normalizedCursorMask(cursorModelMask)
+        let chatGPT = Self.normalizedEffortMask(
+            Self.readMask(defaults: defaults, key: chatGPTKey, fallback: Self.defaultChatGPTThinkingMask)
+        )
+        let cursor = Self.normalizedCursorMask(
+            Self.readMask(defaults: defaults, key: cursorKey, fallback: Self.defaultCursorModelMask)
+        )
+        chatGPTThinkingMask = chatGPT
+        cursorModelMask = cursor
+        swapDials = defaults.object(forKey: swapKey) as? Bool ?? false
     }
 
     func isEffortEnabled(_ index: Int) -> Bool {
@@ -195,9 +208,19 @@ final class BridgePreferences: ObservableObject {
 
 struct SettingsView: View {
     @ObservedObject var preferences: BridgePreferences
+    let refreshCursorModels: () async -> Void
+    @State private var isRefreshingCursorModels = false
 
     var body: some View {
         settingsScroll {
+            settingsSection(
+                title: "Dials",
+                detail: preferences.swapDials
+                    ? "Left changes effort. Right changes the model."
+                    : "Left changes the model. Right changes effort."
+            ) {
+                Toggle("Swap Dials", isOn: $preferences.swapDials)
+            }
             settingsSection(title: "ChatGPT", detail: "Enabled thinking levels are available on the ESP32 effort dial.") {
                 twoColumnGrid {
                     ForEach(Array(BridgePreferences.chatGPTEfforts.enumerated()), id: \.offset) { index, effort in
@@ -205,8 +228,18 @@ struct SettingsView: View {
                     }
                 }
             }
+            settingsSection(title: "Cursor", detail: "Refresh the enabled model list from Cursor.") {
+                Button(isRefreshingCursorModels ? "Refreshing…" : "Refresh Cursor Models") {
+                    Task {
+                        isRefreshingCursorModels = true
+                        await refreshCursorModels()
+                        isRefreshingCursorModels = false
+                    }
+                }
+                .disabled(isRefreshingCursorModels)
+            }
         }
-        .frame(minWidth: 420, minHeight: 240)
+        .frame(minWidth: 420, minHeight: 280)
     }
 
     private func settingsScroll<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -238,8 +271,15 @@ struct SettingsView: View {
 }
 
 final class SettingsWindowController: NSWindowController {
-    init(preferences: BridgePreferences, onChange: @escaping () -> Void) {
-        let hosting = NSHostingView(rootView: SettingsView(preferences: preferences))
+    init(
+        preferences: BridgePreferences,
+        onChange: @escaping () -> Void,
+        refreshCursorModels: @escaping () async -> Void
+    ) {
+        let hosting = NSHostingView(rootView: SettingsView(
+            preferences: preferences,
+            refreshCursorModels: refreshCursorModels
+        ))
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
             styleMask: [.titled, .closable, .resizable],

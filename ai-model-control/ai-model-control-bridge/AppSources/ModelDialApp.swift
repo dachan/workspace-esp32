@@ -23,8 +23,6 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
     private var loginRow: NSMenuItem!
     private let statusRow = NSMenuItem(title: "Starting", action: nil, keyEquivalent: "")
     private let deviceMenu = NSMenu(title: "Device")
-    private var refreshModelsRow: NSMenuItem!
-    private var applyDialRow: NSMenuItem!
     private var settingsWindow: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -41,8 +39,6 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         menu.addItem(.separator())
         let deviceRow = menu.addItem(withTitle: "Device", action: nil, keyEquivalent: "")
         deviceRow.submenu = deviceMenu
-        refreshModelsRow = menu.addItem(withTitle: "Refresh Cursor Models", action: #selector(syncApps), keyEquivalent: "")
-        applyDialRow = menu.addItem(withTitle: "Apply Dial to Focused App", action: #selector(applyDialToFocusedApp), keyEquivalent: "")
         menu.addItem(withTitle: "Accessibility Settings…", action: #selector(openAccessibility), keyEquivalent: "")
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: "")
         menu.addItem(withTitle: "Open Log", action: #selector(openBridgeLog), keyEquivalent: "")
@@ -78,13 +74,14 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         refreshDevices()
     }
     @objc private func openBridgeLog() { controller.openBridgeLog() }
-    @objc private func syncApps() { controller.syncApps() }
-    @objc private func applyDialToFocusedApp() { controller.applyDialToFocusedApp() }
     @objc private func openSettings() {
         if settingsWindow == nil {
             settingsWindow = SettingsWindowController(
                 preferences: controller.preferences,
-                onChange: { [weak controller] in controller?.restartBridge() }
+                onChange: { [weak controller] in controller?.restartBridge() },
+                refreshCursorModels: { [weak controller] in
+                    await controller?.syncApps()
+                }
             )
         }
         settingsWindow?.showWindow()
@@ -97,8 +94,6 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         statusRow.title = controller.statusSummary
         statusRow.toolTip = controller.message
         statusItem.button?.toolTip = "Model Dial: \(controller.statusSummary)"
-        refreshModelsRow.isEnabled = controller.bridgeEnabled && controller.port != nil && !controller.isSyncing
-        applyDialRow.isEnabled = controller.canApplyDialToFocusedApp
     }
 
     private func refreshDevices() {

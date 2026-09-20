@@ -1,5 +1,7 @@
 #include "encoder.h"
 
+#include <stdbool.h>
+
 #include "driver/gpio.h"
 #include "driver/pulse_cnt.h"
 #include "driver/rtc_io.h"
@@ -28,9 +30,10 @@
  * active catalog (ChatGPT or Cursor).
  */
 #if defined(AI_MODEL_PROFILE_SUPERMINI)
-static const int s_clk[ENCODER_COUNT] = {4, 1};
-static const int s_dt[ENCODER_COUNT] = {5, 2};
-static const int s_sw[ENCODER_COUNT] = {6, 7};
+/* Default: left knob = model (GPIO4/5/6), right knob = effort (GPIO1/2/7). */
+static const int s_clk[ENCODER_COUNT] = {1, 4};
+static const int s_dt[ENCODER_COUNT] = {2, 5};
+static const int s_sw[ENCODER_COUNT] = {7, 6};
 #else
 static const int s_clk[ENCODER_COUNT] = {41, 1};
 static const int s_dt[ENCODER_COUNT] = {40, 2};
@@ -38,6 +41,20 @@ static const int s_sw[ENCODER_COUNT] = {39, 42};
 #endif
 
 static const char *TAG = "encoder";
+static bool s_swap_dials;
+
+void encoder_set_swap(bool swap)
+{
+    s_swap_dials = swap;
+}
+
+static encoder_id_t mapped_id(encoder_id_t id)
+{
+    if (!s_swap_dials) {
+        return id;
+    }
+    return id == ENCODER_THINKING ? ENCODER_MODEL : ENCODER_THINKING;
+}
 
 static int s_last_clk[ENCODER_COUNT];
 static int s_last_dir[ENCODER_COUNT];
@@ -419,6 +436,7 @@ static void encoder_task(void *arg)
 
 int encoder_delta(encoder_id_t id)
 {
+    id = mapped_id(id);
     if (id < 0 || id >= ENCODER_COUNT) {
         return 0;
     }
@@ -451,6 +469,7 @@ int encoder_hold_paint(void)
 
 int encoder_button_pressed(encoder_id_t id)
 {
+    id = mapped_id(id);
     if (id < 0 || id >= ENCODER_COUNT) {
         return 0;
     }

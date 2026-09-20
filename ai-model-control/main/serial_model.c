@@ -65,14 +65,10 @@ static int handle_line(const char *line, model_fields_t *fields)
         model_fields_t parsed;
         model_parse_name(line + 6, &parsed);
         if (front_title_app() == DESK_RIG) {
-            char shown[MODEL_PARSE_MAX];
-            catalog_rig_display_name(parsed.model, shown, sizeof(shown));
-            int model = catalog_model_index(shown[0] ? shown : parsed.model);
+            int model = catalog_model_index(parsed.model);
             if (model >= 0) {
                 snprintf(parsed.model, sizeof(parsed.model), "%s", catalog_model_at(model));
-            } else if (shown[0]) {
-                snprintf(parsed.model, sizeof(parsed.model), "%s", shown);
-            } else {
+            } else if (!parsed.model[0]) {
                 ESP_LOGW(TAG, "ignore unknown MODEL");
                 return 0;
             }

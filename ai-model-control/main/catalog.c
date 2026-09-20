@@ -17,29 +17,48 @@ static const char *const chatgpt_models[] = {
 static const char *const opencode_models[] = {
     "GPT-6 Astra", "GPT-5.6 Terra", "GPT-5.6 Sol", "GPT-5.6 Luna",
 };
-/* Encoder slots are OpenRouter Latest aliases. Labels match Rig
- * modelDisplayName on the live catalog (`Provider: Model`, then drop a
- * duplicated provider token). */
+/* Encoder slots are OpenRouter Latest aliases. Labels keep the slug provider and omit Latest. */
 static const char *const rig_models[] = {
-    "Grok Latest",
-    "GPT Astra Latest",
-    "GPT Sol Latest",
-    "GPT Terra Latest",
-    "GPT Luna Latest",
-    "Claude Sonnet Latest",
-    "Claude Opus Latest",
-    "Claude Fable Latest",
-    "Flash Latest",
-    "Gemini Flash Latest",
-    "Gemini Pro Latest",
-    "Kimi Latest",
+    "Anthropic Fable",
+    "Anthropic Opus",
+    "Anthropic Sonnet",
+    "DeepSeek Flash",
+    "Google Gemini Flash",
+    "Google Pro",
+    "Moonshot Kimi",
+    "OpenAI Astra",
+    "OpenAI Luna",
+    "OpenAI Sol",
+    "OpenAI Terra",
+    "xAI Grok",
 };
 static const char *const chatgpt_thinking[] = {
     "Light", "Medium", "High", "Extra High", "Max", "Ultra",
 };
+/* Same labels as Rig composer: Auto plus OpenRouter none/low/medium/high/xhigh/max. */
 static const char *const rig_thinking[] = {
-    "Auto", "None", "Light", "Medium", "High", "Extra High", "Max",
+    "Auto", "None", "Low", "Medium", "High", "X-High", "Max",
 };
+/* Same ladder as Rig: Auto through Max whenever the model has reasoning. */
+static const uint8_t rig_default_masks[] = {
+    0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F, 0x7F,
+};
+_Static_assert(COUNT(rig_default_masks) == COUNT(rig_models), "rig effort masks must match models");
+static uint8_t s_rig_effort_mask[COUNT(rig_models)];
+static uint8_t s_rig_host_mask;
+static char s_rig_host_name[96];
+static const char *s_rig_active[COUNT(rig_thinking)];
+static int s_rig_active_count;
+
+#define RIG_HOST_MAX 48
+#define RIG_HOST_NAME 80
+static char s_rig_live[RIG_HOST_MAX][RIG_HOST_NAME];
+static uint8_t s_rig_live_effort[RIG_HOST_MAX];
+static int s_rig_live_count;
+static char s_rig_build[RIG_HOST_MAX][RIG_HOST_NAME];
+static uint8_t s_rig_build_effort[RIG_HOST_MAX];
+static int s_rig_build_count;
+static bool s_rig_building;
 static const char *const cursor_thinking[] = {
     "None", "Minimal", "Low", "Medium", "High", "Extra High", "Max",
 };
@@ -135,11 +154,16 @@ static bool starts_with_token(const char *text, const char *token, const char **
     return **rest != '\0';
 }
 
-/* OpenRouter titles are `Provider: Model`. Drop that prefix, then the same
- * token if it is repeated (`DeepSeek: DeepSeek Flash Latest` → Flash Latest).
- * GPT/Claude/Gemini stay; they are not the catalog provider. */
+/* Matching helper: drop a leading `Provider: ` or `Provider ` so host and panel names align. */
 void catalog_rig_display_name(const char *name, char *out, size_t out_sz)
 {
+    static const char *const titles[] = {
+        "Cognitive Computations", "Hugging Face", "01.AI", "OpenRouter",
+        "Anthropic", "DeepSeek", "Moonshot", "MiniMax", "OpenAI", "Google",
+        "Amazon", "NVIDIA", "Mistral", "Perplexity", "Microsoft", "Inception",
+        "Arcee", "Cohere", "Groq", "Morph", "Meta", "Qwen", "AI21", "IBM",
+        "xAI", "Z.ai",
+    };
     if (!out || out_sz == 0) {
         return;
     }
@@ -166,12 +190,40 @@ void catalog_rig_display_name(const char *name, char *out, size_t out_sz)
     const char *stripped = rest;
     if (provider[0]) {
         starts_with_token(rest, provider, &stripped);
+    } else {
+        for (int i = 0; i < (int)(sizeof(titles) / sizeof(titles[0])); i++) {
+            if (starts_with_token(name, titles[i], &stripped)) {
+                break;
+            }
+        }
     }
     snprintf(out, out_sz, "%s", stripped);
     size_t n = strlen(out);
     while (n && (out[n - 1] == ' ' || out[n - 1] == '\t')) {
         out[--n] = '\0';
     }
+    const char latest[] = " Latest";
+    size_t ln = sizeof(latest) - 1;
+    if (n > ln && strcasecmp(out + n - ln, latest) == 0) {
+        out[n - ln] = '\0';
+    }
+}
+
+static bool rig_labels_match(const char *a, const char *b)
+{
+    if (!a || !b || !a[0] || !b[0]) {
+        return false;
+    }
+    if (strcasecmp(a, b) == 0) {
+        return true;
+    }
+    char sa[96];
+    char sb[96];
+    catalog_rig_display_name(a, sa, sizeof(sa));
+    catalog_rig_display_name(b, sb, sizeof(sb));
+    return (sa[0] && strcasecmp(sa, b) == 0)
+        || (sb[0] && strcasecmp(a, sb) == 0)
+        || (sa[0] && sb[0] && strcasecmp(sa, sb) == 0);
 }
 
 static int rig_full_index(const char *name)
@@ -179,23 +231,167 @@ static int rig_full_index(const char *name)
     if (!name || !name[0]) {
         return -1;
     }
-    int full = table_count(rig_models, COUNT(rig_models), name);
-    if (full >= 0) {
-        return full;
-    }
-    char stripped[96];
-    catalog_rig_display_name(name, stripped, sizeof(stripped));
-    if (stripped[0]) {
-        full = table_count(rig_models, COUNT(rig_models), stripped);
-        if (full >= 0) {
-            return full;
+    for (int i = 0; i < COUNT(rig_models); i++) {
+        if (rig_labels_match(rig_models[i], name)) {
+            return i;
         }
     }
-    if (strcasecmp(name, "DeepSeek Flash Latest") == 0
-        || strcasecmp(stripped, "DeepSeek Flash Latest") == 0) {
-        return table_count(rig_models, COUNT(rig_models), "Flash Latest");
+    return -1;
+}
+
+static int rig_name_index_exact(const char (*slots)[RIG_HOST_NAME], int count, const char *name)
+{
+    if (!name || !name[0] || count <= 0) {
+        return -1;
+    }
+    for (int i = 0; i < count; i++) {
+        if (strcasecmp(slots[i], name) == 0) {
+            return i;
+        }
     }
     return -1;
+}
+
+static int rig_name_index(const char (*slots)[RIG_HOST_NAME], int count, const char *name)
+{
+    if (!name || !name[0] || count <= 0) {
+        return -1;
+    }
+    for (int i = 0; i < count; i++) {
+        if (rig_labels_match(slots[i], name)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void catalog_rig_catalog_begin(void)
+{
+    s_rig_building = true;
+    s_rig_build_count = 0;
+}
+
+void catalog_rig_catalog_add(const char *name, uint8_t effort_mask)
+{
+    if (!s_rig_building) {
+        catalog_rig_catalog_begin();
+    }
+    if (!name || !name[0] || s_rig_build_count >= RIG_HOST_MAX) {
+        return;
+    }
+    if (rig_name_index_exact(s_rig_build, s_rig_build_count, name) >= 0) {
+        return;
+    }
+    snprintf(s_rig_build[s_rig_build_count], RIG_HOST_NAME, "%s", name);
+    s_rig_build_effort[s_rig_build_count] = effort_mask;
+    s_rig_build_count++;
+}
+
+static void sort_rig_build(void)
+{
+    for (int i = 0; i + 1 < s_rig_build_count; i++) {
+        int best = i;
+        for (int j = i + 1; j < s_rig_build_count; j++) {
+            if (strcasecmp(s_rig_build[j], s_rig_build[best]) < 0) {
+                best = j;
+            }
+        }
+        if (best == i) {
+            continue;
+        }
+        char name[RIG_HOST_NAME];
+        memcpy(name, s_rig_build[i], RIG_HOST_NAME);
+        memcpy(s_rig_build[i], s_rig_build[best], RIG_HOST_NAME);
+        memcpy(s_rig_build[best], name, RIG_HOST_NAME);
+        uint8_t mask = s_rig_build_effort[i];
+        s_rig_build_effort[i] = s_rig_build_effort[best];
+        s_rig_build_effort[best] = mask;
+    }
+}
+
+void catalog_rig_catalog_commit(void)
+{
+    if (!s_rig_building) {
+        return;
+    }
+    sort_rig_build();
+    for (int i = 0; i < s_rig_build_count; i++) {
+        snprintf(s_rig_live[i], RIG_HOST_NAME, "%s", s_rig_build[i]);
+        s_rig_live_effort[i] = s_rig_build_effort[i];
+    }
+    s_rig_live_count = s_rig_build_count;
+    s_rig_building = false;
+    s_rig_build_count = 0;
+}
+
+static uint8_t rig_mask_for(const char *model)
+{
+    int live = rig_name_index_exact(s_rig_live, s_rig_live_count, model);
+    if (live < 0) {
+        live = rig_name_index(s_rig_live, s_rig_live_count, model);
+    }
+    if (live >= 0) {
+        return s_rig_live_effort[live];
+    }
+    int slot = rig_full_index(model);
+    if (slot >= 0) {
+        if (s_rig_effort_mask[slot]) {
+            return s_rig_effort_mask[slot];
+        }
+        return slot < COUNT(rig_default_masks) ? rig_default_masks[slot] : 0x7F;
+    }
+    if (s_rig_host_name[0] && model && strcasecmp(model, s_rig_host_name) == 0 && s_rig_host_mask) {
+        return s_rig_host_mask;
+    }
+    return 0x7F;
+}
+
+static const char *const *rig_thinking_table(const char *model, int *count)
+{
+    uint8_t mask = rig_mask_for(model);
+    s_rig_active_count = 0;
+    if (mask == 0) {
+        *count = 0;
+        return rig_thinking;
+    }
+    for (int i = 0; i < COUNT(rig_thinking); i++) {
+        if (mask & (1u << i)) {
+            s_rig_active[s_rig_active_count++] = rig_thinking[i];
+        }
+    }
+    if (s_rig_active_count == 0) {
+        s_rig_active[0] = rig_thinking[0];
+        s_rig_active_count = 1;
+    }
+    *count = s_rig_active_count;
+    return s_rig_active;
+}
+
+void catalog_rig_set_effort_masks(const uint8_t *masks, int n)
+{
+    if (!masks || n <= 0) {
+        return;
+    }
+    int limit = n < COUNT(rig_models) ? n : COUNT(rig_models);
+    for (int i = 0; i < limit; i++) {
+        s_rig_effort_mask[i] = masks[i];
+    }
+}
+
+void catalog_rig_set_host_effort_mask(const char *model, uint8_t mask)
+{
+    int slot = rig_full_index(model);
+    if (slot >= 0) {
+        s_rig_effort_mask[slot] = mask;
+        return;
+    }
+    if (!model || !model[0]) {
+        s_rig_host_name[0] = '\0';
+        s_rig_host_mask = 0;
+        return;
+    }
+    snprintf(s_rig_host_name, sizeof(s_rig_host_name), "%s", model);
+    s_rig_host_mask = mask;
 }
 
 static uint64_t s_enabled = CURSOR_ENABLED_DEFAULT;
@@ -331,8 +527,7 @@ static const char *const *active_thinking(const char *model, int *count)
         return chatgpt_thinking;
     }
     if (front_title_app() == DESK_RIG) {
-        *count = COUNT(rig_thinking);
-        return rig_thinking;
+        return rig_thinking_table(model, count);
     }
     return thinking_table(front_title_is_cursor(), model, count);
 }
@@ -388,7 +583,10 @@ int catalog_model_count(void)
 int catalog_model_count_for(desk_app_t app)
 {
     if (app == DESK_OPENCODE) return COUNT(opencode_models);
-    if (app == DESK_RIG) return rig_enabled_count();
+    if (app == DESK_RIG) {
+        if (s_rig_live_count > 0) return s_rig_live_count;
+        return rig_enabled_count();
+    }
     return catalog_model_count_in(app == DESK_CURSOR);
 }
 
@@ -411,6 +609,10 @@ const char *catalog_model_at_for(desk_app_t app, int index)
         return opencode_models[index];
     }
     if (app == DESK_RIG) {
+        if (s_rig_live_count > 0) {
+            if (index < 0 || index >= s_rig_live_count) return s_rig_live[0];
+            return s_rig_live[index];
+        }
         if (index < 0 || index >= rig_enabled_count()) return rig_models[rig_full_at_enabled(0)];
         return rig_models[rig_full_at_enabled(index)];
     }
@@ -438,6 +640,9 @@ int catalog_model_index_for(desk_app_t app, const char *name)
         return table_count(opencode_models, COUNT(opencode_models), name);
     }
     if (app == DESK_RIG) {
+        if (s_rig_live_count > 0) {
+            return rig_name_index(s_rig_live, s_rig_live_count, name);
+        }
         return rig_enabled_index(rig_full_index(name));
     }
     return catalog_model_index_in(app == DESK_CURSOR, name);
@@ -532,6 +737,7 @@ bool catalog_model_known(const char *name)
     }
     return cursor_index(name) >= 0
         || table_count(opencode_models, COUNT(opencode_models), name) >= 0
+        || rig_name_index(s_rig_live, s_rig_live_count, name) >= 0
         || rig_full_index(name) >= 0;
 }
 
@@ -544,8 +750,10 @@ const char *catalog_default_model_for(desk_app_t app)
 {
     if (app == DESK_OPENCODE) return "GPT-5.6 Luna";
     if (app == DESK_RIG) {
-        const char *want = "Grok Latest";
-        return catalog_model_index_for(app, want) >= 0 ? want : catalog_model_at_for(app, 0);
+        if (s_rig_live_count > 0) return s_rig_live[0];
+        int idx = catalog_model_index_for(app, "xAI Grok");
+        if (idx < 0) idx = catalog_model_index_for(app, "Grok");
+        return idx >= 0 ? catalog_model_at_for(app, idx) : catalog_model_at_for(app, 0);
     }
     return catalog_default_model_in(app == DESK_CURSOR);
 }
@@ -569,7 +777,9 @@ int catalog_thinking_count_for(desk_app_t app, const char *model)
         return 0;
     }
     if (app == DESK_RIG) {
-        return COUNT(rig_thinking);
+        int count;
+        rig_thinking_table(model, &count);
+        return count;
     }
     return catalog_thinking_count_in(app == DESK_CURSOR, model);
 }
@@ -594,8 +804,15 @@ int catalog_thinking_level(const char *model, const char *name)
     }
     if (count == 0) return 0;
     if (front_title_app() == DESK_RIG) {
-        if (strcasecmp(name, "Low") == 0 || strcasecmp(name, "Minimal") == 0) {
-            return catalog_thinking_level(model, "Light");
+        if (strcasecmp(name, "Light") == 0) {
+            return catalog_thinking_level(model, "Low");
+        }
+        if (strcasecmp(name, "Extra High") == 0 || strcasecmp(name, "xhigh") == 0
+            || strcasecmp(name, "x-high") == 0) {
+            return catalog_thinking_level(model, "X-High");
+        }
+        if (strcasecmp(name, "Minimal") == 0) {
+            return catalog_thinking_level(model, "None");
         }
         return 0;
     }
@@ -646,6 +863,9 @@ const char *catalog_thinking_name(const char *model, int level)
     const char *const *names = active_thinking(model, &count);
     if (count == 0) return "Unsupported";
     if (level < 1 || level > count) {
+        if (front_title_app() == DESK_RIG) {
+            return names[0];
+        }
         return names[count > 1 ? 1 : 0];
     }
     return names[level - 1];

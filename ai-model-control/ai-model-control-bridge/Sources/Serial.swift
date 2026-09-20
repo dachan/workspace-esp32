@@ -13,8 +13,14 @@ final class SerialSession {
     let baud: Int
     private let chatGPTThinkingMask: UInt64
     private let cursorModelMask: UInt64
+    private let dialSwap: Bool
     private var rigModelMask: UInt64
     private var rigModelMaskSent: UInt64?
+    private var rigEffortMasks: [UInt8] = []
+    private var rigEffortMasksSent: [UInt8]?
+    private var rigCatalogWanted: [String] = []
+    private var rigCatalogIndex = 0
+    private var rigCatalogSent = true
     private var fd: Int32 = -1
     private(set) var connectionGeneration: UInt64 = 0
     var isConnected: Bool { fd >= 0 }
@@ -28,8 +34,10 @@ final class SerialSession {
     private var panelFrontSent: String?
     private var hostModelWanted: String?
     private var hostThinkingWanted: String?
+    private var hostEffortMaskWanted: UInt8?
     private var hostModelSent: String?
     private var hostThinkingSent: String?
+    private var hostEffortMaskSent: UInt8?
     private var acknowledgements: [SettingKind: UInt64] = [:]
     private var outgoing: [UInt8] = []
     private var outgoingOffset = 0
@@ -40,13 +48,15 @@ final class SerialSession {
         baud: Int,
         chatGPTThinkingMask: UInt64 = Catalog.defaultChatGPTThinkingMask,
         cursorModelMask: UInt64 = 0xFF,
-        rigModelMask: UInt64 = 0xFFF
+        rigModelMask: UInt64 = 0xFFF,
+        dialSwap: Bool = false
     ) {
         self.port = port
         self.baud = baud
         self.chatGPTThinkingMask = chatGPTThinkingMask
         self.cursorModelMask = cursorModelMask
         self.rigModelMask = rigModelMask
+        self.dialSwap = dialSwap
     }
 
     private func open() throws {
@@ -90,8 +100,12 @@ final class SerialSession {
         acknowledgements.removeAll()
         configurationStep = 0
         rigModelMaskSent = nil
+        rigEffortMasksSent = nil
+        rigCatalogIndex = 0
+        rigCatalogSent = rigCatalogWanted.isEmpty
         hostModelSent = nil
         hostThinkingSent = nil
+        hostEffortMaskSent = nil
     }
 
     func readLines() -> [String] {
@@ -155,8 +169,12 @@ final class SerialSession {
         nextTimeAt = 0
         configurationStep = 0
         rigModelMaskSent = nil
+        rigEffortMasksSent = nil
+        rigCatalogIndex = 0
+        rigCatalogSent = rigCatalogWanted.isEmpty
         hostModelSent = nil
         hostThinkingSent = nil
+        hostEffortMaskSent = nil
     }
 
     func setPanelFront(_ title: String) {
@@ -171,9 +189,35 @@ final class SerialSession {
         }
     }
 
-    func setHostPanel(model: String, thinking: String) {
+    func setRigEffortMasks(_ masks: [UInt8]) {
+        if masks != rigEffortMasks {
+            rigEffortMasks = masks
+            rigEffortMasksSent = nil
+        }
+    }
+
+    func setRigCatalog(_ entries: [(name: String, mask: UInt8)]) {
+        var lines = ["CONFIG RIG_CLEAR"]
+        for entry in entries {
+            let name = String(entry.name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(79))
+            guard !name.isEmpty else { continue }
+            lines.append("CONFIG RIG_ADD \(String(format: "%02x", entry.mask)) \(name)")
+        }
+        lines.append("CONFIG RIG_END")
+        if lines != rigCatalogWanted {
+            rigCatalogWanted = lines
+            rigCatalogIndex = 0
+            rigCatalogSent = false
+        }
+    }
+
+    func setHostPanel(model: String, thinking: String, effortMask: UInt8? = nil) {
         hostModelWanted = model
         hostThinkingWanted = thinking
+        if hostEffortMaskWanted != effortMask {
+            hostEffortMaskWanted = effortMask
+            hostEffortMaskSent = nil
+        }
     }
 
     func flushWrites() {
@@ -189,9 +233,11 @@ final class SerialSession {
                     panelFrontSent = wanted
                     hostModelSent = nil
                     hostThinkingSent = nil
+                    hostEffortMaskSent = nil
                     if wanted != "Rig" {
                         hostModelWanted = nil
                         hostThinkingWanted = nil
+                        hostEffortMaskWanted = nil
                     }
                 } else if syncPending {
                     // READY retries recover a reset without periodic state polling.
@@ -204,13 +250,31 @@ final class SerialSession {
                 } else if configurationStep == 1 {
                     line = "CONFIG CURSOR_MODELS \(String(format: "%016llx", cursorModelMask))"
                     configurationStep = 2
-                } else if configurationStep == 2 || rigModelMaskSent != rigModelMask {
-                    line = "CONFIG RIG_MODELS \(String(format: "%016llx", rigModelMask))"
+                } else if configurationStep == 2 {
+                    line = "CONFIG DIAL_SWAP \(dialSwap ? 1 : 0)"
                     configurationStep = 3
+                } else if !rigCatalogSent, rigCatalogIndex < rigCatalogWanted.count {
+                    line = rigCatalogWanted[rigCatalogIndex]
+                    rigCatalogIndex += 1
+                    if rigCatalogIndex >= rigCatalogWanted.count {
+                        rigCatalogSent = true
+                    }
+                    configurationStep = 4
+                } else if rigCatalogWanted.isEmpty, configurationStep == 3 || rigModelMaskSent != rigModelMask {
+                    line = "CONFIG RIG_MODELS \(String(format: "%016llx", rigModelMask))"
+                    configurationStep = 4
                     rigModelMaskSent = rigModelMask
+                } else if rigCatalogWanted.isEmpty, !rigEffortMasks.isEmpty, configurationStep == 4 || rigEffortMasksSent != rigEffortMasks {
+                    line = "CONFIG RIG_EFFORTS \(rigEffortMasks.map { String(format: "%02x", $0) }.joined())"
+                    configurationStep = 5
+                    rigEffortMasksSent = rigEffortMasks
                 } else if let model = hostModelWanted, model != hostModelSent, panelFrontSent == "Rig" {
                     line = "MODEL \(model)"
                     hostModelSent = model
+                    hostEffortMaskSent = nil
+                } else if let mask = hostEffortMaskWanted, mask != hostEffortMaskSent, panelFrontSent == "Rig" {
+                    line = "CONFIG RIG_HOST_EFFORTS \(String(format: "%02x", mask)) \(hostModelWanted ?? "")"
+                    hostEffortMaskSent = mask
                 } else if let thinking = hostThinkingWanted, thinking != hostThinkingSent, panelFrontSent == "Rig" {
                     line = "THINKING \(thinking)"
                     hostThinkingSent = thinking

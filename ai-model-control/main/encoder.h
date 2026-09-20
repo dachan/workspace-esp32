@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdbool.h>
+
 #include "esp_err.h"
 
 typedef enum {
@@ -9,6 +11,9 @@ typedef enum {
 } encoder_id_t;
 
 esp_err_t encoder_init(void);
+
+/* 0: left = model, right = effort. 1: left = effort, right = model. */
+void encoder_set_swap(bool swap);
 
 /* Signed step count since last poll (thinking may be more than ±1). */
 int encoder_delta(encoder_id_t id);

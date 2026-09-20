@@ -16,23 +16,14 @@ enum Catalog {
         "GPT-5.6 Sol",
         "GPT-5.6 Luna",
     ]
-    // OpenRouter Latest aliases after Rig `modelDisplayName` (live catalog).
+    // OpenRouter Latest aliases. Panel labels keep the slug provider and omit Latest.
     static let rigModels = [
-        "Grok Latest",
-        "GPT Astra Latest",
-        "GPT Sol Latest",
-        "GPT Terra Latest",
-        "GPT Luna Latest",
-        "Claude Sonnet Latest",
-        "Claude Opus Latest",
-        "Claude Fable Latest",
-        "Flash Latest",
-        "Gemini Flash Latest",
-        "Gemini Pro Latest",
-        "Kimi Latest",
+        "xAI Grok", "OpenAI Astra", "OpenAI Sol", "OpenAI Terra", "OpenAI Luna",
+        "Anthropic Sonnet", "Anthropic Opus", "Anthropic Fable", "DeepSeek Flash",
+        "Google Gemini Flash", "Google Pro", "Moonshot Kimi",
     ]
     static let rigThinking = [
-        "Auto", "None", "Light", "Medium", "High", "Extra High", "Max",
+        "Auto", "None", "Low", "Medium", "High", "X-High", "Max",
     ]
 
     private struct CursorModel {
@@ -150,20 +141,16 @@ enum Catalog {
     }
 
     static func rigModelIndex(_ raw: String) -> Int? {
-        let stripped = rigDisplayName(raw)
-        if let exact = rigModels.firstIndex(where: {
-            $0.caseInsensitiveCompare(raw) == .orderedSame
-                || $0.caseInsensitiveCompare(stripped) == .orderedSame
-        }) {
+        if let exact = rigModels.firstIndex(where: { panelNamesMatch($0, raw) }) {
             return exact
         }
         return rigPanelName(slug: raw, name: raw).flatMap { name in
-            rigModels.firstIndex { $0.caseInsensitiveCompare(name) == .orderedSame }
+            rigModels.firstIndex { panelNamesMatch($0, name) }
         }
     }
 
     static func rigCanonicalSlug(_ panelName: String) -> String? {
-        rigSlots.first { $0.name.caseInsensitiveCompare(panelName) == .orderedSame }?.slug
+        rigSlots.first { panelNamesMatch($0.name, panelName) }?.slug
     }
 
     /// Command-apostrophe's native list is the reverse of the encoder order.
@@ -276,7 +263,13 @@ enum Catalog {
     }
 
     static func modelName(_ raw: String) -> String? {
-        chatgptModelName(raw) ?? cursorModelName(raw) ?? openCodeModelName(raw) ?? rigModelName(raw)
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return nil }
+        return chatgptModelName(trimmed)
+            ?? cursorModelName(trimmed)
+            ?? openCodeModelName(trimmed)
+            ?? rigModelName(trimmed)
+            ?? trimmed
     }
 
     static func chatgptThinkingName(_ raw: String) -> String? {
@@ -289,13 +282,14 @@ enum Catalog {
 
     static func thinkingName(_ raw: String) -> String? {
         let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty { return nil }
         if let exact = rigThinking.first(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
             return exact
         }
         if cursorThinking.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
             return cursorThinkingName(raw)
         }
-        return chatgptThinkingName(raw) ?? cursorThinkingName(raw)
+        return chatgptThinkingName(raw) ?? cursorThinkingName(raw) ?? name
     }
 
     static func rigEnabledMask<T: Collection>(from models: T) -> UInt64
@@ -310,49 +304,83 @@ enum Catalog {
         return mask == 0 ? 1 : mask
     }
 
-    static func rigPanelModel(from focus: RigClient.Focus, active: [RigClient.Model]) -> String {
-        if let latest = rigLatestName(forSlug: focus.main) { return latest }
-        let stripped = rigDisplayName(focus.name ?? "", slug: focus.main)
-        if !stripped.isEmpty { return stripped }
-        if let option = active.first(where: { normalizeSlug($0.slug) == normalizeSlug(focus.main) }) {
-            if let latest = rigLatestName(forSlug: option.slug) { return latest }
-            let named = rigDisplayName(option.name, slug: option.slug)
-            if !named.isEmpty { return named }
+    static func rigEffortMask(from efforts: [String]) -> UInt8 {
+        // Rig composer lists Auto–Max whenever the model has reasoning.
+        efforts.isEmpty ? 0 : 0x7F
+    }
+
+    static func rigEffortMasks(from models: [RigClient.Model]) -> [UInt8] {
+        rigSlots.map { slot in
+            guard let model = models.first(where: { normalizeSlug($0.slug) == normalizeSlug(slot.slug) }) else {
+                return 0
+            }
+            return model.efforts.isEmpty ? 0 : rigEffortMask(from: model.efforts)
         }
-        return rigModels[0]
+    }
+
+    static func rigPanelModel(from focus: RigClient.Focus, active: [RigClient.Model]) -> String {
+        let rows = rigCatalogRows(from: active)
+        if let hit = rows.first(where: { normalizeSlug($0.slug) == normalizeSlug(focus.main) }) {
+            return hit.name
+        }
+        return rows.first?.name ?? rigModels[0]
     }
 
     static func rigPanelThinking(from effort: String) -> String {
         switch effort.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "auto": return "Auto"
-        case "none": return "None"
-        case "low", "light", "minimal": return "Light"
+        case "none", "minimal": return "None"
+        case "low", "light": return "Low"
         case "medium": return "Medium"
         case "high": return "High"
-        case "xhigh", "x-high": return "Extra High"
+        case "xhigh", "x-high", "extra high", "extra-high": return "X-High"
         case "max": return "Max"
         default: return "Auto"
         }
     }
 
-    static func rigPanelName(slug: String, name: String?) -> String? {
-        if let latest = rigLatestName(forSlug: slug) { return latest }
-        let shown = rigDisplayName(name ?? "", slug: slug)
+    static func rigPanelName(slug: String, name: String?, among: [String] = []) -> String? {
+        let shown = rigDisplayName(name ?? "", slug: slug, among: among)
         return shown.isEmpty ? nil : shown
+    }
+
+    static func rigCatalogEntries(from models: [RigClient.Model]) -> [(name: String, mask: UInt8)] {
+        rigCatalogRows(from: models).map { (name: $0.name, mask: $0.mask) }
+    }
+
+    static func rigCatalogRows(from models: [RigClient.Model]) -> [(slug: String, name: String, mask: UInt8)] {
+        let peers = models.map(\.slug)
+        var rows = models.compactMap { model -> (slug: String, name: String, mask: UInt8)? in
+            let name = collapsed(stripLatest(displayNameFromSlug(model.slug, among: peers)))
+            guard !name.isEmpty else { return nil }
+            let mask: UInt8 = model.efforts.isEmpty ? 0 : 0x7F
+            return (model.slug, name, mask)
+        }
+        let unique = uniquifyRigLabels(rows.map { (slug: $0.slug, name: $0.name) })
+        for i in rows.indices {
+            rows[i].name = withProviderPrefix(unique[i], slug: rows[i].slug)
+        }
+        return rows
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     static func enabledSlug(forPanel name: String, in models: [RigClient.Model]) -> String? {
         if let exact = models.first(where: { $0.slug.caseInsensitiveCompare(name) == .orderedSame }) {
             return exact.slug
         }
+        if let row = rigCatalogRows(from: models).first(where: { panelNamesMatch($0.name, name) }) {
+            return row.slug
+        }
         if let named = models.first(where: {
-            $0.name.caseInsensitiveCompare(name) == .orderedSame
-                || rigDisplayName($0.name, slug: $0.slug)
-                    .caseInsensitiveCompare(rigDisplayName(name)) == .orderedSame
+            panelNamesMatch($0.name, name)
+                || panelNamesMatch(rigDisplayName($0.name, slug: $0.slug), name)
         }) {
             return named.slug
         }
-        if let mapped = models.first(where: { rigPanelName(slug: $0.slug, name: $0.name) == name }) {
+        if let mapped = models.first(where: {
+            guard let panel = rigPanelName(slug: $0.slug, name: $0.name) else { return false }
+            return panelNamesMatch(panel, name)
+        }) {
             return mapped.slug
         }
         if let canonical = rigCanonicalSlug(name),
@@ -370,66 +398,19 @@ enum Catalog {
 
     // Keep aligned with firmware `rig_models` and Rig Latest aliases.
     private static let rigSlots: [RigSlot] = [
-        .init(name: "Grok Latest", slug: "~x-ai/grok-latest"),
-        .init(name: "GPT Astra Latest", slug: "~openai/gpt-astra-latest"),
-        .init(name: "GPT Sol Latest", slug: "~openai/gpt-sol-latest"),
-        .init(name: "GPT Terra Latest", slug: "~openai/gpt-terra-latest"),
-        .init(name: "GPT Luna Latest", slug: "~openai/gpt-luna-latest"),
-        .init(name: "Claude Sonnet Latest", slug: "~anthropic/claude-sonnet-latest"),
-        .init(name: "Claude Opus Latest", slug: "~anthropic/claude-opus-latest"),
-        .init(name: "Claude Fable Latest", slug: "~anthropic/claude-fable-latest"),
-        .init(name: "Flash Latest", slug: "~deepseek/deepseek-flash-latest"),
-        .init(name: "Gemini Flash Latest", slug: "~google/gemini-flash-latest"),
-        .init(name: "Gemini Pro Latest", slug: "~google/gemini-pro-latest"),
-        .init(name: "Kimi Latest", slug: "~moonshotai/kimi-latest"),
+        .init(name: "Anthropic Fable", slug: "~anthropic/claude-fable-latest"),
+        .init(name: "Anthropic Opus", slug: "~anthropic/claude-opus-latest"),
+        .init(name: "Anthropic Sonnet", slug: "~anthropic/claude-sonnet-latest"),
+        .init(name: "DeepSeek Flash", slug: "~deepseek/deepseek-flash-latest"),
+        .init(name: "Google Gemini Flash", slug: "~google/gemini-flash-latest"),
+        .init(name: "Google Pro", slug: "~google/gemini-pro-latest"),
+        .init(name: "Moonshot Kimi", slug: "~moonshotai/kimi-latest"),
+        .init(name: "OpenAI Astra", slug: "~openai/gpt-astra-latest"),
+        .init(name: "OpenAI Luna", slug: "~openai/gpt-luna-latest"),
+        .init(name: "OpenAI Sol", slug: "~openai/gpt-sol-latest"),
+        .init(name: "OpenAI Terra", slug: "~openai/gpt-terra-latest"),
+        .init(name: "xAI Grok", slug: "~x-ai/grok-latest"),
     ]
-
-    private static func index(_ raw: String, in names: [String], aliases: [String: Int]) -> Int? {
-        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let index = names.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
-            return index
-        }
-        return aliases[name.lowercased()]
-    }
-
-    /// Same rules as Rig `modelDisplayName` on the OpenRouter catalog.
-    static func rigDisplayName(_ raw: String, slug: String? = nil) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return trimmed }
-        var provider: String?
-        var model = trimmed
-        if let colon = trimmed.range(of: ":"),
-           trimmed.distance(from: trimmed.startIndex, to: colon.lowerBound) <= 40,
-           colon.upperBound < trimmed.endIndex,
-           trimmed[colon.upperBound] == " "
-        {
-            provider = String(trimmed[..<colon.lowerBound]).trimmingCharacters(in: .whitespaces)
-            model = String(trimmed[trimmed.index(after: colon.upperBound)...]).trimmingCharacters(in: .whitespaces)
-        }
-        model = stripLeadingProvider(model, provider)
-        if let slug {
-            let key = openRouterProvider(slug)
-            model = stripLeadingProvider(model, providerLabels[key] ?? key)
-        }
-        if !model.isEmpty { return model }
-        if let slug { return slug.split(separator: "/").last.map(String.init) ?? trimmed }
-        return trimmed
-    }
-
-    static func rigLatestName(forSlug slug: String) -> String? {
-        let id = normalizeSlug(slug)
-        return rigSlots.first { normalizeSlug($0.slug) == id }?.name
-    }
-
-    private static func normalizeSlug(_ slug: String) -> String {
-        slug.trimmingCharacters(in: CharacterSet(charactersIn: "~")).lowercased()
-    }
-
-    private static func openRouterProvider(_ slug: String) -> String {
-        let normalized = normalizeSlug(slug)
-        let raw = normalized.split(separator: "/", maxSplits: 1).first.map(String.init) ?? normalized
-        return raw.drop { !$0.isLetter && !$0.isNumber }.isEmpty ? raw : String(raw.drop { !$0.isLetter && !$0.isNumber })
-    }
 
     private static let providerLabels: [String: String] = [
         "01-ai": "01.AI",
@@ -461,13 +442,209 @@ enum Catalog {
         "z-ai": "Z.ai",
     ]
 
-    private static func stripLeadingProvider(_ model: String, _ provider: String?) -> String {
-        let label = provider?.trimmingCharacters(in: .whitespaces) ?? ""
-        guard !label.isEmpty else { return model }
-        let prefix = label + " "
-        if model.count > prefix.count, model.lowercased().hasPrefix(prefix.lowercased()) {
-            return String(model.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+    private static func index(_ raw: String, in names: [String], aliases: [String: Int]) -> Int? {
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let index = names.firstIndex(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) {
+            return index
         }
-        return model
+        return aliases[name.lowercased()]
+    }
+
+    /// Panel label: slug provider plus short name, no colon, no Latest.
+    static func rigDisplayName(_ raw: String, slug: String? = nil, among: [String] = []) -> String {
+        if let slug, slug.contains("/") {
+            let peers = among.isEmpty ? rigSlots.map(\.slug) : among
+            return withProviderPrefix(displayNameFromSlug(slug, among: peers), slug: slug)
+        }
+        return collapsed(stripLatest(normalizeColonProvider(raw)))
+    }
+
+    static func rigLatestName(forSlug slug: String) -> String? {
+        let id = normalizeSlug(slug)
+        guard rigSlots.contains(where: { normalizeSlug($0.slug) == id }) else { return nil }
+        return withProviderPrefix(displayNameFromSlug(slug, among: rigSlots.map(\.slug)), slug: slug)
+    }
+
+    private static func providerLabel(for slug: String) -> String {
+        let key = openRouterProvider(slug).lowercased()
+        return providerLabels[key] ?? titlePathToken(key)
+    }
+
+    private static func withProviderPrefix(_ name: String, slug: String) -> String {
+        let product = collapsed(stripLatest(name))
+        let label = providerLabel(for: slug)
+        guard !product.isEmpty else { return label }
+        guard !label.isEmpty else { return product }
+        if product.caseInsensitiveCompare(label) == .orderedSame { return product }
+        if product.lowercased().hasPrefix(label.lowercased() + " ") { return product }
+        return collapsed(label + " " + product)
+    }
+
+    private static func normalizeColonProvider(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let colon = trimmed.range(of: ":"),
+           trimmed.distance(from: trimmed.startIndex, to: colon.lowerBound) <= 40,
+           colon.upperBound < trimmed.endIndex,
+           trimmed[colon.upperBound] == " "
+        {
+            let provider = String(trimmed[..<colon.lowerBound])
+            let rest = String(trimmed[trimmed.index(after: colon.upperBound)...])
+                .trimmingCharacters(in: .whitespaces)
+            return collapsed(provider + " " + rest)
+        }
+        return trimmed
+    }
+
+    static func stripProviderPrefix(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let colon = trimmed.range(of: ":"),
+           trimmed.distance(from: trimmed.startIndex, to: colon.lowerBound) <= 40,
+           colon.upperBound < trimmed.endIndex,
+           trimmed[colon.upperBound] == " "
+        {
+            return String(trimmed[trimmed.index(after: colon.upperBound)...]).trimmingCharacters(in: .whitespaces)
+        }
+        for label in Set(providerLabels.values) {
+            let prefix = label + " "
+            if trimmed.count > prefix.count, trimmed.lowercased().hasPrefix(prefix.lowercased()) {
+                return String(trimmed.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return trimmed
+    }
+
+    static func panelNamesMatch(_ a: String, _ b: String) -> Bool {
+        let left = stripLatest(a.trimmingCharacters(in: .whitespacesAndNewlines))
+        let right = stripLatest(b.trimmingCharacters(in: .whitespacesAndNewlines))
+        if left.caseInsensitiveCompare(right) == .orderedSame { return true }
+        let ls = stripLatest(stripProviderPrefix(left))
+        let rs = stripLatest(stripProviderPrefix(right))
+        return ls.caseInsensitiveCompare(right) == .orderedSame
+            || left.caseInsensitiveCompare(rs) == .orderedSame
+            || ls.caseInsensitiveCompare(rs) == .orderedSame
+    }
+
+    static func stripLatest(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let suffix = " latest"
+        if trimmed.lowercased().hasSuffix(suffix), trimmed.count > suffix.count {
+            return String(trimmed.dropLast(suffix.count)).trimmingCharacters(in: .whitespaces)
+        }
+        return trimmed
+    }
+
+    static func collapsed(_ raw: String) -> String {
+        raw.split { $0.isWhitespace }.joined(separator: " ")
+    }
+
+    static func uniquifyRigLabels(_ rows: [(slug: String, name: String)]) -> [String] {
+        var names = rows.map { collapsed($0.name) }
+        func key(_ value: String) -> String { value.lowercased() }
+        func dupes() -> Set<String> {
+            var counts: [String: Int] = [:]
+            for name in names { counts[key(name), default: 0] += 1 }
+            return Set(counts.compactMap { $0.value > 1 ? $0.key : nil })
+        }
+        var colliding = dupes()
+        if !colliding.isEmpty {
+            let peers = rows.map(\.slug)
+            for i in names.indices where colliding.contains(key(names[i])) {
+                let slug = rows[i].slug
+                if pathParts(slug).last.map(isLatestToken) == true {
+                    names[i] = collapsed(displayNameFromSlug(slug, among: peers))
+                } else {
+                    names[i] = collapsed(fullNameFromSlug(slug))
+                }
+            }
+        }
+        colliding = dupes()
+        if !colliding.isEmpty {
+            for i in names.indices where colliding.contains(key(names[i])) {
+                names[i] = collapsed(fullNameFromSlug(rows[i].slug))
+            }
+        }
+        return names
+    }
+
+    private static func normalizeSlug(_ slug: String) -> String {
+        slug.trimmingCharacters(in: CharacterSet(charactersIn: "~")).lowercased()
+    }
+
+    private static func openRouterProvider(_ slug: String) -> String {
+        let normalized = normalizeSlug(slug)
+        let raw = normalized.split(separator: "/", maxSplits: 1).first.map(String.init) ?? normalized
+        let trimmed = String(raw.drop { !$0.isLetter && !$0.isNumber })
+        return trimmed.isEmpty ? raw : trimmed
+    }
+
+    private static func slugModelId(_ slug: String) -> String {
+        let bare = normalizeSlug(slug).split(separator: ":").first.map(String.init) ?? normalizeSlug(slug)
+        if let slash = bare.firstIndex(of: "/") {
+            return String(bare[bare.index(after: slash)...]).lowercased()
+        }
+        return bare.lowercased()
+    }
+
+    private static func pathParts(_ slug: String) -> [String] {
+        slugModelId(slug).split { $0 == "-" || $0 == "_" }.map(String.init).filter { !$0.isEmpty }
+    }
+
+    private static func isLatestToken(_ part: String) -> Bool {
+        part.caseInsensitiveCompare("latest") == .orderedSame
+    }
+
+    private static func isProductWord(_ part: String) -> Bool {
+        if isLatestToken(part) { return false }
+        if part.first?.isNumber == true { return false }
+        return part.filter(\.isLetter).count >= 2
+    }
+
+    private static func titlePathToken(_ part: String) -> String {
+        let lower = part.lowercased()
+        if lower == "gpt" { return "GPT" }
+        if lower == "glm" { return "GLM" }
+        if part.first?.isNumber == true { return part }
+        return part.prefix(1).uppercased() + part.dropFirst().lowercased()
+    }
+
+    private static func shortNameFromSlug(_ slug: String, keepLatest: Bool = false) -> (label: String, droppedFamily: Bool) {
+        let parts = pathParts(slug)
+        guard !parts.isEmpty else { return (slug, false) }
+        let latest = isLatestToken(parts.last ?? "")
+        let core = latest ? Array(parts.dropLast()) : parts
+        let family = core.first ?? ""
+        var product = core
+        var droppedFamily = false
+        if core.count > 1, core.dropFirst().contains(where: isProductWord) {
+            product = Array(core.dropFirst())
+            droppedFamily = true
+        }
+        var words = product.map(titlePathToken)
+        if keepLatest && latest { words.append("Latest") }
+        let label = words.joined(separator: " ")
+        return (label.isEmpty ? titlePathToken(family) : label, droppedFamily)
+    }
+
+    private static func fullNameFromSlug(_ slug: String, keepLatest: Bool = false) -> String {
+        let parts = pathParts(slug)
+        let latest = parts.last.map(isLatestToken) ?? false
+        let core = latest ? Array(parts.dropLast()) : parts
+        var words = core.map(titlePathToken)
+        if keepLatest && latest { words.append("Latest") }
+        return words.joined(separator: " ")
+    }
+
+    static func displayNameFromSlug(_ slug: String, among: [String] = [], keepLatest: Bool = false) -> String {
+        let selfName = shortNameFromSlug(slug, keepLatest: keepLatest)
+        if !selfName.droppedFamily || among.isEmpty { return selfName.label }
+        let id = slugModelId(slug)
+        let provider = openRouterProvider(slug).lowercased()
+        let repeatsProvider = id == provider || id.hasPrefix(provider + "-")
+        let collide = among.contains { other in
+            guard normalizeSlug(other) != normalizeSlug(slug) else { return false }
+            return shortNameFromSlug(other, keepLatest: keepLatest).label.caseInsensitiveCompare(selfName.label) == .orderedSame
+        }
+        if !collide || repeatsProvider { return selfName.label }
+        return fullNameFromSlug(slug, keepLatest: keepLatest)
     }
 }
