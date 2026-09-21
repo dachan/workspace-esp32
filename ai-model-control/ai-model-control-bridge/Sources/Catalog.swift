@@ -362,7 +362,7 @@ enum Catalog {
             rows[i].name = withProviderPrefix(unique[i], slug: rows[i].slug)
         }
         return rows
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedDescending }
     }
 
     static func enabledSlug(forPanel name: String, in models: [RigClient.Model]) -> String? {
@@ -399,18 +399,18 @@ enum Catalog {
 
     // Keep aligned with firmware `rig_models` and Rig Latest aliases.
     private static let rigSlots: [RigSlot] = [
-        .init(name: "Anthropic Fable", slug: "~anthropic/claude-fable-latest"),
-        .init(name: "Anthropic Opus", slug: "~anthropic/claude-opus-latest"),
-        .init(name: "Anthropic Sonnet", slug: "~anthropic/claude-sonnet-latest"),
-        .init(name: "DeepSeek Flash", slug: "~deepseek/deepseek-flash-latest"),
-        .init(name: "Google Gemini Flash", slug: "~google/gemini-flash-latest"),
-        .init(name: "Google Pro", slug: "~google/gemini-pro-latest"),
-        .init(name: "Moonshot Kimi", slug: "~moonshotai/kimi-latest"),
-        .init(name: "OpenAI Astra", slug: "~openai/gpt-astra-latest"),
-        .init(name: "OpenAI Luna", slug: "~openai/gpt-luna-latest"),
-        .init(name: "OpenAI Sol", slug: "~openai/gpt-sol-latest"),
-        .init(name: "OpenAI Terra", slug: "~openai/gpt-terra-latest"),
         .init(name: "xAI Grok", slug: "~x-ai/grok-latest"),
+        .init(name: "OpenAI Terra", slug: "~openai/gpt-terra-latest"),
+        .init(name: "OpenAI Sol", slug: "~openai/gpt-sol-latest"),
+        .init(name: "OpenAI Luna", slug: "~openai/gpt-luna-latest"),
+        .init(name: "OpenAI Astra", slug: "~openai/gpt-astra-latest"),
+        .init(name: "Moonshot Kimi", slug: "~moonshotai/kimi-latest"),
+        .init(name: "Google Pro", slug: "~google/gemini-pro-latest"),
+        .init(name: "Google Gemini Flash", slug: "~google/gemini-flash-latest"),
+        .init(name: "DeepSeek Flash", slug: "~deepseek/deepseek-flash-latest"),
+        .init(name: "Anthropic Sonnet", slug: "~anthropic/claude-sonnet-latest"),
+        .init(name: "Anthropic Opus", slug: "~anthropic/claude-opus-latest"),
+        .init(name: "Anthropic Fable", slug: "~anthropic/claude-fable-latest"),
     ]
 
     private static let providerLabels: [String: String] = [

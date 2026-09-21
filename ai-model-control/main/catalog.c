@@ -19,18 +19,18 @@ static const char *const opencode_models[] = {
 };
 /* Encoder slots are OpenRouter Latest aliases. Labels keep the slug provider and omit Latest. */
 static const char *const rig_models[] = {
-    "Anthropic Fable",
-    "Anthropic Opus",
-    "Anthropic Sonnet",
-    "DeepSeek Flash",
-    "Google Gemini Flash",
-    "Google Pro",
-    "Moonshot Kimi",
-    "OpenAI Astra",
-    "OpenAI Luna",
-    "OpenAI Sol",
-    "OpenAI Terra",
     "xAI Grok",
+    "OpenAI Terra",
+    "OpenAI Sol",
+    "OpenAI Luna",
+    "OpenAI Astra",
+    "Moonshot Kimi",
+    "Google Pro",
+    "Google Gemini Flash",
+    "DeepSeek Flash",
+    "Anthropic Sonnet",
+    "Anthropic Opus",
+    "Anthropic Fable",
 };
 static const char *const chatgpt_thinking[] = {
     "Light", "Medium", "High", "Extra High", "Max", "Ultra",
@@ -305,7 +305,7 @@ static void sort_rig_build(void)
     for (int i = 0; i + 1 < s_rig_build_count; i++) {
         int best = i;
         for (int j = i + 1; j < s_rig_build_count; j++) {
-            if (strcasecmp(s_rig_build[j], s_rig_build[best]) < 0) {
+            if (strcasecmp(s_rig_build[j], s_rig_build[best]) > 0) {
                 best = j;
             }
         }

@@ -75,7 +75,7 @@ The Model Dial Settings window controls which ChatGPT effort levels and Cursor
 models are available on the encoders, and which knob changes the model versus
 effort (left is model by default). Its Cursor section can refresh the model
 list from Cursor; the bridge sends those masks and the dial mapping to the
-panel on every connection. Rig models are sent A–Z by the full provider-plus-name
+panel on every connection. Rig models are sent Z–A by the full provider-plus-name
 label. A release is confirmed after 150 ms without contact so a transient
 FT6336 read error cannot create a false release.
 

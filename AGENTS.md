@@ -111,7 +111,7 @@ to the left knob and effort burst decode to the right. The model knob uses
 PCNT hardware quadrature — a polled decode misreads it because display flush
 delays the poll past the CLK/DT phase difference. Keep firmware
 `main/catalog.c` and Swift `Catalog.swift` aligned. Rig models walk
-A–Z by the full provider-plus-name label.
+Z–A by the full provider-plus-name label.
 Desk pose and locked ST7796 view mapping: see `HARDWARE.md` and
 `ai-model-control/README.md`.
 
