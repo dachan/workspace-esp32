@@ -87,7 +87,7 @@ typedef struct {
 /* Auto plus the seven Model Dial Settings entries that ship enabled. */
 #define CURSOR_ENABLED_DEFAULT 0xFFull
 
-/* Auto, then Model Dial Settings toggle order (enabled group, then the rest). */
+/* Stable Cursor configuration-mask slots. */
 static const cursor_model_t cursor_models[] = {
     {"Auto", THINK_NONE},
     {"Cursor Grok 4.6", THINK(think_lmhx)},
@@ -128,6 +128,18 @@ static const cursor_model_t cursor_models[] = {
     {"GLM 5.2", THINK(think_hm)},
     {"Grok 4.7", THINK(think_lmhx)},
 };
+/*
+ * Keep configuration-mask bits stable while placing the latest Cursor model
+ * beside Auto on the physical dial.
+ */
+static const uint8_t cursor_panel_order[] = {
+    0, 37,
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+    19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
+    35, 36,
+};
+_Static_assert(COUNT(cursor_panel_order) == COUNT(cursor_models),
+               "cursor panel order must cover every model");
 
 static int table_count(const char *const *names, int n, const char *name)
 {
@@ -460,8 +472,8 @@ static bool cursor_on(int full_index)
 static int cursor_enabled_count(void)
 {
     int n = 0;
-    for (int i = 0; i < COUNT(cursor_models); i++) {
-        if (cursor_on(i)) {
+    for (int i = 0; i < COUNT(cursor_panel_order); i++) {
+        if (cursor_on(cursor_panel_order[i])) {
             n++;
         }
     }
@@ -471,12 +483,13 @@ static int cursor_enabled_count(void)
 static int cursor_full_at_enabled(int enabled_index)
 {
     int n = 0;
-    for (int i = 0; i < COUNT(cursor_models); i++) {
-        if (!cursor_on(i)) {
+    for (int i = 0; i < COUNT(cursor_panel_order); i++) {
+        int full_index = cursor_panel_order[i];
+        if (!cursor_on(full_index)) {
             continue;
         }
         if (n == enabled_index) {
-            return i;
+            return full_index;
         }
         n++;
     }
@@ -489,12 +502,14 @@ static int cursor_enabled_index(int full_index)
         return -1;
     }
     int n = 0;
-    for (int i = 0; i < full_index; i++) {
-        if (cursor_on(i)) {
-            n++;
+    for (int i = 0; i < COUNT(cursor_panel_order); i++) {
+        int panel_index = cursor_panel_order[i];
+        if (panel_index == full_index) {
+            return n;
         }
+        if (cursor_on(panel_index)) n++;
     }
-    return n;
+    return -1;
 }
 
 static const char *const *models_table(bool cursor, int *count)
