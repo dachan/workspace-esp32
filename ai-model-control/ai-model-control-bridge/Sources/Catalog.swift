@@ -71,6 +71,7 @@ enum Catalog {
         .init(name: "Kimi K3", efforts: ["Low", "High", "Max"]),
         .init(name: "Kimi K2.7 Code", efforts: []),
         .init(name: "GLM 5.2", efforts: ["High", "Max"]),
+        .init(name: "Grok 4.7", efforts: ["Low", "Medium", "High", "Extra High"]),
     ]
 
     static var cursorModels: [String] { cursorCatalog.map(\.name) }

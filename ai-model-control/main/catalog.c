@@ -126,6 +126,7 @@ static const cursor_model_t cursor_models[] = {
     {"Kimi K3", THINK(think_lhm)},
     {"Kimi K2.7 Code", THINK_NONE},
     {"GLM 5.2", THINK(think_hm)},
+    {"Grok 4.7", THINK(think_lmhx)},
 };
 
 static int table_count(const char *const *names, int n, const char *name)

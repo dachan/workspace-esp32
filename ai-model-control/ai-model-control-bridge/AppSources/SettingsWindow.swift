@@ -29,7 +29,7 @@ final class BridgePreferences: ObservableObject {
         "Claude Opus 4.6", "Claude Opus 4.5", "GPT-5.2", "Gemini 3.6 Flash", "Gemini 3.1 Pro",
         "GPT-5.4 Mini", "GPT-5.4 Nano", "Claude Haiku 4.5", "Claude Sonnet 4.5", "GPT-5.1",
         "Gemini 3 Flash", "Gemini 3.5 Flash", "Claude Sonnet 4", "GPT-5 Mini", "Gemini 2.5 Flash",
-        "Kimi K3", "Kimi K2.7 Code", "GLM 5.2",
+        "Kimi K3", "Kimi K2.7 Code", "GLM 5.2", "Grok 4.7",
     ]
 
     static let cursorModelGroups: [CursorModelGroup] = [
@@ -51,6 +51,7 @@ final class BridgePreferences: ObservableObject {
         CursorModelGroup(provider: "Cursor", models: [
             CursorModelSetting(index: 11, name: "Cursor Grok 4.5", provider: "Cursor"),
             CursorModelSetting(index: 1, name: "Cursor Grok 4.6", provider: "Cursor"),
+            CursorModelSetting(index: 37, name: "Grok 4.7", provider: "Cursor"),
         ]),
         CursorModelGroup(provider: "Google", models: [
             CursorModelSetting(index: 33, name: "Gemini 2.5 Flash", provider: "Google"),

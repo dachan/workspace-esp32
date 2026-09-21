@@ -381,7 +381,7 @@ physical edges; the pending-step fix does not replace the existing decoder.
 - Unsupported (knob ignored): Auto, Composer 2.5, Claude Opus 4.5, Claude Haiku 4.5, Claude Sonnet 4.5, Claude Sonnet 4, Gemini 3.1 Pro, Gemini 3 Flash, Gemini 3.5 Flash, GPT-5 Mini, Gemini 2.5 Flash, Kimi K2.7 Code.
 - Low, Medium, High: Cursor Grok 4.5, Gemini 3.8 Flash, Gemini 3.7 Flash, GPT-5.1.
 - Minimal, Low, Medium, High: Gemini 3.6 Flash.
-- Low, Medium, High, Extra High: Cursor Grok 4.6, Codex 5.3, GPT-5.2.
+- Low, Medium, High, Extra High: Cursor Grok 4.6, Grok 4.7, Codex 5.3, GPT-5.2.
 - Low, Medium, High, Extra High, Max: Claude Opus 5 / 4.8 / 4.7, Claude Fable 5 / 5.1, Claude Sonnet 5.
 - Low, Medium, High, Max: Claude Sonnet 4.6, Claude Opus 4.6.
 - None, Low, Medium, High, Extra High, Max: GPT-5.6 Sol, Terra, Luna.
