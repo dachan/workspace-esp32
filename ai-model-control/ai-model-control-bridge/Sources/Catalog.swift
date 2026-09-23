@@ -1,7 +1,7 @@
 import Foundation
 
 enum Catalog {
-    static let models = [
+    static var models = [
         "GPT-6 Astra",
         "GPT-6 Sol",
         "GPT-6 Luna",
@@ -131,10 +131,14 @@ enum Catalog {
         return levels.firstIndex(of: name).map { ($0, name) }
     }
 
+    static func setChatGPTModels(_ names: [String]) {
+        if !names.isEmpty { models = names }
+    }
+
     static func chatgptModelIndex(_ raw: String) -> Int? {
-        index(raw, in: models, aliases: [
-            "astra": 0, "sol": 1, "terra": 4, "luna": 2,
-        ])
+        if let exact = index(raw, in: models, aliases: [:]) { return exact }
+        let alias = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return models.firstIndex { $0.lowercased().hasSuffix(" " + alias) }
     }
 
     static func openCodeModelIndex(_ raw: String) -> Int? {

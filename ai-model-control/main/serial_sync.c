@@ -185,6 +185,26 @@ bool serial_sync_handle_line(const char *line)
         }
         return true;
     }
+    if (strcmp(line, "CONFIG CHATGPT_CLEAR") == 0) {
+        catalog_chatgpt_catalog_begin();
+        return true;
+    }
+    const char *chatgpt_add = "CONFIG CHATGPT_ADD ";
+    if (strncmp(line, chatgpt_add, strlen(chatgpt_add)) == 0) {
+        const char *value = line + strlen(chatgpt_add);
+        uint8_t mask[1];
+        if (parse_hex_bytes(value, mask, 1) == 1) {
+            const char *name = value;
+            while (*name && !isspace((unsigned char)*name)) name++;
+            while (*name && isspace((unsigned char)*name)) name++;
+            if (*name) catalog_chatgpt_catalog_add(name, mask[0]);
+        }
+        return true;
+    }
+    if (strcmp(line, "CONFIG CHATGPT_END") == 0) {
+        s_config_changed |= catalog_chatgpt_catalog_commit();
+        return true;
+    }
     if (strcmp(line, "CONFIG RIG_CLEAR") == 0) {
         catalog_rig_catalog_begin();
         return true;

@@ -32,6 +32,9 @@ final class BridgeRuntime {
     private var forceApply = false
     private var bootID: UInt64?
     private var connectionGeneration: UInt64 = 0
+    private var nextChatGPTRefreshAt: TimeInterval = 0
+    private var chatGPTRefreshInFlight = false
+    private var lastChatGPTCatalogError = false
     private var lastRigPushAt: TimeInterval = 0
     private var lastRigPanel: (model: String, thinking: String, mask: UInt64)?
     private var lastRigError: String?
@@ -436,10 +439,37 @@ final class BridgeRuntime {
         }
     }
 
+    private func refreshChatGPTCatalog() {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard !chatGPTRefreshInFlight, now >= nextChatGPTRefreshAt else { return }
+        chatGPTRefreshInFlight = true
+        nextChatGPTRefreshAt = now + 60
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let entries = CodexModelList.load()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.chatGPTRefreshInFlight = false
+                guard let entries else {
+                    if !self.lastChatGPTCatalogError {
+                        fputs("ai-model-control-bridge: Codex model list unavailable; retaining panel catalog\n", stderr)
+                    }
+                    self.lastChatGPTCatalogError = true
+                    return
+                }
+                self.lastChatGPTCatalogError = false
+                Catalog.setChatGPTModels(entries.map(\.name))
+                self.session?.setChatGPTCatalog(entries)
+                print("\(stamp()) ChatGPT model catalog: \(entries.map(\.name).joined(separator: ", "))")
+                fflush(stdout)
+            }
+        }
+    }
+
     func run() -> Never {
         print("watching ChatGPT / Cursor / OpenCode / Rig foreground\(session.map { "; listening on \($0.port)" } ?? "") (Ctrl+C to stop)")
         fflush(stdout)
         while true {
+            refreshChatGPTCatalog()
             drainSerial()
             noteFront()
             applyPending()

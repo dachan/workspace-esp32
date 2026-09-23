@@ -14,6 +14,48 @@ static const char *const chatgpt_models[] = {
     "GPT-6 Astra", "GPT-6 Sol", "GPT-6 Luna", "GPT-5.6 Sol", "GPT-5.6 Terra",
     "GPT-5.6 Luna", "GPT-5.5",
 };
+#define CHATGPT_LIVE_MAX 32
+#define CHATGPT_LIVE_NAME 64
+static char s_chatgpt_live[CHATGPT_LIVE_MAX][CHATGPT_LIVE_NAME];
+static uint8_t s_chatgpt_live_effort[CHATGPT_LIVE_MAX];
+static const char *s_chatgpt_live_names[CHATGPT_LIVE_MAX];
+static int s_chatgpt_live_count;
+static char s_chatgpt_build[CHATGPT_LIVE_MAX][CHATGPT_LIVE_NAME];
+static uint8_t s_chatgpt_build_effort[CHATGPT_LIVE_MAX];
+static int s_chatgpt_build_count;
+static bool s_chatgpt_building;
+static const char *s_chatgpt_model_efforts[COUNT(chatgpt_thinking)];
+
+void catalog_chatgpt_catalog_begin(void)
+{
+    s_chatgpt_build_count = 0;
+    s_chatgpt_building = true;
+}
+
+void catalog_chatgpt_catalog_add(const char *name, uint8_t effort_mask)
+{
+    if (!s_chatgpt_building || !name || !name[0]
+        || strlen(name) >= CHATGPT_LIVE_NAME || s_chatgpt_build_count >= CHATGPT_LIVE_MAX) return;
+    for (int i = 0; i < s_chatgpt_build_count; i++) {
+        if (strcasecmp(s_chatgpt_build[i], name) == 0) return;
+    }
+    snprintf(s_chatgpt_build[s_chatgpt_build_count], CHATGPT_LIVE_NAME, "%s", name);
+    s_chatgpt_build_effort[s_chatgpt_build_count++] = effort_mask & 0x3f;
+}
+
+bool catalog_chatgpt_catalog_commit(void)
+{
+    s_chatgpt_building = false;
+    if (s_chatgpt_build_count == 0) return false;
+    s_chatgpt_live_count = s_chatgpt_build_count;
+    for (int i = 0; i < s_chatgpt_live_count; i++) {
+        snprintf(s_chatgpt_live[i], CHATGPT_LIVE_NAME, "%s", s_chatgpt_build[i]);
+        s_chatgpt_live_effort[i] = s_chatgpt_build_effort[i];
+        s_chatgpt_live_names[i] = s_chatgpt_live[i];
+    }
+    return true;
+}
+
 static bool s_chatgpt_show_older;
 static const char *s_chatgpt_active[COUNT(chatgpt_models)];
 
@@ -22,6 +64,10 @@ void catalog_chatgpt_set_show_older(bool show) { s_chatgpt_show_older = show; }
 
 static const char *const *chatgpt_model_table(int *count)
 {
+    if (s_chatgpt_live_count > 0) {
+        *count = s_chatgpt_live_count;
+        return s_chatgpt_live_names;
+    }
     // Compare explicit major versions; never depend on catalog ordering.
     int newest = 0;
     for (int i = 0; i < COUNT(chatgpt_models); i++) {
@@ -459,13 +505,36 @@ static void refresh_chatgpt_thinking(void)
     s_chatgpt_thinking_active_ready = true;
 }
 
-static const char *const *chatgpt_thinking_table(int *count)
+static uint8_t chatgpt_model_effort_mask(const char *model)
 {
-    if (!s_chatgpt_thinking_active_ready) {
-        refresh_chatgpt_thinking();
+    for (int i = 0; i < s_chatgpt_live_count; i++) {
+        if (model && strcasecmp(s_chatgpt_live[i], model) == 0) {
+            return s_chatgpt_live_effort[i];
+        }
     }
-    *count = s_chatgpt_thinking_active_count;
-    return s_chatgpt_thinking_active;
+    return 0x3f;
+}
+
+static const char *const *chatgpt_thinking_table(const char *model, int *count)
+{
+    if (!s_chatgpt_thinking_active_ready) refresh_chatgpt_thinking();
+    uint8_t mask = chatgpt_model_effort_mask(model);
+    *count = 0;
+    for (int i = 0; i < COUNT(chatgpt_thinking); i++) {
+        if ((mask & (1u << i)) && (s_chatgpt_thinking_enabled & (1ull << i))) {
+            s_chatgpt_model_efforts[(*count)++] = chatgpt_thinking[i];
+        }
+    }
+    // A disabled intersection still needs one valid level for the dial.
+    if (*count == 0) {
+        for (int i = 0; i < COUNT(chatgpt_thinking); i++) {
+            if (mask & (1u << i)) {
+                s_chatgpt_model_efforts[(*count)++] = chatgpt_thinking[i];
+                break;
+            }
+        }
+    }
+    return s_chatgpt_model_efforts;
 }
 
 static int cursor_index(const char *name)
@@ -560,7 +629,7 @@ static const char *const *thinking_table(bool cursor, const char *model, int *co
         *count = cursor_models[index].thinking_count;
         return *count ? cursor_models[index].thinking : cursor_thinking;
     }
-    return chatgpt_thinking_table(count);
+    return chatgpt_thinking_table(model, count);
 }
 
 static const char *const *active_thinking(const char *model, int *count)
@@ -775,9 +844,10 @@ bool catalog_cursor_set_slot(int slot, bool on)
 
 bool catalog_model_known(const char *name)
 {
-    if (table_count(chatgpt_models, COUNT(chatgpt_models), name) >= 0) {
-        return true;
-    }
+    int live_count;
+    const char *const *live = chatgpt_model_table(&live_count);
+    if (table_count(live, live_count, name) >= 0
+        || table_count(chatgpt_models, COUNT(chatgpt_models), name) >= 0) return true;
     return cursor_index(name) >= 0
         || table_count(opencode_models, COUNT(opencode_models), name) >= 0
         || rig_name_index(s_rig_live, s_rig_live_count, name) >= 0
@@ -863,13 +933,15 @@ int catalog_thinking_level(const char *model, const char *name)
         int full = table_count(chatgpt_thinking, COUNT(chatgpt_thinking), name);
         if (full >= 0) {
             for (int i = full; i >= 0; i--) {
-                if ((s_chatgpt_thinking_enabled & (1ull << i)) == 0) {
+                if ((s_chatgpt_thinking_enabled & (1ull << i)) == 0
+                    || (chatgpt_model_effort_mask(model) & (1u << i)) == 0) {
                     continue;
                 }
                 return table_count(names, count, chatgpt_thinking[i]) + 1;
             }
             for (int i = full + 1; i < COUNT(chatgpt_thinking); i++) {
-                if ((s_chatgpt_thinking_enabled & (1ull << i)) == 0) {
+                if ((s_chatgpt_thinking_enabled & (1ull << i)) == 0
+                    || (chatgpt_model_effort_mask(model) & (1u << i)) == 0) {
                     continue;
                 }
                 return table_count(names, count, chatgpt_thinking[i]) + 1;

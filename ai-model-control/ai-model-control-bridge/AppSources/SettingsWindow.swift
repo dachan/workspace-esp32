@@ -231,8 +231,7 @@ struct SettingsView: View {
                 Toggle("Swap Dials", isOn: $preferences.swapDials)
             }
             settingsSection(title: "ChatGPT", detail: "Enabled thinking levels are available on the ESP32 effort dial.") {
-                Toggle("Show older models", isOn: $preferences.showOlderModels)
-                Text("Off: newest GPT generation only. On: include older generations.")
+                Text("Models follow the computer's ChatGPT/Codex picker.")
                     .font(.caption).foregroundStyle(.secondary)
                 twoColumnGrid {
                     ForEach(Array(BridgePreferences.chatGPTEfforts.enumerated()), id: \.offset) { index, effort in

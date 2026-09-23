@@ -19,6 +19,9 @@ final class SerialSession {
     private var rigModelMaskSent: UInt64?
     private var rigEffortMasks: [UInt8] = []
     private var rigEffortMasksSent: [UInt8]?
+    private var chatGPTCatalogWanted: [String] = []
+    private var chatGPTCatalogIndex = 0
+    private var chatGPTCatalogSent = true
     private var rigCatalogWanted: [String] = []
     private var rigCatalogIndex = 0
     private var rigCatalogSent = true
@@ -104,6 +107,8 @@ final class SerialSession {
         configurationStep = 0
         rigModelMaskSent = nil
         rigEffortMasksSent = nil
+        chatGPTCatalogIndex = 0
+        chatGPTCatalogSent = chatGPTCatalogWanted.isEmpty
         rigCatalogIndex = 0
         rigCatalogSent = rigCatalogWanted.isEmpty
         hostModelSent = nil
@@ -173,6 +178,8 @@ final class SerialSession {
         configurationStep = 0
         rigModelMaskSent = nil
         rigEffortMasksSent = nil
+        chatGPTCatalogIndex = 0
+        chatGPTCatalogSent = chatGPTCatalogWanted.isEmpty
         rigCatalogIndex = 0
         rigCatalogSent = rigCatalogWanted.isEmpty
         hostModelSent = nil
@@ -196,6 +203,19 @@ final class SerialSession {
         if masks != rigEffortMasks {
             rigEffortMasks = masks
             rigEffortMasksSent = nil
+        }
+    }
+
+    func setChatGPTCatalog(_ entries: [CodexModelList.Entry]) {
+        var lines = ["CONFIG CHATGPT_CLEAR"]
+        for entry in entries {
+            lines.append("CONFIG CHATGPT_ADD \(String(format: "%02x", entry.effortMask)) \(entry.name)")
+        }
+        lines.append("CONFIG CHATGPT_END")
+        if lines != chatGPTCatalogWanted {
+            chatGPTCatalogWanted = lines
+            chatGPTCatalogIndex = 0
+            chatGPTCatalogSent = false
         }
     }
 
@@ -256,6 +276,12 @@ final class SerialSession {
                 } else if configurationStep == 2 {
                     line = "CONFIG DIAL_SWAP \(dialSwap ? 1 : 0)\nCONFIG CHATGPT_OLDER \(showOlderModels ? 1 : 0)"
                     configurationStep = 3
+                } else if !chatGPTCatalogSent, chatGPTCatalogIndex < chatGPTCatalogWanted.count {
+                    line = chatGPTCatalogWanted[chatGPTCatalogIndex]
+                    chatGPTCatalogIndex += 1
+                    if chatGPTCatalogIndex >= chatGPTCatalogWanted.count {
+                        chatGPTCatalogSent = true
+                    }
                 } else if !rigCatalogSent, rigCatalogIndex < rigCatalogWanted.count {
                     line = rigCatalogWanted[rigCatalogIndex]
                     rigCatalogIndex += 1
