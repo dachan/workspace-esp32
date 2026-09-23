@@ -95,7 +95,8 @@ receives the panel's informational ENABLED snapshot.
 
 Dial models follow the focused app.
 
-ChatGPT: GPT-6 Astra, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5.
+ChatGPT: GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra,
+GPT-5.6 Luna, GPT-5.5.
 Reasoning: Light, Medium, High, Extra High, Max, Ultra (filtered by Settings).
 
 Cursor: Auto, then the enabled model list (defaults: Cursor Grok 4.6,
