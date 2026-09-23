@@ -217,8 +217,6 @@ final class BridgePreferences: ObservableObject {
 
 struct SettingsView: View {
     @ObservedObject var preferences: BridgePreferences
-    let refreshCursorModels: () async -> Void
-    @State private var isRefreshingCursorModels = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -239,15 +237,9 @@ struct SettingsView: View {
                     }
                 }
             }
-            settingsSection(title: "Cursor", detail: "Refresh the enabled model list from Cursor.") {
-                Button(isRefreshingCursorModels ? "Refreshing…" : "Refresh Cursor Models") {
-                    Task {
-                        isRefreshingCursorModels = true
-                        await refreshCursorModels()
-                        isRefreshingCursorModels = false
-                    }
-                }
-                .disabled(isRefreshingCursorModels)
+            settingsSection(title: "Cursor", detail: "Enabled models sync automatically from Cursor's local model file.") {
+                Text("Changes appear on the dial while Model Dial is running.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(22)
@@ -277,12 +269,10 @@ struct SettingsView: View {
 final class SettingsWindowController: NSWindowController {
     init(
         preferences: BridgePreferences,
-        onChange: @escaping () -> Void,
-        refreshCursorModels: @escaping () async -> Void
+        onChange: @escaping () -> Void
     ) {
         let hosting = NSHostingView(rootView: SettingsView(
-            preferences: preferences,
-            refreshCursorModels: refreshCursorModels
+            preferences: preferences
         ))
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 430),

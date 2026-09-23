@@ -78,10 +78,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         if settingsWindow == nil {
             settingsWindow = SettingsWindowController(
                 preferences: controller.preferences,
-                onChange: { [weak controller] in controller?.restartBridge() },
-                refreshCursorModels: { [weak controller] in
-                    await controller?.syncApps()
-                }
+                onChange: { [weak controller] in controller?.restartBridge() }
             )
         }
         settingsWindow?.showWindow()

@@ -51,7 +51,10 @@ keys on their own. A settled rotation follows its complete state with `APPLY`;
 an encoder click follows fresh revisions for both fields with `PUSH`.
 `APPLY` uses the per-process cache, while `PUSH` forces both fields.
 
-Settings → Cursor → Refresh Cursor Models only updates the dial's Cursor model list.
+Model Dial reads Cursor's local SQLite model file at startup and checks its database
+and WAL for changes while running. Enabled-model changes update the dial without a
+manual refresh; a failed read retains the last saved selection and retries. This
+syncs existing dial catalog slots, not new model definitions or picker order.
 
 Each changed field gets a new revision, including after firmware restart.
 Unacknowledged state retries every 0.5 s; a full USB transmit buffer retries after

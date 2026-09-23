@@ -9,7 +9,7 @@ enum CursorModelSync {
     }
 
     static func readMask() -> Result<UInt64, Error> {
-        let database = NSHomeDirectory() + "/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+        let database = databasePath
         guard FileManager.default.fileExists(atPath: database) else { return .failure(ReadError.unavailable) }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
@@ -61,6 +61,28 @@ enum CursorModelSync {
         } catch {
             return .failure(error)
         }
+    }
+
+    // SQLite can commit to its WAL without changing the main database file.
+    static var fileSignature: String? {
+        let files = [databasePath, databasePath + "-wal"]
+        var parts: [String] = []
+        for path in files {
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: path) else {
+                if path == databasePath { return nil }
+                parts.append("missing")
+                continue
+            }
+            let inode = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0
+            let size = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
+            let modified = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+            parts.append("\(inode):\(size):\(modified)")
+        }
+        return parts.joined(separator: ":")
+    }
+
+    private static var databasePath: String {
+        NSHomeDirectory() + "/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
     }
 
     private static func modelID(_ name: String) -> String {

@@ -19,6 +19,8 @@ final class DialController {
         .appendingPathComponent("Library/Logs/Model Dial/bridge.log")
     private var bridge: Process?
     private var monitor: Timer?
+    private var cursorSignature: String?
+    private var lastCursorRead: TimeInterval = 0
     private var wantsBridge = true
     private var stopping = false
     private var restartAt: TimeInterval = 0
@@ -51,9 +53,13 @@ final class DialController {
     func start() {
         guard monitor == nil else { return }
         monitor = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.checkPort() }
+            Task { @MainActor in
+                self?.checkPort()
+                self?.checkCursorModels()
+            }
         }
         startBridge()
+        checkCursorModels()
     }
 
     func shutdown() {
@@ -112,24 +118,35 @@ final class DialController {
         }
     }
 
-    func syncApps() async {
+    private func checkCursorModels() {
+        guard wantsBridge, !isSyncing,
+              let signature = CursorModelSync.fileSignature,
+              signature != cursorSignature,
+              ProcessInfo.processInfo.systemUptime - lastCursorRead >= 10 else { return }
+        lastCursorRead = ProcessInfo.processInfo.systemUptime
+        Task { await syncCursorModels(signature: signature) }
+    }
+
+    private func syncCursorModels(signature: String) async {
         guard wantsBridge, !isSyncing else { return }
         isSyncing = true
-        status = "Refreshing Cursor models"
         let originalMask = preferences.cursorModelMask
         let result = await Task.detached(priority: .utility) { CursorModelSync.readMask() }.value
         defer { isSyncing = false }
         guard wantsBridge else { return }
         switch result {
         case .success(let mask):
+            // If Cursor changed while the read ran, let the next poll get its final state.
+            guard CursorModelSync.fileSignature == signature else { return }
+            cursorSignature = signature
             // A preference edit made while reading Cursor takes precedence.
             if preferences.cursorModelMask == originalMask, preferences.syncCursorModels(mask) {
                 recordBridgeEvent("Cursor models updated from Cursor")
+                restartBridge()
             }
         case .failure(let error):
             recordBridgeEvent("Cursor sync: \(error.localizedDescription); saved selection retained")
         }
-        restartBridge()
     }
 
     func openBridgeLog() {
