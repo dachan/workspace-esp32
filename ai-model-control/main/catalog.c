@@ -24,7 +24,6 @@ static char s_chatgpt_build[CHATGPT_LIVE_MAX][CHATGPT_LIVE_NAME];
 static uint8_t s_chatgpt_build_effort[CHATGPT_LIVE_MAX];
 static int s_chatgpt_build_count;
 static bool s_chatgpt_building;
-static const char *s_chatgpt_model_efforts[COUNT(chatgpt_thinking)];
 
 void catalog_chatgpt_catalog_begin(void)
 {
@@ -109,6 +108,7 @@ static const char *const rig_models[] = {
 static const char *const chatgpt_thinking[] = {
     "Light", "Medium", "High", "Extra High", "Max", "Ultra",
 };
+static const char *s_chatgpt_model_efforts[COUNT(chatgpt_thinking)];
 /* Same labels as Rig composer: Auto plus OpenRouter none/low/medium/high/xhigh/max. */
 static const char *const rig_thinking[] = {
     "Auto", "None", "Low", "Medium", "High", "X-High", "Max",
