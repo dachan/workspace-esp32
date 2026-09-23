@@ -183,6 +183,7 @@ final class DialController {
             "--watch", "--send-serial", "--port", candidate,
             "--chatgpt-effort-mask", maskArgument(preferences.chatGPTThinkingMask),
             "--cursor-model-mask", maskArgument(preferences.cursorModelMask),
+            "--show-older-models", preferences.showOlderModels ? "1" : "0",
             "--dial-swap", preferences.swapDials ? "1" : "0",
         ]
         let process = Process()

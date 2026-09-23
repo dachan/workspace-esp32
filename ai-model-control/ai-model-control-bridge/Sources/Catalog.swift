@@ -133,7 +133,7 @@ enum Catalog {
 
     static func chatgptModelIndex(_ raw: String) -> Int? {
         index(raw, in: models, aliases: [
-            "astra": 0, "sol": 1, "terra": 2, "luna": 3,
+            "astra": 0, "sol": 1, "terra": 4, "luna": 2,
         ])
     }
 

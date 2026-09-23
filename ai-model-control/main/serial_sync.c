@@ -131,6 +131,16 @@ bool serial_sync_handle_line(const char *line)
         }
         return true;
     }
+    const char *older_prefix = "CONFIG CHATGPT_OLDER ";
+    if (strncmp(line, older_prefix, strlen(older_prefix)) == 0) {
+        const char *value = line + strlen(older_prefix);
+        if (strcmp(value, "0") == 0 || strcmp(value, "1") == 0) {
+            bool show = value[0] == '1';
+            s_config_changed |= show != catalog_chatgpt_show_older();
+            catalog_chatgpt_set_show_older(show);
+        }
+        return true;
+    }
     const char *chatgpt_prefix = "CONFIG CHATGPT_EFFORTS ";
     if (strncmp(line, chatgpt_prefix, strlen(chatgpt_prefix)) == 0) {
         char *end = NULL;

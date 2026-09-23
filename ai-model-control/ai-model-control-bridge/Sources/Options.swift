@@ -17,6 +17,7 @@ struct Options {
     var bundleID: String?
     var chatGPTThinkingMask = Catalog.defaultChatGPTThinkingMask
     var cursorModelMask: UInt64 = 0xFF
+    var showOlderModels = false
     var dialSwap = false
 }
 
@@ -99,6 +100,12 @@ func parseOptions(_ args: [String]) -> Options? {
                 return nil
             }
             options.cursorModelMask = mask
+        case "--show-older-models":
+            guard let value = takeValue(), value == "0" || value == "1" else {
+                fputs("ai-model-control-bridge: --show-older-models needs 0 or 1\n", stderr)
+                return nil
+            }
+            options.showOlderModels = value == "1"
         case "--dial-swap":
             guard let value = takeValue(), value == "0" || value == "1" else {
                 fputs("ai-model-control-bridge: --dial-swap needs 0 or 1\n", stderr)
@@ -139,6 +146,7 @@ func usage() -> String {
       --set-model NAME    One-shot: select NAME if ChatGPT, Cursor, OpenCode, or Rig is focused
       --set-thinking LVL  One-shot: set reasoning if ChatGPT, Cursor, OpenCode, or Rig is focused
       --bundle-id ID      Force ChatGPT, Codex, Cursor, OpenCode, or Rig
+      --show-older-models 0|1   Include older ChatGPT generations (default 0)
       --chatgpt-effort-mask HEX  Enabled ChatGPT effort levels (default 0x0f)
       --cursor-model-mask HEX   Enabled Cursor model entries (Auto is always on)
       --dial-swap 0|1     1 swaps the knobs (left effort, right model)

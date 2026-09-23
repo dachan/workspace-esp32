@@ -83,14 +83,13 @@ See the [firmware protocol](../README.md#protocol-usb-serial-115200) for frame
 formats and compatibility details. Buffers and bytes processed per poll are
 bounded. Retry and key-delay durations use a monotonic clock.
 
-The Model Dial Settings window has ChatGPT, Cursor, and OpenCode tabs. ChatGPT
-models are fixed; its effort list offers Light, Medium, High, Extra High, Max,
-and Ultra, and at least one level stays enabled. Cursor models are grouped by
-provider and sorted alphabetically within each group; Auto is always enabled.
-The OpenCode tab is intentionally empty. Changes restart the bridge so the new
-masks are sent immediately. The CLI
-accepts the same values with --chatgpt-effort-mask HEX and
---cursor-model-mask HEX; the bridge configuration is authoritative when it
+The Model Dial Settings window fits Dials, ChatGPT, and Cursor sections without
+scrolling. Show older models defaults off and limits ChatGPT to the newest major
+GPT generation in the static catalog; enabling it restores older generations.
+Its effort list offers Light, Medium, High, Extra High, Max, and Ultra, with at
+least one level enabled. Cursor has a Refresh Cursor Models button.
+Changes restart the bridge so configuration is sent immediately. The CLI accepts
+--show-older-models 0|1, --chatgpt-effort-mask HEX, and --cursor-model-mask HEX; the bridge configuration is authoritative when it
 receives the panel's informational ENABLED snapshot.
 
 Dial models follow the focused app.

@@ -14,6 +14,33 @@ static const char *const chatgpt_models[] = {
     "GPT-6 Astra", "GPT-6 Sol", "GPT-6 Luna", "GPT-5.6 Sol", "GPT-5.6 Terra",
     "GPT-5.6 Luna", "GPT-5.5",
 };
+static bool s_chatgpt_show_older;
+static const char *s_chatgpt_active[COUNT(chatgpt_models)];
+
+bool catalog_chatgpt_show_older(void) { return s_chatgpt_show_older; }
+void catalog_chatgpt_set_show_older(bool show) { s_chatgpt_show_older = show; }
+
+static const char *const *chatgpt_model_table(int *count)
+{
+    // Compare explicit major versions; never depend on catalog ordering.
+    int newest = 0;
+    for (int i = 0; i < COUNT(chatgpt_models); i++) {
+        int generation = 0;
+        if (sscanf(chatgpt_models[i], "GPT-%d", &generation) == 1 && generation > newest) {
+            newest = generation;
+        }
+    }
+    *count = 0;
+    for (int i = 0; i < COUNT(chatgpt_models); i++) {
+        int generation = 0;
+        sscanf(chatgpt_models[i], "GPT-%d", &generation);
+        if (s_chatgpt_show_older || generation == newest) {
+            s_chatgpt_active[(*count)++] = chatgpt_models[i];
+        }
+    }
+    return s_chatgpt_active;
+}
+
 /* OpenCode encoder order. Its native picker remains Luna-first. */
 static const char *const opencode_models[] = {
     "GPT-6 Astra", "GPT-5.6 Terra", "GPT-5.6 Sol", "GPT-5.6 Luna",
@@ -519,8 +546,7 @@ static const char *const *models_table(bool cursor, int *count)
         *count = cursor_enabled_count();
         return NULL;
     }
-    *count = COUNT(chatgpt_models);
-    return chatgpt_models;
+    return chatgpt_model_table(count);
 }
 
 static const char *const *thinking_table(bool cursor, const char *model, int *count)

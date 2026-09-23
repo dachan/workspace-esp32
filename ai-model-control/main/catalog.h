@@ -35,6 +35,8 @@ bool catalog_cursor_slot_on(int slot);
 bool catalog_cursor_set_slot(int slot, bool on);
 
 /* ChatGPT/OpenCode thinking enable mask. At least one effort is always on. */
+bool catalog_chatgpt_show_older(void);
+void catalog_chatgpt_set_show_older(bool show);
 uint64_t catalog_chatgpt_thinking_mask(void);
 void catalog_chatgpt_set_thinking_mask(uint64_t mask);
 

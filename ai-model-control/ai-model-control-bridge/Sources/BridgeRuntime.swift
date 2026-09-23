@@ -49,6 +49,7 @@ final class BridgeRuntime {
                 baud: options.baud,
                 chatGPTThinkingMask: options.chatGPTThinkingMask,
                 cursorModelMask: options.cursorModelMask,
+                showOlderModels: options.showOlderModels,
                 dialSwap: options.dialSwap
             )
         }

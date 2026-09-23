@@ -155,6 +155,11 @@ int model_nvs_load(model_fields_t *out)
         catalog_cursor_set_enabled_mask(enabled);
     }
 
+    uint8_t show_older = 0;
+    if (nvs_get_u8(h, "g_older", &show_older) == ESP_OK) {
+        catalog_chatgpt_set_show_older(show_older != 0);
+    }
+
     uint64_t thinking_enabled = 0;
     len = sizeof(thinking_enabled);
     err = nvs_get_blob(h, KEY_CHATGPT_THINK_EN, &thinking_enabled, &len);
@@ -229,6 +234,9 @@ esp_err_t model_nvs_save(const model_fields_t *fields)
     if (err == ESP_OK) {
         uint64_t thinking_enabled = catalog_chatgpt_thinking_mask();
         err = nvs_set_blob(h, KEY_CHATGPT_THINK_EN, &thinking_enabled, sizeof(thinking_enabled));
+    }
+    if (err == ESP_OK) {
+        err = nvs_set_u8(h, "g_older", catalog_chatgpt_show_older());
     }
     if (err == ESP_OK) {
         s_effort.version = EFFORT_BLOB_VER;

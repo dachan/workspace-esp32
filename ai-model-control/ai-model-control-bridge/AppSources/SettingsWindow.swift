@@ -90,6 +90,13 @@ final class BridgePreferences: ObservableObject {
 
     @Published private(set) var chatGPTThinkingMask: UInt64
     @Published private(set) var cursorModelMask: UInt64
+    @Published var showOlderModels: Bool {
+        didSet {
+            guard showOlderModels != oldValue else { return }
+            defaults.set(showOlderModels, forKey: "showOlderModels")
+            onChange?()
+        }
+    }
     @Published var swapDials: Bool {
         didSet {
             guard swapDials != oldValue else { return }
@@ -111,6 +118,7 @@ final class BridgePreferences: ObservableObject {
         let cursor = Self.normalizedCursorMask(
             Self.readMask(defaults: defaults, key: cursorKey, fallback: Self.defaultCursorModelMask)
         )
+        showOlderModels = defaults.bool(forKey: "showOlderModels")
         chatGPTThinkingMask = chatGPT
         cursorModelMask = cursor
         swapDials = defaults.object(forKey: swapKey) as? Bool ?? false
@@ -213,7 +221,7 @@ struct SettingsView: View {
     @State private var isRefreshingCursorModels = false
 
     var body: some View {
-        settingsScroll {
+        VStack(alignment: .leading, spacing: 18) {
             settingsSection(
                 title: "Dials",
                 detail: preferences.swapDials
@@ -223,6 +231,9 @@ struct SettingsView: View {
                 Toggle("Swap Dials", isOn: $preferences.swapDials)
             }
             settingsSection(title: "ChatGPT", detail: "Enabled thinking levels are available on the ESP32 effort dial.") {
+                Toggle("Show older models", isOn: $preferences.showOlderModels)
+                Text("Off: newest GPT generation only. On: include older generations.")
+                    .font(.caption).foregroundStyle(.secondary)
                 twoColumnGrid {
                     ForEach(Array(BridgePreferences.chatGPTEfforts.enumerated()), id: \.offset) { index, effort in
                         Toggle(effort, isOn: preferences.effortBinding(index: index))
@@ -240,16 +251,9 @@ struct SettingsView: View {
                 .disabled(isRefreshingCursorModels)
             }
         }
-        .frame(minWidth: 420, minHeight: 280)
-    }
-
-    private func settingsScroll<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                content()
-            }
-            .padding(22)
-        }
+        .padding(22)
+        .frame(width: 480)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func twoColumnGrid<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -282,14 +286,14 @@ final class SettingsWindowController: NSWindowController {
             refreshCursorModels: refreshCursorModels
         ))
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
-            styleMask: [.titled, .closable, .resizable],
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 430),
+            styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         window.title = "Model Dial Settings"
         window.contentView = hosting
-        window.contentMinSize = NSSize(width: 420, height: 240)
+        window.setContentSize(hosting.fittingSize)
         window.isReleasedWhenClosed = false
         preferences.onChange = onChange
         super.init(window: window)

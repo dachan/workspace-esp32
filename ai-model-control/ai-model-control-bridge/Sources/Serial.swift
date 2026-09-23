@@ -13,6 +13,7 @@ final class SerialSession {
     let baud: Int
     private let chatGPTThinkingMask: UInt64
     private let cursorModelMask: UInt64
+    private let showOlderModels: Bool
     private let dialSwap: Bool
     private var rigModelMask: UInt64
     private var rigModelMaskSent: UInt64?
@@ -49,6 +50,7 @@ final class SerialSession {
         chatGPTThinkingMask: UInt64 = Catalog.defaultChatGPTThinkingMask,
         cursorModelMask: UInt64 = 0xFF,
         rigModelMask: UInt64 = 0xFFF,
+        showOlderModels: Bool = false,
         dialSwap: Bool = false
     ) {
         self.port = port
@@ -56,6 +58,7 @@ final class SerialSession {
         self.chatGPTThinkingMask = chatGPTThinkingMask
         self.cursorModelMask = cursorModelMask
         self.rigModelMask = rigModelMask
+        self.showOlderModels = showOlderModels
         self.dialSwap = dialSwap
     }
 
@@ -251,7 +254,7 @@ final class SerialSession {
                     line = "CONFIG CURSOR_MODELS \(String(format: "%016llx", cursorModelMask))"
                     configurationStep = 2
                 } else if configurationStep == 2 {
-                    line = "CONFIG DIAL_SWAP \(dialSwap ? 1 : 0)"
+                    line = "CONFIG DIAL_SWAP \(dialSwap ? 1 : 0)\nCONFIG CHATGPT_OLDER \(showOlderModels ? 1 : 0)"
                     configurationStep = 3
                 } else if !rigCatalogSent, rigCatalogIndex < rigCatalogWanted.count {
                     line = rigCatalogWanted[rigCatalogIndex]

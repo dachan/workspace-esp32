@@ -29,6 +29,7 @@ ESP → Mac: ENABLED <16-hex Cursor enable mask>
 Mac → ESP: CONFIG CHATGPT_EFFORTS <16-hex effort mask>
 Mac → ESP: CONFIG CURSOR_MODELS <16-hex model mask>
 Mac → ESP: CONFIG DIAL_SWAP <0|1>
+Mac → ESP: CONFIG CHATGPT_OLDER <0|1>
 Mac → ESP: CONFIG RIG_MODELS <16-hex Latest-alias mask>
 Mac → ESP: MODEL <Rig display name>
 Mac → ESP: THINKING <Rig effort name>
@@ -105,7 +106,14 @@ restores that app's last model and effort. A first visit to a model keeps the
 current level and clamps it. Unchanged values do not trigger persistence or
 display work.
 
-Dial models follow the focused app. ChatGPT: GPT-6 Astra, GPT-6 Sol,
+Settings → ChatGPT → Show older models defaults off: only the newest major
+GPT generation in the catalog appears on the model dial. Turning it on restores
+all catalog generations. This preference persists on the Mac and in device NVS;
+connection/READY resends it. A hidden selection falls back to an available model
+without applying anything to the desktop app. Settings fits its content without
+scrolling. The catalog itself remains static; this is not automatic discovery.
+
+Dial models follow the focused app. Full ChatGPT catalog: GPT-6 Astra, GPT-6 Sol,
 GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5; thinking Light, Medium, High,
 Extra High, Max, Ultra. Cursor: Auto, then the enabled model list (defaults: Cursor Grok 4.6,
 Composer 2.5, Claude Opus 5, GPT-5.6 Sol, Claude Fable 5, GPT-5.6 Terra,
