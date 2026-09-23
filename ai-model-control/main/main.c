@@ -250,6 +250,7 @@ void app_main(void)
             clamp_front_model(&fields);
             adapt_fields_for_front(&fields);
             model_nvs_remember(&fields);
+            serial_sync_update(&fields, false);
             save_pending = true;
             paint_pending = true;
         }
