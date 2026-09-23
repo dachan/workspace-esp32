@@ -11,7 +11,8 @@
 #define COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
 static const char *const chatgpt_models[] = {
-    "GPT-6 Astra", "GPT-5.6 Sol", "GPT-5.6 Terra", "GPT-5.6 Luna", "GPT-5.5",
+    "GPT-6 Astra", "GPT-6 Sol", "GPT-6 Luna", "GPT-5.6 Sol", "GPT-5.6 Terra",
+    "GPT-5.6 Luna", "GPT-5.5",
 };
 /* OpenCode encoder order. Its native picker remains Luna-first. */
 static const char *const opencode_models[] = {

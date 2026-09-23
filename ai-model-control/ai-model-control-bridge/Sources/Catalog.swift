@@ -3,6 +3,8 @@ import Foundation
 enum Catalog {
     static let models = [
         "GPT-6 Astra",
+        "GPT-6 Sol",
+        "GPT-6 Luna",
         "GPT-5.6 Sol",
         "GPT-5.6 Terra",
         "GPT-5.6 Luna",

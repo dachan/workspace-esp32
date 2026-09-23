@@ -105,8 +105,8 @@ restores that app's last model and effort. A first visit to a model keeps the
 current level and clamps it. Unchanged values do not trigger persistence or
 display work.
 
-Dial models follow the focused app. ChatGPT: GPT-6 Astra, GPT-5.6 Sol,
-GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5; thinking Light, Medium, High,
+Dial models follow the focused app. ChatGPT: GPT-6 Astra, GPT-6 Sol,
+GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5; thinking Light, Medium, High,
 Extra High, Max, Ultra. Cursor: Auto, then the enabled model list (defaults: Cursor Grok 4.6,
 Composer 2.5, Claude Opus 5, GPT-5.6 Sol, Claude Fable 5, GPT-5.6 Terra,
 GPT-5.6 Luna). Effort depends on the model (see Cursor effort ranges below).
