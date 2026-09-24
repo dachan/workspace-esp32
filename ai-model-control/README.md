@@ -114,7 +114,7 @@ display work.
 
 The Mac bridge reads the desktop picker's visible entries from Codex's local
 model cache at startup and every 10 seconds, then sends their ordered names and
-supported reasoning levels to the panel. If that cache is unavailable it falls
+supported reasoning levels to the panel. If that cache file is absent it falls
 back to Codex `model/list`. The same result powers the bridge's model validation. The ESP32 swaps
 its ChatGPT catalog only after a complete nonempty serial update; it keeps its
 last catalog if discovery fails. The computer's picker determines whether older

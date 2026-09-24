@@ -87,7 +87,7 @@ The Model Dial Settings window fits Dials, ChatGPT, and Cursor sections without
 scrolling. The bridge reads picker-visible entries from Codex's local model
 cache at startup and every 10 seconds, sending ordered model names and
 per-model effort options to the panel. Codex `model/list` is the fallback when
-the cache is unavailable. The computer's picker controls which models appear; a failed refresh
+the cache file is absent. A failed read retains the last catalog. The computer's picker controls which models appear; a failed refresh
 retains the last catalog. ChatGPT's global effort settings further constrain
 each model's supported levels, keeping at least one valid level. Cursor's
 enabled models sync automatically; other settings changes restart the bridge

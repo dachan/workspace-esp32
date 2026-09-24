@@ -9,15 +9,22 @@ enum CodexModelList {
     }
 
     static func load() -> [Entry]? {
-        loadCache() ?? loadServer()
+        // A transient partial cache read must not replace a seven-model panel
+        // catalog with the smaller app-server result.
+        FileManager.default.fileExists(atPath: cacheURL.path)
+            ? loadCache() : loadServer()
+    }
+
+    private static var cacheURL: URL {
+        let root = ProcessInfo.processInfo.environment["CODEX_HOME"]
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex").path
+        return URL(fileURLWithPath: root).appendingPathComponent("models_cache.json")
     }
 
     // The desktop picker's cache includes older entries that a fresh app-server
     // model/list call currently omits. Only `list` entries appear in its menu.
     private static func loadCache() -> [Entry]? {
-        let root = ProcessInfo.processInfo.environment["CODEX_HOME"]
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex").path
-        let url = URL(fileURLWithPath: root).appendingPathComponent("models_cache.json")
+        let url = cacheURL
         guard let data = try? Data(contentsOf: url),
               let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let models = payload["models"] as? [[String: Any]] else { return nil }
