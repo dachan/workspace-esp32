@@ -75,7 +75,7 @@ and applied-value caches, so the reconnect snapshot is accepted even when its
 revision is unchanged. Frames from a poll that ended in a disconnect are discarded.
 Current firmware retransmits until ACK and answers SYNC with its state, so a
 bridge restart or device reset recovers the panel state without applying it.
-Settings → Cursor → Refresh Cursor Models only refreshes the dial's Cursor model list.
+Cursor's enabled-model selection syncs automatically from its local database.
 Older firmware still works, but cannot replay missing changes. If the device path
 changes, restart with the new `--port`.
 
@@ -84,12 +84,14 @@ formats and compatibility details. Buffers and bytes processed per poll are
 bounded. Retry and key-delay durations use a monotonic clock.
 
 The Model Dial Settings window fits Dials, ChatGPT, and Cursor sections without
-scrolling. The bridge reads the visible Codex `model/list` catalog at startup and
-every 60 seconds, sending ordered model names and per-model effort options to
-the panel. The computer's picker controls which models appear; a failed refresh
+scrolling. The bridge reads picker-visible entries from Codex's local model
+cache at startup and every 10 seconds, sending ordered model names and
+per-model effort options to the panel. Codex `model/list` is the fallback when
+the cache is unavailable. The computer's picker controls which models appear; a failed refresh
 retains the last catalog. ChatGPT's global effort settings further constrain
-each model's supported levels, keeping at least one valid level. Cursor has a Refresh Cursor Models button.
-Changes restart the bridge so configuration is sent immediately. The CLI accepts
+each model's supported levels, keeping at least one valid level. Cursor's
+enabled models sync automatically; other settings changes restart the bridge
+so configuration is sent immediately. The CLI accepts
 --show-older-models 0|1, --chatgpt-effort-mask HEX, and --cursor-model-mask HEX; the bridge configuration is authoritative when it
 receives the panel's informational ENABLED snapshot.
 

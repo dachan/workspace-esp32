@@ -112,9 +112,10 @@ restores that app's last model and effort. A first visit to a model keeps the
 current level and clamps it. Unchanged values do not trigger persistence or
 display work.
 
-The Mac bridge reads Codex's visible `model/list` catalog at startup and every
-60 seconds, then sends its ordered model names and supported reasoning levels to
-the panel. The same result powers the bridge's model validation. The ESP32 swaps
+The Mac bridge reads the desktop picker's visible entries from Codex's local
+model cache at startup and every 10 seconds, then sends their ordered names and
+supported reasoning levels to the panel. If that cache is unavailable it falls
+back to Codex `model/list`. The same result powers the bridge's model validation. The ESP32 swaps
 its ChatGPT catalog only after a complete nonempty serial update; it keeps its
 last catalog if discovery fails. The computer's picker determines whether older
 models appear. The previous Show older models flag applies only to the static

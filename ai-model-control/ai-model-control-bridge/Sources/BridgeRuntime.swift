@@ -35,6 +35,7 @@ final class BridgeRuntime {
     private var nextChatGPTRefreshAt: TimeInterval = 0
     private var chatGPTRefreshInFlight = false
     private var lastChatGPTCatalogError = false
+    private var lastChatGPTCatalog: [CodexModelList.Entry]?
     private var lastRigPushAt: TimeInterval = 0
     private var lastRigPanel: (model: String, thinking: String, mask: UInt64)?
     private var lastRigError: String?
@@ -443,7 +444,7 @@ final class BridgeRuntime {
         let now = ProcessInfo.processInfo.systemUptime
         guard !chatGPTRefreshInFlight, now >= nextChatGPTRefreshAt else { return }
         chatGPTRefreshInFlight = true
-        nextChatGPTRefreshAt = now + 60
+        nextChatGPTRefreshAt = now + 10
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let entries = CodexModelList.load()
             DispatchQueue.main.async {
@@ -457,6 +458,8 @@ final class BridgeRuntime {
                     return
                 }
                 self.lastChatGPTCatalogError = false
+                guard entries != self.lastChatGPTCatalog else { return }
+                self.lastChatGPTCatalog = entries
                 Catalog.setChatGPTModels(entries.map(\.name))
                 self.session?.setChatGPTCatalog(entries)
                 print("\(stamp()) ChatGPT model catalog: \(entries.map(\.name).joined(separator: ", "))")

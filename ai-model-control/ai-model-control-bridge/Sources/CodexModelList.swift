@@ -9,6 +9,47 @@ enum CodexModelList {
     }
 
     static func load() -> [Entry]? {
+        loadCache() ?? loadServer()
+    }
+
+    // The desktop picker's cache includes older entries that a fresh app-server
+    // model/list call currently omits. Only `list` entries appear in its menu.
+    private static func loadCache() -> [Entry]? {
+        let root = ProcessInfo.processInfo.environment["CODEX_HOME"]
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex").path
+        let url = URL(fileURLWithPath: root).appendingPathComponent("models_cache.json")
+        guard let data = try? Data(contentsOf: url),
+              let payload = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let models = payload["models"] as? [[String: Any]] else { return nil }
+        let visible = models.filter { $0["visibility"] as? String == "list" }
+            .sorted { ($0["priority"] as? Int ?? Int.max) < ($1["priority"] as? Int ?? Int.max) }
+        var entries: [Entry] = []
+        for model in visible {
+            guard let raw = model["display_name"] as? String else { continue }
+            let efforts = (model["supported_reasoning_levels"] as? [[String: Any]] ?? [])
+                .compactMap { $0["effort"] as? String }
+            guard let entry = makeEntry(raw, efforts: efforts),
+                  !entries.contains(where: { $0.name.caseInsensitiveCompare(entry.name) == .orderedSame }) else { continue }
+            entries.append(entry)
+            if entries.count == 32 { break }
+        }
+        return entries.isEmpty ? nil : entries
+    }
+
+    private static func makeEntry(_ raw: String, efforts: [String]) -> Entry? {
+        let name = raw.replacingOccurrences(
+            of: #"^(GPT-[0-9]+(?:\.[0-9]+)?)-"#, with: "$1 ", options: .regularExpression
+        )
+        guard name.utf8.count < 64,
+              name.unicodeScalars.allSatisfy({ $0.value >= 32 && $0.value < 127 }) else { return nil }
+        let bits: [String: UInt8] = ["low": 1, "medium": 2, "high": 4,
+                                    "xhigh": 8, "max": 16, "ultra": 32]
+        let mask = efforts.reduce(UInt8(0)) { value, effort in value | (bits[effort] ?? 0) }
+        // An older catalog may omit effort options; keep the dial's fallback range.
+        return Entry(name: name, effortMask: efforts.isEmpty ? 0x3f : mask)
+    }
+
+    private static func loadServer() -> [Entry]? {
         let installed = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.openai.codex")
         let bundled = installed?.appendingPathComponent("Contents/Resources/codex")
         let fallback = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/codex")
@@ -68,20 +109,11 @@ enum CodexModelList {
         for model in data where model["hidden"] as? Bool != true {
             guard model["model"] is String,
                   let raw = model["displayName"] as? String else { continue }
-            let name = raw.replacingOccurrences(
-                of: #"^(GPT-[0-9]+(?:\.[0-9]+)?)-"#, with: "$1 ", options: .regularExpression
-            )
-            guard name.utf8.count < 64,
-                  name.unicodeScalars.allSatisfy({ $0.value >= 32 && $0.value < 127 }),
-                  !entries.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) else { continue }
-            let levels = model["supportedReasoningEfforts"] as? [[String: Any]] ?? []
-            let bits: [String: UInt8] = ["low": 1, "medium": 2, "high": 4,
-                                        "xhigh": 8, "max": 16, "ultra": 32]
-            let mask = levels.reduce(UInt8(0)) { value, level in
-                value | (bits[level["reasoningEffort"] as? String ?? ""] ?? 0)
-            }
-            // Older catalogs may omit the effort list; keep the existing dial range then.
-            entries.append(Entry(name: name, effortMask: levels.isEmpty ? 0x3f : mask))
+            let efforts = (model["supportedReasoningEfforts"] as? [[String: Any]] ?? [])
+                .compactMap { $0["reasoningEffort"] as? String }
+            guard let entry = makeEntry(raw, efforts: efforts),
+                  !entries.contains(where: { $0.name.caseInsensitiveCompare(entry.name) == .orderedSame }) else { continue }
+            entries.append(entry)
             if entries.count == 32 { break }
         }
         return entries.isEmpty ? nil : entries
