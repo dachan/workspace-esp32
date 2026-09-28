@@ -7,41 +7,31 @@ import Foundation
 /// labels. This avoids assumptions about enabled-model order or current focus.
 enum CursorPicker {
     static func matches(_ name: String, focus: FocusOperation, effort: Bool) -> Bool {
-        control(name, focus: focus, effort: effort) != nil
+        guard let label = selectedControlLabel(focus: focus) else { return false }
+        if effort {
+            guard let model = modelName(in: label) else { return false }
+            return label.caseInsensitiveCompare(model + " " + name) == .orderedSame
+        }
+        return modelName(in: label)?.caseInsensitiveCompare(name) == .orderedSame
     }
 
     static func selectedModel(focus: FocusOperation) -> String? {
+        guard let label = selectedControlLabel(focus: focus) else { return nil }
+        return modelName(in: label)
+    }
+
+    // Cursor may expose a model control in the editor and another in Agents.
+    // The active chat composer is the last one in the focused window's AX tree.
+    private static func selectedControlLabel(focus: FocusOperation) -> String? {
         guard let root = root(for: focus) else { return nil }
         var selected: String?
         _ = find(in: root, where: {
             guard role($0) == "AXPopUpButton" else { return false }
             let label = title($0).isEmpty ? description($0) : title($0)
-            selected = Catalog.cursorModels.first { model in
-                label.caseInsensitiveCompare(model) == .orderedSame ||
-                    Catalog.cursorEfforts(for: model)?.contains {
-                        label.caseInsensitiveCompare(model + " " + $0) == .orderedSame
-                    } == true
-            }
-            return selected != nil
+            if modelName(in: label) != nil { selected = label }
+            return false
         })
         return selected
-    }
-
-    private static func control(_ name: String, focus: FocusOperation, effort: Bool) -> AXUIElement? {
-        guard let root = root(for: focus) else { return nil }
-        return find(in: root, where: {
-            guard role($0) == "AXPopUpButton" else { return false }
-            let label = title($0).isEmpty ? description($0) : title($0)
-            if label.caseInsensitiveCompare(name) == .orderedSame { return true }
-            if effort {
-                return Catalog.cursorModels.contains {
-                    label.caseInsensitiveCompare($0 + " " + name) == .orderedSame
-                }
-            }
-            return Catalog.cursorEfforts(for: name)?.contains {
-                label.caseInsensitiveCompare(name + " " + $0) == .orderedSame
-            } == true
-        })
     }
 
     static func model(
@@ -64,6 +54,9 @@ enum CursorPicker {
         guard step(Keys.down, count: index + 1, pulse: pulse),
               Keys.key(Keys.return, pulse: pulse),
               Keys.wait(Keys.pickerTiming, pulse: pulse) else { return .interrupted }
+        guard selectedModel(focus: focus)?.caseInsensitiveCompare(name) == .orderedSame else {
+            return .failed("Cursor did not select model \(name)")
+        }
         return .applied(path: "keyboard model \(name)")
     }
 

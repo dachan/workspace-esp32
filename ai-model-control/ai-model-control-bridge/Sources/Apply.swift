@@ -243,12 +243,10 @@ enum Switcher {
     ) -> Result? {
         switch focus.kind {
         case .cursor:
-            // Cmd+L is Toggle Sidepanel. Sending it while Agents is already
-            // open closes the right panel. Only use it to open a missing panel.
+            // Command-L toggles Agents, so it cannot recover a missing
+            // composer safely. Leave the panel alone and report the failure.
             if PromptFocus.ensure(pid: focus.pid, kind: .cursor) == .missing {
-                guard Keys.command(Keys.l, pulse: pulse) else {
-                    return pulse() ? .interrupted : .failed("could not post Command-L")
-                }
+                return .failed("Cursor composer unavailable")
             }
         case .chatGPT, .openCode:
             if PromptFocus.ensure(pid: focus.pid, kind: focus.kind) == .missing {

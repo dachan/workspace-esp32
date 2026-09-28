@@ -18,9 +18,7 @@ while a supported app is already focused. Focus changes only update the panel.
    An ACK means received, not applied. Revisioned state waits for `APPLY` from
    a settled rotation or `PUSH` from an encoder click. Legacy SET remains an
    application intent for compatibility.
-4. After explicit intent, if ChatGPT, Cursor, or OpenCode is focused, focus the prompt first — Cursor via
-   Command-L only when the Agents panel is missing (Cmd+L toggles it closed
-   if it is already open), otherwise AX-focus `aislash-editor-input`;
+4. After explicit intent, if ChatGPT, Cursor, or OpenCode is focused, focus the prompt first — Cursor by the composer next to the active model control (or its accessibility identity), without toggling Agents;
    ChatGPT/Codex by message-box identity — then apply using that app's shortcuts.
    Applies start after the 0.20 s intent settle.
    One worker retains the latest complete model/effort target,
@@ -39,7 +37,8 @@ while a supported app is already focused. Focus changes only update the panel.
    - ChatGPT / Codex reasoning: absolute Light clamp (Ctrl+Shift+,) then
      climb with Ctrl+Shift-.
    - Cursor model: Command-/ opens Search; first Down is Auto, then the
-     enabled picker order; Return selects. A ChatGPT-only name still on
+     enabled picker order; Return selects. The bridge reads the active
+     model control afterward and treats a mismatch as failure. A ChatGPT-only name still on
      the panel (e.g. GPT-6 Astra) is skipped, not retried, so effort can
      still apply.
    - Cursor effort accepts both Reasoning and Effort menu labels in the focused window.
@@ -59,8 +58,9 @@ that failed while the app stayed focused, is retried at two-second intervals whi
 three failed attempts per target. This limit applies to all apps and input-filter
 creation failures; a later dial update starts a fresh attempt budget. Interrupted pickers are dismissed before retrying in that process, tracking
 both Cursor menu layers and each Escape already posted. ChatGPT thinking retries
-start from the absolute Light clamp. Logs say “posted” when the current generation's
-key sequence completes; the helper does not read back the app's selected value.
+start from the absolute Light clamp. Cursor model posting requires matching
+Accessibility readback from the active composer. Other “posted” log lines
+only confirm that the current generation's key sequence completed.
 Debounce reduces intermediate work, while generation checks and invalidation make
 slow turns converge on the final target as long as the same app stays focused.
 This is keyboard-posting completion, not verified on-screen synchronization.

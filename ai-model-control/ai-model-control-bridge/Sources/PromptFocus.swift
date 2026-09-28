@@ -25,9 +25,9 @@ enum PromptFocus {
         guard let field = findField(in: root, kind: kind) else {
             return .missing
         }
-        _ = AXUIElementSetAttributeValue(
+        guard AXUIElementSetAttributeValue(
             field, kAXFocusedAttribute as CFString, kCFBooleanTrue
-        )
+        ) == .success else { return .missing }
         placeCaret(in: field)
         return .focused
     }
@@ -35,10 +35,20 @@ enum PromptFocus {
     private static func findField(in root: AXUIElement, kind: DeskKind) -> AXUIElement? {
         var best: (score: Int, el: AXUIElement)?
         var visited = 0
+        var cursorFields: [(position: Int, el: AXUIElement)] = []
+        var cursorModelControlPositions: [Int] = []
 
         func walk(_ el: AXUIElement) {
-            if visited >= 4000 { return }
+            if visited >= 8000 { return }
             visited += 1
+            let role = string(el, kAXRoleAttribute as String)
+            if kind == .cursor {
+                if role == "AXTextArea" || role == "AXTextField" {
+                    cursorFields.append((visited, el))
+                } else if role == "AXPopUpButton", isCursorModelControl(el) {
+                    cursorModelControlPositions.append(visited)
+                }
+            }
             let score = matchScore(el, kind: kind)
             if score > (best?.score ?? 0) {
                 best = (score, el)
@@ -50,6 +60,10 @@ enum PromptFocus {
             }
         }
         walk(root)
+        if kind == .cursor, let control = cursorModelControlPositions.last,
+           let field = cursorFields.last(where: { $0.position < control }) {
+            return field.el
+        }
         return best?.el
     }
 
@@ -73,6 +87,16 @@ enum PromptFocus {
             return 0
         case .rig:
             return 0
+        }
+    }
+
+    private static func isCursorModelControl(_ el: AXUIElement) -> Bool {
+        let label = string(el, kAXTitleAttribute as String).isEmpty
+            ? string(el, kAXDescriptionAttribute as String)
+            : string(el, kAXTitleAttribute as String)
+        return Catalog.cursorModels.contains { model in
+            label.caseInsensitiveCompare(model) == .orderedSame ||
+                label.lowercased().hasPrefix(model.lowercased() + " ")
         }
     }
 
