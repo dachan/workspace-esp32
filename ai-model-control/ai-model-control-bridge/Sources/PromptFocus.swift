@@ -47,18 +47,25 @@ enum PromptFocus {
     private static func findField(in root: AXUIElement, kind: DeskKind) -> AXUIElement? {
         var best: (score: Int, el: AXUIElement)?
         var visited = 0
-        var cursorFields: [(position: Int, el: AXUIElement)] = []
-        var cursorModelControlPositions: [Int] = []
+        var cursorFields = 0
+        var cursorModelControls = 0
+        var cursorControlSeen = false
+        var cursorComposer: AXUIElement?
 
         func walk(_ el: AXUIElement) {
-            if visited >= 8000 { return }
+            if visited >= 8000 || cursorComposer != nil { return }
             visited += 1
             let role = string(el, kAXRoleAttribute as String)
             if kind == .cursor {
-                if role == "AXTextArea" || role == "AXTextField" {
-                    cursorFields.append((visited, el))
-                } else if role == "AXPopUpButton", isCursorModelControl(el) {
-                    cursorModelControlPositions.append(visited)
+                if role == "AXPopUpButton", isCursorModelControl(el) {
+                    cursorModelControls += 1
+                    cursorControlSeen = true
+                } else if role == "AXTextArea" || role == "AXTextField" {
+                    cursorFields += 1
+                    if cursorControlSeen {
+                        cursorComposer = el
+                        return
+                    }
                 }
             }
             let score = matchScore(el, kind: kind)
@@ -66,19 +73,20 @@ enum PromptFocus {
                 best = (score, el)
             }
             if let children = copy(el, kAXChildrenAttribute as String) as? [AXUIElement] {
-                for child in children {
-                    walk(child)
+                // Agents is near the end of Cursor's large window tree. Visit it
+                // before the editor so the traversal limit cannot hide it.
+                if kind == .cursor {
+                    for child in children.reversed() { walk(child) }
+                } else {
+                    for child in children { walk(child) }
                 }
             }
         }
         walk(root)
-        if kind == .cursor, let control = cursorModelControlPositions.last,
-           let field = cursorFields.last(where: { $0.position < control }) {
-            return field.el
-        }
+        if let cursorComposer { return cursorComposer }
         if kind == .cursor, best == nil {
             fputs(
-                "ai-model-control-bridge: Cursor focus scan visited \(visited), fields \(cursorFields.count), model controls \(cursorModelControlPositions.count)\n",
+                "ai-model-control-bridge: Cursor focus scan visited \(visited), fields \(cursorFields), model controls \(cursorModelControls)\n",
                 stderr
             )
         }

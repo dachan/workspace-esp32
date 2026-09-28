@@ -24,12 +24,10 @@ enum CursorPicker {
     // The active chat composer is the last one in the focused window's AX tree.
     private static func selectedControlLabel(focus: FocusOperation) -> String? {
         guard let root = root(for: focus) else { return nil }
-        var selected: String?
-        _ = find(in: root, where: {
-            if let label = modelControlLabel($0) { selected = label }
-            return false
-        })
-        return selected
+        guard let control = find(in: root, reverse: true, where: {
+            modelControlLabel($0) != nil
+        }) else { return nil }
+        return modelControlLabel(control)
     }
 
     /// Cursor exposes the popup's visible model name on a child text element
@@ -59,7 +57,7 @@ enum CursorPicker {
         pulse: @escaping () -> Bool
     ) -> Switcher.Result {
         guard let root = root(for: focus),
-              let menu = find(in: root, where: {
+              let menu = find(in: root, reverse: true, where: {
                   role($0) == "AXMenu" && description($0) == "Model selection"
               }) else { return .failed("Cursor model menu unavailable") }
         // Read the live row order so Cursor settings can reorder enabled models.
@@ -89,7 +87,7 @@ enum CursorPicker {
               step(Keys.right, count: 1, pulse: pulse),
               Keys.wait(Keys.pickerTiming, pulse: pulse) else { return .interrupted }
         guard let root = root(for: focus),
-              let menu = find(in: root, where: {
+              let menu = find(in: root, reverse: true, where: {
                   role($0) == "AXMenu" &&
                       ["effort options", "reasoning options", "reasoning effort options"]
                           .contains(description($0).lowercased())
@@ -114,7 +112,7 @@ enum CursorPicker {
             guard Keys.key(Keys.escape, pulse: pulse),
                   Keys.wait(Keys.pickerTiming, pulse: pulse) else { return .interrupted }
         }
-        if let currentRoot = Self.root(for: focus), find(in: currentRoot, where: {
+        if let currentRoot = Self.root(for: focus), find(in: currentRoot, reverse: true, where: {
             guard role($0) == "AXMenu" else { return false }
             let label = description($0).lowercased()
             return label == "model selection" || label.hasSuffix(" parameters")
@@ -164,6 +162,7 @@ enum CursorPicker {
 
     private static func find(
         in root: AXUIElement,
+        reverse: Bool = false,
         where matches: (AXUIElement) -> Bool
     ) -> AXUIElement? {
         var visited = 0
@@ -174,8 +173,14 @@ enum CursorPicker {
             guard let children = copy(element, kAXChildrenAttribute as String) as? [AXUIElement] else {
                 return nil
             }
-            for child in children {
-                if let found = walk(child) { return found }
+            if reverse {
+                for child in children.reversed() {
+                    if let found = walk(child) { return found }
+                }
+            } else {
+                for child in children {
+                    if let found = walk(child) { return found }
+                }
             }
             return nil
         }
