@@ -17,7 +17,7 @@ their technical names.
 - `super-tamagotchi/` — portable ESP32-S3 virtual-pet firmware, including the
   native creature simulator and the display, touch, and audio drivers.
 - `ai-model-control/` — ESP32-S3 AI model control panel (ST7796) for model/thinking selection across
-  ChatGPT, Cursor, and OpenCode, plus
+  ChatGPT, Cursor, OpenCode, and Rig, plus
   `ai-model-control/ai-model-control-bridge/` macOS CLI that applies encoder `SET` lines over USB
   serial while a supported app is focused (`--watch --send-serial`).
 - `date-time-display/` — dual-display firmware with a fluid-motion 1.3-inch
