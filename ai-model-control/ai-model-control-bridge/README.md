@@ -94,7 +94,8 @@ retains the last catalog. ChatGPT's global effort settings further constrain
 each model's supported levels, keeping at least one valid level. Cursor's
 enabled names, picker order, and effort choices sync automatically; other
 settings changes restart the bridge
-so configuration is sent immediately. The CLI accepts
+so configuration is sent immediately. One-shot --set-model and --set-thinking commands also load Cursor's
+current catalog before validating names. The CLI accepts
 --show-older-models 0|1, --chatgpt-effort-mask HEX, and --cursor-model-mask HEX; the bridge configuration is authoritative when it
 receives the panel's informational ENABLED snapshot.
 

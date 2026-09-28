@@ -3,6 +3,11 @@ import AppKit
 import Foundation
 
 func run() -> Int32 {
+    if CommandLine.arguments.contains("--set-model") ||
+        CommandLine.arguments.contains("--set-thinking"),
+       let entries = CursorModelList.load() {
+        Catalog.setCursorCatalog(entries)
+    }
     guard let options = parseOptions(CommandLine.arguments) else {
         return 2
     }
