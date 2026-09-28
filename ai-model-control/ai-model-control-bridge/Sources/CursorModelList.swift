@@ -70,7 +70,10 @@ enum CursorModelList {
 
     private static func effortMask(_ model: [String: Any]) -> UInt8 {
         guard let definitions = model["parameterDefinitions"] as? [[String: Any]],
-              let effort = definitions.first(where: { $0["id"] as? String == "effort" }),
+              let effort = definitions.first(where: {
+                  guard let id = $0["id"] as? String else { return false }
+                  return ["effort", "reasoning", "reasoning_effort"].contains(id)
+              }),
               let parameter = effort["parameterType"] as? [String: Any],
               let choice = parameter["enumParameter"] as? [String: Any],
               let values = choice["values"] as? [[String: Any]] else { return 0 }

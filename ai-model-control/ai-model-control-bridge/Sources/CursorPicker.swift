@@ -73,7 +73,8 @@ enum CursorPicker {
         guard let root = root(for: focus),
               let menu = find(in: root, where: {
                   role($0) == "AXMenu" &&
-                      ["effort options", "reasoning options"].contains(description($0).lowercased())
+                      ["effort options", "reasoning options", "reasoning effort options"]
+                          .contains(description($0).lowercased())
               }) else {
             closeMenus(pulse: pulse)
             return .failed("Cursor effort menu unavailable")
