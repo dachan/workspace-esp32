@@ -87,8 +87,10 @@ calibration.
 Rig uses `agent.setFocus` and does not need Accessibility; ChatGPT, Cursor, and OpenCode still do.
 The Model Dial Settings window controls ChatGPT effort levels and which knob
 changes the model versus effort (left is model by default). Cursor availability,
-order, and effort choices follow Cursor's local model file. The bridge sends
-its live list on connection and when that file changes. Rig models are sent Z–A by the full provider-plus-name
+order, and effort choices follow Cursor's local model file. Its effort
+choices can be stored as `effort`, `reasoning`, or `reasoning_effort`; the
+bridge maps each to the dial's thinking levels. The bridge sends its live list
+on connection and when that file changes. Rig models are sent Z–A by the full provider-plus-name
 label. A release is confirmed after 150 ms without contact so a transient
 FT6336 read error cannot create a false release.
 
@@ -238,9 +240,9 @@ Firmware `v 0.35+` updates the panel immediately, then sends SET after a
 0.4 s settle window. Thinking pulses are held until the knob pauses so
 two detents are one level and a quick turn can run Light↔Extra High. Model
 steps still use a 160 ms emit gap. The Mac helper uses `NSWorkspace.frontmostApplication`
-and focuses the prompt first: Cursor Command-L only if Agents is not already
-open (it toggles the panel otherwise), otherwise AX-focus the composer;
-ChatGPT by Accessibility element identity. While ChatGPT is focused it opens the visible model
+and focuses the prompt first: Cursor by the composer beside the active
+model control without toggling Agents; ChatGPT by Accessibility element
+identity. While ChatGPT is focused it opens the visible model
 control by Accessibility, chooses **Select model**, and presses the exact model label; it steps reasoning with Control-Shift-, / Control-Shift-.
 While Cursor is focused it opens the model list with Command-/ (first Down
 is Auto), then reopens it for Effort with Left, Up, Right, then Down-only to
