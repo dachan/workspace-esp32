@@ -26,6 +26,11 @@ const char *catalog_default_model_for(desk_app_t app);
 int catalog_thinking_count_for(desk_app_t app, const char *model);
 const char *catalog_default_thinking_for(desk_app_t app, const char *model);
 
+/* Transactional, ordered Cursor picker catalog; fixed slots remain the offline fallback. */
+void catalog_cursor_catalog_begin(void);
+void catalog_cursor_catalog_add(const char *name, uint8_t effort_mask);
+bool catalog_cursor_catalog_commit(void);
+
 /* Cursor dial enable mask. Auto is always on. Default is the Settings "on" set. */
 uint64_t catalog_cursor_enabled_mask(void);
 void catalog_cursor_set_enabled_mask(uint64_t mask);

@@ -237,8 +237,8 @@ struct SettingsView: View {
                     }
                 }
             }
-            settingsSection(title: "Cursor", detail: "Enabled models sync automatically from Cursor's local model file.") {
-                Text("Changes appear on the dial while Model Dial is running.")
+            settingsSection(title: "Cursor", detail: "The dial uses Cursor's enabled model list and effort choices.") {
+                Text("Model availability updates while Model Dial is running.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

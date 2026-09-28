@@ -27,7 +27,10 @@ responds with its latest model and thinking after any active 0.4 s settle window
 Mac → ESP: SYNC
 ESP → Mac: ENABLED <16-hex Cursor enable mask>
 Mac → ESP: CONFIG CHATGPT_EFFORTS <16-hex effort mask>
-Mac → ESP: CONFIG CURSOR_MODELS <16-hex model mask>
+Mac → ESP: CONFIG CURSOR_MODELS <16-hex fallback model mask>
+Mac → ESP: CONFIG CURSOR_CLEAR
+Mac → ESP: CONFIG CURSOR_ADD <2-hex effort mask> <picker model name>
+Mac → ESP: CONFIG CURSOR_END
 Mac → ESP: CONFIG DIAL_SWAP <0|1>
 Mac → ESP: CONFIG CHATGPT_OLDER <0|1> (legacy fallback only)
 Mac → ESP: CONFIG CHATGPT_CLEAR
@@ -51,10 +54,14 @@ keys on their own. A settled rotation follows its complete state with `APPLY`;
 an encoder click follows fresh revisions for both fields with `PUSH`.
 `APPLY` uses the per-process cache, while `PUSH` forces both fields.
 
-Model Dial reads Cursor's local SQLite model file at startup and checks its database
-and WAL for changes while running. Enabled-model changes update the dial without a
-manual refresh; a failed read retains the last saved selection and retries. This
-syncs existing dial catalog slots, not new model definitions or picker order.
+Model Dial reads Cursor's local SQLite model file at startup and refreshes the
+ordered enabled model names and per-model effort choices every 10 seconds while
+running. The bridge sends a complete catalog transaction to the ESP32; an empty
+or interrupted update leaves its previous list intact. If the local file is
+unavailable, the last good catalog stays in use and the bridge retries. The
+built-in Cursor slots remain the fallback before a live catalog arrives.
+Cursor's selected model is separate from this availability sync; choosing a
+model directly in Cursor does not change the panel's saved dial selection.
 
 Each changed field gets a new revision, including after firmware restart.
 Unacknowledged state retries every 0.5 s; a full USB transmit buffer retries after
@@ -78,11 +85,10 @@ and touch controls are ignored so they cannot change a stored dial selection.
 A five-second press-and-hold anywhere on the glass starts a five-point touch
 calibration.
 Rig uses `agent.setFocus` and does not need Accessibility; ChatGPT, Cursor, and OpenCode still do.
-The Model Dial Settings window controls which ChatGPT effort levels and Cursor
-models are available on the encoders, and which knob changes the model versus
-effort (left is model by default). Its Cursor section can refresh the model
-list from Cursor; the bridge sends those masks and the dial mapping to the
-panel on every connection. Rig models are sent Z–A by the full provider-plus-name
+The Model Dial Settings window controls ChatGPT effort levels and which knob
+changes the model versus effort (left is model by default). Cursor availability,
+order, and effort choices follow Cursor's local model file. The bridge sends
+its live list on connection and when that file changes. Rig models are sent Z–A by the full provider-plus-name
 label. A release is confirmed after 150 ms without contact so a transient
 FT6336 read error cannot create a false release.
 
@@ -124,12 +130,11 @@ Catalog refresh and focus snapshots never post keys to the desktop app.
 
 Dial models follow the focused app. Static fallback ChatGPT catalog: GPT-6 Astra, GPT-6 Sol,
 GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5; thinking Light, Medium, High,
-Extra High, Max, Ultra. Cursor: Auto, then the enabled model list (defaults: Cursor Grok 4.6,
-Composer 2.5, Claude Opus 5, GPT-5.6 Sol, Claude Fable 5, GPT-5.6 Terra,
-GPT-5.6 Luna). Effort depends on the model (see Cursor effort ranges below).
-Command-/ apply uses this enabled index; keep the same models on in Cursor
-Settings. Canonical names live in firmware `main/catalog.c` and Swift
-`Sources/Catalog.swift`; keep these tables aligned when adding entries.
+Extra High, Max, Ultra. Cursor uses its enabled picker order and per-model
+effort choices from the local model file. If that file is unavailable before
+the first successful read, the fixed catalog in firmware `main/catalog.c` and
+Swift `Sources/Catalog.swift` provides a fallback. Command-/ apply reads the
+live picker rows before choosing a model.
 
 ## Hardware
 

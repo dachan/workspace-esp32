@@ -21,9 +21,10 @@ static const char *KEY_EFFORT = "effort";
 static const char *KEY_CURSOR_EN = "c_en";
 static const char *KEY_CHATGPT_THINK_EN = "g_en";
 
-#define EFFORT_BLOB_VER 1
+#define EFFORT_BLOB_VER 2
 #define EFFORT_SLOT_MAX 80
-#define EFFORT_MODEL_MAX 32
+#define EFFORT_MODEL_MAX 64
+#define EFFORT_MODEL_LEGACY_MAX 32
 #define EFFORT_THINK_MAX 16
 
 typedef struct __attribute__((packed)) {
@@ -37,6 +38,18 @@ typedef struct __attribute__((packed)) {
     uint8_t count;
     effort_slot_t slots[EFFORT_SLOT_MAX];
 } effort_blob_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t cursor;
+    char model[EFFORT_MODEL_LEGACY_MAX];
+    char thinking[EFFORT_THINK_MAX];
+} effort_slot_legacy_t;
+
+typedef struct __attribute__((packed)) {
+    uint8_t version;
+    uint8_t count;
+    effort_slot_legacy_t slots[EFFORT_SLOT_MAX];
+} effort_blob_legacy_t;
 
 static effort_blob_t s_effort;
 static char s_last_model[4][EFFORT_MODEL_MAX];
@@ -139,9 +152,19 @@ int model_nvs_load(model_fields_t *out)
     len = sizeof(blob);
     err = nvs_get_blob(h, KEY_EFFORT, &blob, &len);
     if (err == ESP_OK && blob.version == EFFORT_BLOB_VER && blob.count <= EFFORT_SLOT_MAX
-        && len >= 2) {
+        && len == sizeof(blob)) {
         s_effort = blob;
-        s_effort.version = EFFORT_BLOB_VER;
+    } else if (err == ESP_OK && blob.version == 1 && len == sizeof(effort_blob_legacy_t)) {
+        effort_blob_legacy_t legacy;
+        memcpy(&legacy, &blob, sizeof(legacy));
+        if (legacy.count <= EFFORT_SLOT_MAX) {
+            s_effort.count = legacy.count;
+            for (int i = 0; i < legacy.count; i++) {
+                s_effort.slots[i].cursor = legacy.slots[i].cursor;
+                copy_trunc(s_effort.slots[i].model, EFFORT_MODEL_MAX, legacy.slots[i].model);
+                copy_trunc(s_effort.slots[i].thinking, EFFORT_THINK_MAX, legacy.slots[i].thinking);
+            }
+        }
     }
     load_last_model(h, KEY_LAST_G, s_last_model[0], sizeof(s_last_model[0]));
     load_last_model(h, KEY_LAST_C, s_last_model[1], sizeof(s_last_model[1]));

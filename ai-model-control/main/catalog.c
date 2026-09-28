@@ -202,6 +202,61 @@ static const cursor_model_t cursor_models[] = {
     {"GLM 5.2", THINK(think_hm)},
     {"Grok 4.7", THINK(think_lmhx)},
 };
+#define CURSOR_LIVE_MAX 48
+#define CURSOR_LIVE_NAME 64
+static char s_cursor_live[CURSOR_LIVE_MAX][CURSOR_LIVE_NAME];
+static uint8_t s_cursor_live_effort[CURSOR_LIVE_MAX];
+static int s_cursor_live_count;
+static char s_cursor_build[CURSOR_LIVE_MAX][CURSOR_LIVE_NAME];
+static uint8_t s_cursor_build_effort[CURSOR_LIVE_MAX];
+static int s_cursor_build_count;
+static bool s_cursor_building;
+static const char *s_cursor_live_effort_names[COUNT(cursor_thinking)];
+
+void catalog_cursor_catalog_begin(void)
+{
+    s_cursor_build_count = 0;
+    s_cursor_building = true;
+}
+
+void catalog_cursor_catalog_add(const char *name, uint8_t effort_mask)
+{
+    if (!s_cursor_building || !name || !name[0]
+        || strlen(name) >= CURSOR_LIVE_NAME || s_cursor_build_count >= CURSOR_LIVE_MAX) return;
+    for (int i = 0; i < s_cursor_build_count; i++) {
+        if (strcasecmp(s_cursor_build[i], name) == 0) return;
+    }
+    snprintf(s_cursor_build[s_cursor_build_count], CURSOR_LIVE_NAME, "%s", name);
+    s_cursor_build_effort[s_cursor_build_count++] = effort_mask & 0x7f;
+}
+
+bool catalog_cursor_catalog_commit(void)
+{
+    s_cursor_building = false;
+    if (s_cursor_build_count == 0) return false;
+    bool changed = s_cursor_live_count != s_cursor_build_count;
+    for (int i = 0; i < s_cursor_build_count && !changed; i++) {
+        changed = strcasecmp(s_cursor_live[i], s_cursor_build[i]) != 0
+            || s_cursor_live_effort[i] != s_cursor_build_effort[i];
+    }
+    if (!changed) return false;
+    s_cursor_live_count = s_cursor_build_count;
+    for (int i = 0; i < s_cursor_live_count; i++) {
+        snprintf(s_cursor_live[i], CURSOR_LIVE_NAME, "%s", s_cursor_build[i]);
+        s_cursor_live_effort[i] = s_cursor_build_effort[i];
+    }
+    return true;
+}
+
+static int cursor_live_index(const char *name)
+{
+    if (!name) return -1;
+    for (int i = 0; i < s_cursor_live_count; i++) {
+        if (strcasecmp(s_cursor_live[i], name) == 0) return i;
+    }
+    return -1;
+}
+
 /*
  * Keep configuration-mask bits stable while placing the latest Cursor model
  * beside Auto on the physical dial.
@@ -612,7 +667,7 @@ static int cursor_enabled_index(int full_index)
 static const char *const *models_table(bool cursor, int *count)
 {
     if (cursor) {
-        *count = cursor_enabled_count();
+        *count = s_cursor_live_count > 0 ? s_cursor_live_count : cursor_enabled_count();
         return NULL;
     }
     return chatgpt_model_table(count);
@@ -621,6 +676,19 @@ static const char *const *models_table(bool cursor, int *count)
 static const char *const *thinking_table(bool cursor, const char *model, int *count)
 {
     if (cursor) {
+        if (s_cursor_live_count > 0) {
+            int index = cursor_live_index(model);
+            *count = 0;
+            if (index >= 0) {
+                uint8_t mask = s_cursor_live_effort[index];
+                for (int i = 0; i < COUNT(cursor_thinking); i++) {
+                    if (mask & (1u << i)) {
+                        s_cursor_live_effort_names[(*count)++] = cursor_thinking[i];
+                    }
+                }
+            }
+            return s_cursor_live_effort_names;
+        }
         int index = cursor_index(model);
         if (index < 0) {
             *count = 0;
@@ -738,6 +806,7 @@ const char *catalog_model_at_in(bool cursor, int index)
     if (index < 0 || index >= count) {
         return cursor ? cursor_models[0].name : names[0];
     }
+    if (cursor && s_cursor_live_count > 0) return s_cursor_live[index];
     return cursor ? cursor_models[cursor_full_at_enabled(index)].name : names[index];
 }
 
@@ -763,6 +832,7 @@ int catalog_model_index_for(desk_app_t app, const char *name)
 int catalog_model_index_in(bool cursor, const char *name)
 {
     if (cursor) {
+        if (s_cursor_live_count > 0) return cursor_live_index(name);
         int full = cursor_index(name);
         return full < 0 ? -1 : cursor_enabled_index(full);
     }
@@ -848,7 +918,7 @@ bool catalog_model_known(const char *name)
     const char *const *live = chatgpt_model_table(&live_count);
     if (table_count(live, live_count, name) >= 0
         || table_count(chatgpt_models, COUNT(chatgpt_models), name) >= 0) return true;
-    return cursor_index(name) >= 0
+    return cursor_live_index(name) >= 0 || cursor_index(name) >= 0
         || table_count(opencode_models, COUNT(opencode_models), name) >= 0
         || rig_name_index(s_rig_live, s_rig_live_count, name) >= 0
         || rig_full_index(name) >= 0;
@@ -873,6 +943,7 @@ const char *catalog_default_model_for(desk_app_t app)
 
 const char *catalog_default_model_in(bool cursor)
 {
+    if (cursor && s_cursor_live_count > 0) return s_cursor_live[0];
     const char *want = cursor ? "Cursor Grok 4.6" : "GPT-5.6 Luna";
     return catalog_model_index_in(cursor, want) >= 0
         ? want

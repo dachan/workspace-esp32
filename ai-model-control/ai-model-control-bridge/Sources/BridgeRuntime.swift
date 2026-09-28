@@ -36,6 +36,10 @@ final class BridgeRuntime {
     private var chatGPTRefreshInFlight = false
     private var lastChatGPTCatalogError = false
     private var lastChatGPTCatalog: [CodexModelList.Entry]?
+    private var nextCursorRefreshAt: TimeInterval = 0
+    private var cursorRefreshInFlight = false
+    private var lastCursorCatalogError = false
+    private var lastCursorCatalog: [CursorModelList.Entry]?
     private var lastRigPushAt: TimeInterval = 0
     private var lastRigPanel: (model: String, thinking: String, mask: UInt64)?
     private var lastRigError: String?
@@ -468,11 +472,49 @@ final class BridgeRuntime {
         }
     }
 
+    private func refreshCursorCatalog() {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard !cursorRefreshInFlight, now >= nextCursorRefreshAt else { return }
+        cursorRefreshInFlight = true
+        nextCursorRefreshAt = now + 10
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let entries = CursorModelList.load()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.cursorRefreshInFlight = false
+                guard let entries else {
+                    if !self.lastCursorCatalogError {
+                        fputs("ai-model-control-bridge: Cursor model list unavailable; retaining panel catalog\n", stderr)
+                    }
+                    self.lastCursorCatalogError = true
+                    return
+                }
+                self.lastCursorCatalogError = false
+                guard entries != self.lastCursorCatalog else { return }
+                self.lastCursorCatalog = entries
+                Catalog.setCursorCatalog(entries)
+                self.session?.setCursorCatalog(entries)
+                print("\(stamp()) Cursor model catalog: \(entries.map(\.name).joined(separator: ", "))")
+                fflush(stdout)
+            }
+        }
+    }
+
     func run() -> Never {
+        // Load once before FRONT Cursor so a saved model is not clamped against
+        // the firmware fallback catalog during the initial USB handshake.
+        if let entries = CursorModelList.load() {
+            lastCursorCatalog = entries
+            Catalog.setCursorCatalog(entries)
+            session?.setCursorCatalog(entries)
+            print("\(stamp()) Cursor model catalog: \(entries.map(\.name).joined(separator: ", "))")
+        }
+        nextCursorRefreshAt = ProcessInfo.processInfo.systemUptime + 10
         print("watching ChatGPT / Cursor / OpenCode / Rig foreground\(session.map { "; listening on \($0.port)" } ?? "") (Ctrl+C to stop)")
         fflush(stdout)
         while true {
             refreshChatGPTCatalog()
+            refreshCursorCatalog()
             drainSerial()
             noteFront()
             applyPending()

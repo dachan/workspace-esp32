@@ -75,7 +75,9 @@ and applied-value caches, so the reconnect snapshot is accepted even when its
 revision is unchanged. Frames from a poll that ended in a disconnect are discarded.
 Current firmware retransmits until ACK and answers SYNC with its state, so a
 bridge restart or device reset recovers the panel state without applying it.
-Cursor's enabled-model selection syncs automatically from its local database.
+Cursor's ordered enabled model list and per-model effort choices sync from its
+local database. The selected model in Cursor remains separate from the dial's
+saved selection.
 Older firmware still works, but cannot replay missing changes. If the device path
 changes, restart with the new `--port`.
 
@@ -90,7 +92,8 @@ per-model effort options to the panel. Codex `model/list` is the fallback when
 the cache file is absent. A failed read retains the last catalog. The computer's picker controls which models appear; a failed refresh
 retains the last catalog. ChatGPT's global effort settings further constrain
 each model's supported levels, keeping at least one valid level. Cursor's
-enabled models sync automatically; other settings changes restart the bridge
+enabled names, picker order, and effort choices sync automatically; other
+settings changes restart the bridge
 so configuration is sent immediately. The CLI accepts
 --show-older-models 0|1, --chatgpt-effort-mask HEX, and --cursor-model-mask HEX; the bridge configuration is authoritative when it
 receives the panel's informational ENABLED snapshot.
@@ -101,9 +104,8 @@ ChatGPT: GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra,
 GPT-5.6 Luna, GPT-5.5.
 Reasoning: Light, Medium, High, Extra High, Max, Ultra (filtered by Settings).
 
-Cursor: Auto, then the enabled model list (defaults: Cursor Grok 4.6,
-Composer 2.5, Claude Opus 5, GPT-5.6 Sol, Claude Fable 5, GPT-5.6 Terra,
-GPT-5.6 Luna). Effort depends on the model (see below).
+Cursor: the enabled picker list and per-model effort choices from its local
+model file. The fixed catalog is used until the first successful read.
 
 Bind ChatGPT's three shortcuts if they are Unassigned. Cursor uses Command-/
 to open the model list (first Down is Auto). Firmware waits 0.4 s after the

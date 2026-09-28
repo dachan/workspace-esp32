@@ -22,6 +22,9 @@ final class SerialSession {
     private var chatGPTCatalogWanted: [String] = []
     private var chatGPTCatalogIndex = 0
     private var chatGPTCatalogSent = true
+    private var cursorCatalogWanted: [String] = []
+    private var cursorCatalogIndex = 0
+    private var cursorCatalogSent = true
     private var rigCatalogWanted: [String] = []
     private var rigCatalogIndex = 0
     private var rigCatalogSent = true
@@ -109,6 +112,8 @@ final class SerialSession {
         rigEffortMasksSent = nil
         chatGPTCatalogIndex = 0
         chatGPTCatalogSent = chatGPTCatalogWanted.isEmpty
+        cursorCatalogIndex = 0
+        cursorCatalogSent = cursorCatalogWanted.isEmpty
         rigCatalogIndex = 0
         rigCatalogSent = rigCatalogWanted.isEmpty
         hostModelSent = nil
@@ -180,6 +185,8 @@ final class SerialSession {
         rigEffortMasksSent = nil
         chatGPTCatalogIndex = 0
         chatGPTCatalogSent = chatGPTCatalogWanted.isEmpty
+        cursorCatalogIndex = 0
+        cursorCatalogSent = cursorCatalogWanted.isEmpty
         rigCatalogIndex = 0
         rigCatalogSent = rigCatalogWanted.isEmpty
         hostModelSent = nil
@@ -219,6 +226,19 @@ final class SerialSession {
         }
     }
 
+    func setCursorCatalog(_ entries: [CursorModelList.Entry]) {
+        var lines = ["CONFIG CURSOR_CLEAR"]
+        for entry in entries {
+            lines.append("CONFIG CURSOR_ADD \(String(format: "%02x", entry.effortMask)) \(entry.name)")
+        }
+        lines.append("CONFIG CURSOR_END")
+        if lines != cursorCatalogWanted {
+            cursorCatalogWanted = lines
+            cursorCatalogIndex = 0
+            cursorCatalogSent = false
+        }
+    }
+
     func setRigCatalog(_ entries: [(name: String, mask: UInt8)]) {
         var lines = ["CONFIG RIG_CLEAR"]
         for entry in entries {
@@ -251,7 +271,8 @@ final class SerialSession {
                 if let kind = SettingKind.allCases.first(where: { acknowledgements[$0] != nil }),
                    let revision = acknowledgements.removeValue(forKey: kind) {
                     line = "ACK \(String(format: "%016llx", revision)) \(kind.rawValue)"
-                } else if let wanted = panelFrontWanted, wanted != panelFrontSent {
+                } else if let wanted = panelFrontWanted, wanted != panelFrontSent,
+                          wanted != "Cursor" || cursorCatalogSent {
                     line = "FRONT \(wanted)"
                     panelFrontSent = wanted
                     hostModelSent = nil
@@ -282,6 +303,18 @@ final class SerialSession {
                     if chatGPTCatalogIndex >= chatGPTCatalogWanted.count {
                         chatGPTCatalogSent = true
                     }
+                } else if !cursorCatalogSent, cursorCatalogIndex < cursorCatalogWanted.count {
+                    line = cursorCatalogWanted[cursorCatalogIndex]
+                    cursorCatalogIndex += 1
+                    if cursorCatalogIndex >= cursorCatalogWanted.count {
+                        cursorCatalogSent = true
+                    }
+                } else if let wanted = panelFrontWanted, wanted != panelFrontSent {
+                    line = "FRONT \(wanted)"
+                    panelFrontSent = wanted
+                    hostModelSent = nil
+                    hostThinkingSent = nil
+                    hostEffortMaskSent = nil
                 } else if !rigCatalogSent, rigCatalogIndex < rigCatalogWanted.count {
                     line = rigCatalogWanted[rigCatalogIndex]
                     rigCatalogIndex += 1

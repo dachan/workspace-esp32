@@ -76,7 +76,17 @@ enum Catalog {
         .init(name: "Grok 4.7", efforts: ["Low", "Medium", "High", "Extra High"]),
     ]
 
-    static var cursorModels: [String] { cursorCatalog.map(\.name) }
+    private static var cursorLiveCatalog: [CursorModel]?
+    static var cursorModels: [String] { (cursorLiveCatalog ?? cursorCatalog).map(\.name) }
+
+    static func setCursorCatalog(_ entries: [CursorModelList.Entry]) {
+        guard !entries.isEmpty else { return }
+        cursorLiveCatalog = entries.map { entry in
+            CursorModel(name: entry.name, efforts: cursorMaskOrder.enumerated().compactMap { index, name in
+                entry.effortMask & (1 << index) != 0 ? name : nil
+            })
+        }
+    }
 
     static let thinking = [
         "Light",
@@ -86,6 +96,8 @@ enum Catalog {
         "Max",
         "Ultra",
     ]
+
+    private static let cursorMaskOrder = ["None", "Minimal", "Low", "Medium", "High", "Extra High", "Max"]
 
     static let cursorThinking = [
         "Low",
@@ -118,7 +130,7 @@ enum Catalog {
     /// Nil means the model is unknown; an empty list means effort is unsupported.
     static func cursorEfforts(for model: String) -> [String]? {
         guard let index = cursorModelIndex(model) else { return nil }
-        return cursorCatalog[index].efforts
+        return (cursorLiveCatalog ?? cursorCatalog)[index].efforts
     }
 
     static func cursorEffort(_ raw: String, model: String) -> (index: Int, name: String)? {
@@ -166,7 +178,8 @@ enum Catalog {
     }
 
     static func cursorModelIndex(_ raw: String) -> Int? {
-        index(raw, in: cursorModels, aliases: [
+        if cursorLiveCatalog != nil { return index(raw, in: cursorModels, aliases: [:]) }
+        return index(raw, in: cursorModels, aliases: [
             "auto": 0, "grok": 1, "composer": 2, "opus": 3,
             "sol": 4, "fable": 5, "terra": 6, "luna": 7,
         ])
@@ -181,6 +194,7 @@ enum Catalog {
 
     static func cursorNameEnabled(_ raw: String) -> Bool {
         guard let full = cursorModelIndex(raw) else { return false }
+        if cursorLiveCatalog != nil { return true }
         if full == 0 { return true }
         guard full < 64 else { return false }
         return cursorEnabledMask & (1 << full) != 0
@@ -189,6 +203,7 @@ enum Catalog {
     /// Command-/ Down index among Auto + models enabled on the panel.
     static func cursorPickerIndex(_ raw: String) -> Int? {
         guard let full = cursorModelIndex(raw), cursorNameEnabled(raw) else { return nil }
+        if cursorLiveCatalog != nil { return full }
         var n = 0
         for i in 0..<full {
             if i == 0 || (i < 64 && cursorEnabledMask & (1 << i) != 0) { n += 1 }
