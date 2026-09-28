@@ -103,13 +103,7 @@ enum PromptFocus {
     }
 
     private static func isCursorModelControl(_ el: AXUIElement) -> Bool {
-        let label = string(el, kAXTitleAttribute as String).isEmpty
-            ? string(el, kAXDescriptionAttribute as String)
-            : string(el, kAXTitleAttribute as String)
-        return Catalog.cursorModels.contains { model in
-            label.caseInsensitiveCompare(model) == .orderedSame ||
-                label.lowercased().hasPrefix(model.lowercased() + " ")
-        }
+        CursorPicker.modelControlLabel(el) != nil
     }
 
     /// Move the insertion point into the field so it becomes first responder

@@ -26,12 +26,30 @@ enum CursorPicker {
         guard let root = root(for: focus) else { return nil }
         var selected: String?
         _ = find(in: root, where: {
-            guard role($0) == "AXPopUpButton" else { return false }
-            let label = title($0).isEmpty ? description($0) : title($0)
-            if modelName(in: label) != nil { selected = label }
+            if let label = modelControlLabel($0) { selected = label }
             return false
         })
         return selected
+    }
+
+    /// Cursor exposes the popup's visible model name on a child text element
+    /// in some layouts, leaving the popup's own title and description empty.
+    static func modelControlLabel(_ element: AXUIElement) -> String? {
+        guard role(element) == "AXPopUpButton" else { return nil }
+        var label: String?
+        _ = find(in: element, where: {
+            for attribute in [kAXTitleAttribute as String,
+                              kAXDescriptionAttribute as String,
+                              kAXValueAttribute as String] {
+                let value = string($0, attribute)
+                if modelName(in: value) != nil {
+                    label = value
+                    return true
+                }
+            }
+            return false
+        })
+        return label
     }
 
     static func model(
