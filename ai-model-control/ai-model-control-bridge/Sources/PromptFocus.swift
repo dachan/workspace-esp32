@@ -76,6 +76,12 @@ enum PromptFocus {
            let field = cursorFields.last(where: { $0.position < control }) {
             return field.el
         }
+        if kind == .cursor, best == nil {
+            fputs(
+                "ai-model-control-bridge: Cursor focus scan visited \(visited), fields \(cursorFields.count), model controls \(cursorModelControlPositions.count)\n",
+                stderr
+            )
+        }
         return best?.el
     }
 
