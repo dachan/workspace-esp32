@@ -148,14 +148,15 @@ int model_nvs_load(model_fields_t *out)
         out->has_thinking = 1;
     }
 
-    effort_blob_t blob = {0};
+    static effort_blob_t blob;
+    memset(&blob, 0, sizeof(blob));
     len = sizeof(blob);
     err = nvs_get_blob(h, KEY_EFFORT, &blob, &len);
     if (err == ESP_OK && blob.version == EFFORT_BLOB_VER && blob.count <= EFFORT_SLOT_MAX
         && len == sizeof(blob)) {
         s_effort = blob;
     } else if (err == ESP_OK && blob.version == 1 && len == sizeof(effort_blob_legacy_t)) {
-        effort_blob_legacy_t legacy;
+        static effort_blob_legacy_t legacy;
         memcpy(&legacy, &blob, sizeof(legacy));
         if (legacy.count <= EFFORT_SLOT_MAX) {
             s_effort.count = legacy.count;
