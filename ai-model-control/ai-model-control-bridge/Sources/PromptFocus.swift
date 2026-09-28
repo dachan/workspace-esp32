@@ -17,17 +17,29 @@ enum PromptFocus {
         let root: AXUIElement
         if kind == .cursor {
             guard let window = copy(app, kAXFocusedWindowAttribute as String),
-                  CFGetTypeID(window) == AXUIElementGetTypeID() else { return .missing }
+                  CFGetTypeID(window) == AXUIElementGetTypeID() else {
+                fputs("ai-model-control-bridge: Cursor focus missing window\n", stderr)
+                return .missing
+            }
             root = window as! AXUIElement
         } else {
             root = app
         }
         guard let field = findField(in: root, kind: kind) else {
+            if kind == .cursor {
+                fputs("ai-model-control-bridge: Cursor focus missing composer field\n", stderr)
+            }
             return .missing
         }
-        guard AXUIElementSetAttributeValue(
+        let focusResult = AXUIElementSetAttributeValue(
             field, kAXFocusedAttribute as CFString, kCFBooleanTrue
-        ) == .success else { return .missing }
+        )
+        guard focusResult == .success else {
+            if kind == .cursor {
+                fputs("ai-model-control-bridge: Cursor AXFocused failed (\(focusResult.rawValue), \(string(field, kAXRoleAttribute as String)))\n", stderr)
+            }
+            return .missing
+        }
         placeCaret(in: field)
         return .focused
     }
