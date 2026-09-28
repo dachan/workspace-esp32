@@ -119,17 +119,28 @@ enum CursorPicker {
             guard Keys.key(Keys.escape, pulse: pulse),
                   Keys.wait(Keys.pickerTiming, pulse: pulse) else { return .interrupted }
         }
-        if let currentRoot = Self.root(for: focus), find(in: currentRoot, reverse: true, where: {
-            guard role($0) == "AXMenu" else { return false }
-            let label = description($0).lowercased()
-            return label == "model selection" || label.hasSuffix(" parameters")
-                || label == "effort options" || label == "reasoning options"
-        }) != nil {
-            return .failed("Cursor effort selected but picker did not close")
+        // The popover and visible effort label update asynchronously after
+        // Return and Escape. Confirm both before reporting an applied change.
+        for attempt in 0..<6 {
+            let pickerOpen = Self.root(for: focus).flatMap { currentRoot in
+                find(in: currentRoot, reverse: true, where: {
+                    guard role($0) == "AXMenu" else { return false }
+                    let label = description($0).lowercased()
+                    return label == "model selection" || label.hasSuffix(" parameters")
+                        || label == "effort options" || label == "reasoning options"
+                        || label == "reasoning effort options"
+                })
+            } != nil
+            if !pickerOpen && matches(name, focus: focus, effort: true) {
+                guard !pulse() else { return .interrupted }
+                _ = PromptFocus.ensure(pid: focus.pid, kind: .cursor)
+                return .applied(path: "keyboard effort \(name)")
+            }
+            if attempt < 5 && !Keys.wait(Keys.pickerTiming, pulse: pulse) {
+                return .interrupted
+            }
         }
-        guard !pulse() else { return .interrupted }
-        _ = PromptFocus.ensure(pid: focus.pid, kind: .cursor)
-        return .applied(path: "keyboard effort \(name)")
+        return .failed("Cursor effort \(name) did not settle")
     }
 
     private static func step(_ key: UInt16, count: Int, pulse: @escaping () -> Bool) -> Bool {
