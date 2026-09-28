@@ -16,7 +16,6 @@ enum Keys {
     static let comma: UInt16 = 0x2B
     static let period: UInt16 = 0x2F
     static let m: UInt16 = 0x2E
-    static let l: UInt16 = 0x25
     static let slash: UInt16 = 0x2C
     static let escape: UInt16 = 0x35
     static let `return`: UInt16 = 0x24
@@ -30,19 +29,20 @@ enum Keys {
     Keyboard path (Mac helper)
       Foreground: NSWorkspace.frontmostApplication (ChatGPT, Codex, Cursor, or OpenCode).
       The helper never activates those apps; keys fire only while one is focused.
-      Before shortcuts it focuses the prompt: Cursor Command-L only if the
-      Agents panel is not already open (Cmd+L toggles it closed otherwise),
-      otherwise AX-focus aislash-editor-input; ChatGPT via the message box.
+      Before shortcuts it focuses the prompt by Accessibility: Cursor uses
+      the composer next to the active model control without toggling Agents;
+      ChatGPT uses the message box.
       ChatGPT / Codex
         Model: accessibility click model control, Select model, then exact model label.
         Reasoning: absolute Light clamp then Control-Shift-. up to target.
         Bind those shortcuts in ChatGPT if they are Unassigned.
       Cursor
-        Command-/ opens the model control; click Model, then the exact visible
-        model label. Click Reasoning, then the exact visible effort label.
+        Command-/ opens model search. The bridge uses the live row order,
+        selects with Down and Return, then reads back the active model control.
+        The effort submenu uses the live visible level order.
         Chat/agent input must be focused.
         Fast/Slow is not set from the dial.
-        The Model Dial Settings window controls the enabled Cursor model list; Auto stays on.
+        Cursor's enabled model list and effort choices sync to the dial.
         Press either encoder to reapply the current model and thinking.
       OpenCode
         Command-apostrophe opens models; exact accessible names select choices.
