@@ -70,10 +70,17 @@ enum CursorPicker {
         guard step(Keys.down, count: index + 1, pulse: pulse),
               Keys.key(Keys.return, pulse: pulse),
               Keys.wait(Keys.pickerTiming, pulse: pulse) else { return .interrupted }
-        guard selectedModel(focus: focus)?.caseInsensitiveCompare(name) == .orderedSame else {
-            return .failed("Cursor did not select model \(name)")
+        // Cursor commits the visible label asynchronously after Return. Poll
+        // in picker-sized intervals before reporting a failed selection.
+        for attempt in 0..<6 {
+            if selectedModel(focus: focus)?.caseInsensitiveCompare(name) == .orderedSame {
+                return .applied(path: "keyboard model \(name)")
+            }
+            if attempt < 5 && !Keys.wait(Keys.pickerTiming, pulse: pulse) {
+                return .interrupted
+            }
         }
-        return .applied(path: "keyboard model \(name)")
+        return .failed("Cursor did not select model \(name)")
     }
 
     static func effort(
