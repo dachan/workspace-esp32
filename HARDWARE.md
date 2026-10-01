@@ -3,7 +3,7 @@
 Living list of boards used with this repo. Agents must keep this current
 (see `AGENTS.md`). Prefer facts verified on the desk; mark unknowns.
 
-Last inventory pass: 2026-09-14 (ESP32 device-to-build matching)
+Last inventory pass: 2026-09-30 (AI Model Control board match and live catalog update)
 
 ## ESP32 device/build matching
 
@@ -130,7 +130,7 @@ I2C pins; they are a different interface.
 - Rotary encoders: same KY-040-style pair using the accessible outer headers — default left = model CLK/DT/SW GPIO4/5/6, right = effort CLK/DT/SW GPIO1/2/7; Settings → Dials can swap those roles. Encoder + to 3V3 and grounds to GND. GPIO3 is left unused because it is a boot-strapping pin. Both knobs use PCNT (sampled on a 1 ms task) so the round-panel SPI flush cannot drop detents.
 - Touch: none identified; round profile disables FT6336 initialization and uses the Model Dial helper's Sync command
 - Firmware expected: original round-display image from `ai-model-control/ESP32_MINI-128_tft_240x240-AI_Model_Control-Original` (old display order); do not flash the New label unless this board is rewired to RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12.
-- Mac USB serial: `/dev/cu.usbmodem21101` (re-verify if the CDC address changes after replug)
+- Mac USB serial: last seen `/dev/cu.usbmodem21101` on 2026-09-11; this transient path now identifies the New board, so re-identify the Original board by MAC if it is reattached.
 - Last verified: 2026-09-11 — application-only reflash of `ESP32_MINI-128_tft_240x240-AI_Model_Control-Original` v0.90 to `/dev/cu.usbmodem21101` (hash verified, NVS preserved). Chip matched ESP32-S3 QFN56 rev v0.2, 4 MB flash + 2 MB PSRAM, MAC `90:da:72:73:5a:64`. Firmware SHA-256 `c58ad39d99e8bb6f845b7881c144b311688f1c520d9aabf3bd73599829f56a66`. This image uses a black/grayscale round UI and screensaver, standard 5×7 thinking text at 1× scale in the same white as the model name, 24 px model-to-thinking spacing, 8 px thinking-bar segments with 8 px gaps and a 4 px corner radius, and holds the GPIO48 WS2812 data line low after an RGB-off frame.
 - Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
 
@@ -141,9 +141,10 @@ I2C pins; they are a different interface.
 - Display / peripherals: external round SPI panel photographed; controller/model is not marked in the photo. The flashed firmware expects the 1.28-inch round GC9A01 panel and two rotary encoders documented in `ai-model-control/README.md`.
 - Display header order from the supplied photo (top to bottom): `RST → CS → DC → SDA → SCL → GND → 3V3`; expected SuperMini connections for the new build are GPIO8 → GPIO9 → GPIO10 → GPIO11 → GPIO12 → GND → 3V3. Physical connection to this board remains unverified.
 - Firmware: flashed image is `ai-model-control/ESP32_MINI-128_tft_240x240-AI_Model_Control-New`; display order RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12, Model encoder direction `-1`, readable display rotation `180` degrees. Dial rotation applies after the 400 ms firmware settle; either encoder click explicitly pushes the current model and effort. Passive focus and connection snapshots update state without posting keys. When no supported app is focused, the panel immediately shows its clock and ignores encoder/touch changes until focus returns. Picker/confirmation waits are 150 ms, with a 50 ms posted-key gap.
-- Mac USB serial: `/dev/cu.usbmodem21201` (re-verify after replug; macOS may renumber native USB CDC ports)
+- Mac USB serial: `/dev/cu.usbmodem21101` (verified 2026-09-30; re-identify by MAC after replug because macOS renumbers native USB CDC ports)
 - Last verified: 2026-09-28 — application-only reflash of the New SuperMini v0.90 from commit `d997ddb`, preserving NVS. Live ESP32-S3 MAC `d4:05:92:47:d5:1c`, 4 MB flash and 2 MB PSRAM matched inventory on `/dev/cu.usbmodem21201`; esptool verified the written image hash. Firmware SHA-256 `d94f6fda7184e51d937aa2b111421417674644e585c8e67046bfb0c80dd96751`. The stable-signed Model Dial app was relaunched and its bridge reconnected, read the nine enabled Cursor picker entries in order, and received panel state. Live serial checks returned Claude Opus 5.5 and Muse Spark 1.3 / Minimal from the panel; Grok 4.7 / High was restored afterward. A five-second serial check showed no resets. Physical panel appearance and the target app's selected model were not visually checked.
 - Last verified: 2026-09-28 — after bridge commit `196a99b` mapped Cursor `reasoning` and `reasoning_effort` choices, application-only reflashed the same v0.90 image at 0x10000, preserving NVS. Esptool identified MAC `d4:05:92:47:d5:1c` on `/dev/cu.usbmodem21201` and verified the write; firmware SHA-256 remains `d94f6fda7184e51d937aa2b111421417674644e585c8e67046bfb0c80dd96751`. The stable-signed Model Dial bridge reconnected and later received GPT-5.6 Luna thinking updates (Max and Extra High). Physical display appearance was not visually checked.
+- Last verified: 2026-09-30 — app-only firmware update of the New SuperMini v0.90 from commit `2b35780` to `/dev/cu.usbmodem21101`. MAC `d4:05:92:47:d5:1c`, 4 MB flash, and 2 MB PSRAM matched inventory. The app partition at 0x10000 was hash-verified and NVS was preserved; firmware SHA-256 `d101c51bc93cce82e3774194492fd43990d98492e28313b7888d39f6e64c5fbc`. The stable-signed Model Dial app reconnected, received READY/ENABLED, and reported the current GPT-6 Astra/Sol/Luna catalog and saved `GPT-6 Sol / Extra High` state. Physical display appearance and ChatGPT's selected model were not visually checked.
 - Notes: USB Serial/JTAG board newly identified on 2026-09-15. Do not assume it is wired like an older SuperMini; verify every external connection before applying the documented GC9A01/encoder map.
 
 ## ESP32_MINI-no_display-Radar_Sensor (verified hardware)
