@@ -113,26 +113,26 @@ Changed values are saved once per input pass to NVS (`cgpt`/`model`,`think`
 for the last displayed pair, `cgpt`/`last_g` and `last_c` for each app's last
 model, `cgpt`/`c_en` for the Cursor model mask, `cgpt`/`g_en` for the ChatGPT
 effort mask, plus `cgpt`/`effort` for each app's last thinking level per model)
-and reloaded on boot. Empty NVS (first flash) starts ChatGPT on GPT-5.6 Luna
+and reloaded on boot. Empty NVS (first flash) starts ChatGPT on GPT-6 Luna
 Extra High and Cursor on Cursor Grok 4.6 Extra High. Changing models restores
 that model's saved effort for the focused app; switching ChatGPT ↔ Cursor
 restores that app's last model and effort. A first visit to a model keeps the
 current level and clamps it. Unchanged values do not trigger persistence or
 display work.
 
-The Mac bridge reads the desktop picker's visible entries from Codex's local
-model cache at startup and every 10 seconds, then sends their ordered names and
-supported reasoning levels to the panel. If that cache file is absent it falls
-back to Codex `model/list`. The same result powers the bridge's model validation. The ESP32 swaps
-its ChatGPT catalog only after a complete nonempty serial update; it keeps its
-last catalog if discovery fails. The computer's picker determines whether older
-models appear. The previous Show older models flag applies only to the static
-firmware fallback until a live catalog arrives. Settings fits without scrolling.
-Catalog refresh and focus snapshots never post keys to the desktop app.
+The Mac bridge queries Codex `model/list` at startup and every 10 seconds, then
+sends its ordered visible model names and supported reasoning levels to the
+panel. It uses the local model cache only when the live list is unavailable, so
+a stale cache cannot keep unavailable models in the dial. The same live result
+powers bridge model validation. The ESP32 swaps its ChatGPT catalog only after
+a complete nonempty serial update and keeps its last catalog if discovery fails.
+The static fallback matches the current live list: GPT-6 Astra, GPT-6 Sol, and
+GPT-6 Luna. Catalog refresh and focus snapshots never post keys to the desktop
+app.
 
-Dial models follow the focused app. Static fallback ChatGPT catalog: GPT-6 Astra, GPT-6 Sol,
-GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, GPT-5.5; thinking Light, Medium, High,
-Extra High, Max, Ultra. Cursor uses its enabled picker order and per-model
+Dial models follow the focused app. The static fallback ChatGPT catalog is
+GPT-6 Astra, GPT-6 Sol, GPT-6 Luna; thinking levels are limited by each model's
+supported reasoning range. Cursor uses its enabled picker order and per-model
 effort choices from the local model file. If that file is unavailable before
 the first successful read, the fixed catalog in firmware `main/catalog.c` and
 Swift `Sources/Catalog.swift` provides a fallback. Command-/ apply reads the

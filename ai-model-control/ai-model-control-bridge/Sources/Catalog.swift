@@ -5,10 +5,6 @@ enum Catalog {
         "GPT-6 Astra",
         "GPT-6 Sol",
         "GPT-6 Luna",
-        "GPT-5.6 Sol",
-        "GPT-5.6 Terra",
-        "GPT-5.6 Luna",
-        "GPT-5.5",
     ]
 
     // OpenCode encoder order. Its native picker remains Luna-first.

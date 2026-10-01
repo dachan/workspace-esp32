@@ -9,10 +9,9 @@ enum CodexModelList {
     }
 
     static func load() -> [Entry]? {
-        // A transient partial cache read must not replace a seven-model panel
-        // catalog with the smaller app-server result.
-        FileManager.default.fileExists(atPath: cacheURL.path)
-            ? loadCache() : loadServer()
+        // The live model list reflects current availability. Keep the disk
+        // cache as a fallback for temporary app-server or account failures.
+        loadServer() ?? loadCache()
     }
 
     private static var cacheURL: URL {
@@ -21,8 +20,7 @@ enum CodexModelList {
         return URL(fileURLWithPath: root).appendingPathComponent("models_cache.json")
     }
 
-    // The desktop picker's cache includes older entries that a fresh app-server
-    // model/list call currently omits. Only `list` entries appear in its menu.
+    // Only `list` entries from the last good picker snapshot are a fallback.
     private static func loadCache() -> [Entry]? {
         let url = cacheURL
         guard let data = try? Data(contentsOf: url),

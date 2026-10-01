@@ -11,9 +11,13 @@
 #define COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
 static const char *const chatgpt_models[] = {
-    "GPT-6 Astra", "GPT-6 Sol", "GPT-6 Luna", "GPT-5.6 Sol", "GPT-5.6 Terra",
-    "GPT-5.6 Luna", "GPT-5.5",
+    "GPT-6 Astra", "GPT-6 Sol", "GPT-6 Luna",
 };
+static const uint8_t chatgpt_fallback_effort_masks[] = {
+    0x3f, 0x3f, 0x1f,
+};
+_Static_assert(COUNT(chatgpt_fallback_effort_masks) == COUNT(chatgpt_models),
+               "ChatGPT fallback effort masks must match models");
 #define CHATGPT_LIVE_MAX 32
 #define CHATGPT_LIVE_NAME 64
 static char s_chatgpt_live[CHATGPT_LIVE_MAX][CHATGPT_LIVE_NAME];
@@ -567,6 +571,11 @@ static uint8_t chatgpt_model_effort_mask(const char *model)
             return s_chatgpt_live_effort[i];
         }
     }
+    for (int i = 0; i < COUNT(chatgpt_models); i++) {
+        if (model && strcasecmp(chatgpt_models[i], model) == 0) {
+            return chatgpt_fallback_effort_masks[i];
+        }
+    }
     return 0x3f;
 }
 
@@ -944,7 +953,7 @@ const char *catalog_default_model_for(desk_app_t app)
 const char *catalog_default_model_in(bool cursor)
 {
     if (cursor && s_cursor_live_count > 0) return s_cursor_live[0];
-    const char *want = cursor ? "Cursor Grok 4.6" : "GPT-5.6 Luna";
+    const char *want = cursor ? "Cursor Grok 4.6" : "GPT-6 Luna";
     return catalog_model_index_in(cursor, want) >= 0
         ? want
         : catalog_model_at_in(cursor, 0);
