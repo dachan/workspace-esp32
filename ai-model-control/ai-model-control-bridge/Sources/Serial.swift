@@ -254,6 +254,15 @@ final class SerialSession {
         }
     }
 
+    func clearHostPanel() {
+        hostModelWanted = nil
+        hostThinkingWanted = nil
+        hostEffortMaskWanted = nil
+        hostModelSent = nil
+        hostThinkingSent = nil
+        hostEffortMaskSent = nil
+    }
+
     func setHostPanel(model: String, thinking: String, effortMask: UInt8? = nil) {
         hostModelWanted = model
         hostThinkingWanted = thinking
@@ -279,9 +288,7 @@ final class SerialSession {
                     hostThinkingSent = nil
                     hostEffortMaskSent = nil
                     if wanted != "Rig" {
-                        hostModelWanted = nil
-                        hostThinkingWanted = nil
-                        hostEffortMaskWanted = nil
+                        clearHostPanel()
                     }
                 } else if syncPending {
                     // READY retries recover a reset without periodic state polling.

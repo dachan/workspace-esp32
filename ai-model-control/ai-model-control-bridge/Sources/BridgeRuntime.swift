@@ -97,6 +97,11 @@ final class BridgeRuntime {
             return
         }
         beginApplyingToFocusedApp(force: force)
+        if source == "APPLY", targetFocus?.kind == .rig {
+            // Firmware ignores host display updates for 8.4 s after rotation.
+            // Wait out that window so a later Rig selection is actually received.
+            suppressHostPushUntil = ProcessInfo.processInfo.systemUptime + 8.4
+        }
         print("\(stamp()) rx \(source)")
         fflush(stdout)
     }
@@ -118,6 +123,9 @@ final class BridgeRuntime {
             targetFocus = FocusOperation(preferred: options.bundleID)
         }
         guard targetFocus != nil else { return }
+        if targetFocus?.kind == .rig {
+            session?.clearHostPanel()
+        }
         applyFailures = 0
         forceApply = forceApply || force
         // Explicit APPLY/PUSH intents arrive after their complete state frames.
@@ -337,7 +345,10 @@ final class BridgeRuntime {
             forceApply = false
         }
         let needsApply = snapshot.contains { kind, value in lastApplied[pid]?[kind] != value }
-        guard needsApply else { return }
+        guard needsApply else {
+            targetFocus = nil
+            return
+        }
         let result = RigApply.apply(model: snapshot[.model], thinking: snapshot[.thinking])
         switch result {
         case .applied(let path):
@@ -350,7 +361,8 @@ final class BridgeRuntime {
                 snapshot[.thinking] ?? lastRigPanel?.thinking ?? "",
                 lastRigPanel?.mask ?? 0
             )
-            suppressHostPushUntil = ProcessInfo.processInfo.systemUptime + 1.5
+            targetFocus = nil
+            suppressHostPushUntil = max(suppressHostPushUntil, ProcessInfo.processInfo.systemUptime + 1.5)
             if let model = snapshot[.model] {
                 print("\(stamp()) posted model \(model) via \(path)")
             }
@@ -402,12 +414,9 @@ final class BridgeRuntime {
             return
         }
         let now = ProcessInfo.processInfo.systemUptime
-        let dialAhead =
-            (desired[.model].map { $0 != lastRigPanel?.model } ?? false)
-            || (desired[.thinking].map { $0 != lastRigPanel?.thinking } ?? false)
-        let holdHost = now < suppressHostPushUntil
-            || (targetFocus != nil && now < settleAt + 1.25)
-            || dialAhead
+        // Saved STATE frames are snapshots; only explicit dial intent holds
+        // Rig readback. A mismatch alone would block the first sync forever.
+        let holdHost = now < suppressHostPushUntil || targetFocus?.kind == .rig
         do {
             let active = try RigClient.modelsActive()
             let focus = try RigClient.focus()
@@ -430,6 +439,7 @@ final class BridgeRuntime {
                 lastApplied[app.processIdentifier] = [.model: model, .thinking: thinking]
                 receivedModel = model
                 receivedThinking = thinking
+                replaceDesiredWithPanelState()
                 print("\(stamp()) panel Rig \(model) \(thinking)")
                 fflush(stdout)
             }

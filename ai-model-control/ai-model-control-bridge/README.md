@@ -102,6 +102,14 @@ receives the panel's informational ENABLED snapshot.
 
 Dial models follow the focused app.
 
+While Rig is focused, its current model and effort are read over the local
+socket and mirrored to the panel. Saved panel snapshots do not block this
+readback or change Rig's selection. Explicit APPLY/PUSH holds readback until
+the dial request finishes; completed requests are retired so subsequent Rig
+selections remain authoritative. After rotation, host display updates wait out
+the firmware's 8.4-second compatibility hold and resend both fields, even if
+Rig returns to a value sent before the rotation.
+
 ChatGPT: GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, GPT-5.6 Sol, GPT-5.6 Terra,
 GPT-5.6 Luna, GPT-5.5.
 Reasoning: Light, Medium, High, Extra High, Max, Ultra (filtered by Settings).
