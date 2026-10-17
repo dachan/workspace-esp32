@@ -76,10 +76,37 @@ enum ClaudePicker {
             }
             return false
         })
+        print("elements mentioning a model or effort:")
+        dumpCandidates(root) { print("  \($0)") }
         let live = modelRows(in: root, excluding: status)
         print("model rows read: \(live.isEmpty ? "none (open the model menu first)" : live.joined(separator: ", "))")
         print("dial fallback: \(Catalog.claudeFallbackModels.joined(separator: ", "))")
         return 0
+    }
+
+    /// Any-role elements whose title, description or value mentions a Claude
+    /// model family or effort word, with every label source shown separately.
+    private static func dumpCandidates(_ root: AXUIElement, _ emit: (String) -> Void) {
+        let families = Set(Catalog.claudeModels.compactMap { $0.split(separator: " ").first.map(String.init) })
+            .union(["Opus", "Sonnet", "Haiku", "Fable"])
+        let words = families.union(Catalog.claudeEffortLabels).union(["Effort"])
+        var visited = 0
+        var lines = 0
+        _ = AXQuery.find(in: root, where: { element in
+            visited += 1
+            let title = AXQuery.title(element)
+            let description = AXQuery.description(element)
+            let value = AXQuery.string(element, kAXValueAttribute as String)
+            let text = "\(title) \(description) \(value)"
+            // Menu rows are short; long text is chat transcript, not controls.
+            guard lines < 60, text.count < 90,
+                  !["AXTextArea", "AXTextField", "AXWebArea"].contains(AXQuery.role(element)),
+                  words.contains(where: { text.contains($0) }) else { return false }
+            lines += 1
+            emit("\(AXQuery.role(element)) title=\"\(title)\" desc=\"\(description)\" value=\"\(value.prefix(60))\"")
+            return false
+        })
+        emit("scanned \(visited) elements, \(lines) matched")
     }
 
     private static func choose(
@@ -106,6 +133,8 @@ enum ClaudePicker {
         whileOpen(root, status)
 
         guard let item = findChoice(label: label, in: root, excluding: status) else {
+            // Record what the open menu exposes so a label/role mismatch is diagnosable.
+            dumpCandidates(root) { fputs("ai-model-control-bridge: Claude AX \($0)\n", stderr) }
             closeIfOpen(root, pulse: pulse)
             return .failed("Claude menu choice \(label) unavailable")
         }
