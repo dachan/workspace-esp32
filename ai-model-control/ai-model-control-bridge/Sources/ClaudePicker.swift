@@ -44,18 +44,16 @@ enum ClaudePicker {
         return withMenu(
             target: label, focus: focus, preferred: preferred, pulse: pulse,
             act: { root, status in
-                if findChoice(label, in: root, excluding: status) == nil {
+                let visible = { findChoice(label, in: root, excluding: status) != nil }
+                if !visible() {
                     guard let effort = findChoice("Effort", in: root, excluding: status) else {
                         return .failed("Claude Effort row unavailable")
                     }
-                    guard press(effort, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
-                        return .interrupted
-                    }
+                    guard press(effort, pulse: pulse) else { return .interrupted }
                     // A submenu that opens on hover may still need its keyboard opener.
-                    if findChoice(label, in: root, excluding: status) == nil {
-                        guard Keys.key(Keys.right, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
-                            return .interrupted
-                        }
+                    if !poll(pulse: pulse, until: visible) {
+                        guard Keys.key(Keys.right, pulse: pulse) else { return .interrupted }
+                        _ = poll(pulse: pulse, until: visible)
                     }
                 }
                 return pressChoice(label, in: root, excluding: status, pulse: pulse)
@@ -141,9 +139,16 @@ enum ClaudePicker {
             return .failed("Claude model control unavailable")
         }
         fputs("ai-model-control-bridge: Claude \(statusText(control)) -> \(target)\n", stderr)
-        guard press(control, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
+        guard press(control, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not open the Claude model menu")
         }
+        // The menu renders asynchronously; a fixed wait raced it.
+        let opened = poll(pulse: pulse) {
+            findChoice("Effort", in: root, excluding: control) != nil
+                || !modelRows(in: root, excluding: control).isEmpty
+        }
+        guard !pulse() else { return .interrupted }
+        guard opened else { return .failed("Claude model menu did not open") }
         guard DeskFront.isForeground(preferred: preferred) else {
             return .failed("\(focus.displayName) is not focused")
         }
@@ -169,6 +174,16 @@ enum ClaudePicker {
             return .failed("Claude shows \(current) after selecting \(target)")
         }
         return .applied(path: "Claude \(target), confirmed \(current)")
+    }
+
+    /// Polls `condition` every posted-key gap for up to a second.
+    private static func poll(pulse: @escaping () -> Bool, until condition: () -> Bool) -> Bool {
+        let deadline = ProcessInfo.processInfo.systemUptime + 1.0
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if condition() { return true }
+            guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else { return false }
+        }
+        return condition()
     }
 
     private static func pressChoice(
