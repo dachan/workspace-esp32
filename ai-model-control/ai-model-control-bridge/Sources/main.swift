@@ -33,6 +33,9 @@ func run() -> Int32 {
         print(trusted ? "accessibility: granted" : "accessibility: missing")
         return trusted ? 0 : 2
     }
+    if options.checkClaude {
+        return ClaudePicker.diagnose()
+    }
     if options.checkInputGuard {
         guard AXTrust.require(prompt: true),
               let focus = FocusOperation(preferred: options.bundleID) else {

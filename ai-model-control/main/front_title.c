@@ -22,6 +22,9 @@ bool front_title_apply_line(const char *line)
     } else if (strcmp(line, "FRONT Rig") == 0) {
         focused = true;
         app = DESK_RIG;
+    } else if (strcmp(line, "FRONT Claude") == 0) {
+        focused = true;
+        app = DESK_CLAUDE;
     } else if (strcmp(line, "FRONT None") == 0) {
         focused = false;
     } else {

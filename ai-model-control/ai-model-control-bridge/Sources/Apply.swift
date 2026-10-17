@@ -17,7 +17,7 @@ enum Switcher {
         pulse: (() -> Bool)? = nil
     ) -> Result {
         guard let focus = FocusOperation(preferred: preferredBundleID) else {
-            return .failed("ChatGPT, Cursor, OpenCode, or Rig is not focused")
+            return .failed("ChatGPT, Cursor, OpenCode, Rig, or Claude is not focused")
         }
         if focus.kind == .rig {
             return RigApply.apply(model: raw, thinking: nil)
@@ -30,6 +30,8 @@ enum Switcher {
                 return OpenCodeApply.model(raw, focus: focus, pulse: pulse)
             case .rig:
                 return RigApply.apply(model: raw, thinking: nil)
+            case .claude:
+                return ClaudePicker.model(raw, focus: focus, preferred: preferredBundleID, pulse: pulse)
             case .chatGPT:
                 guard let name = Catalog.chatgptModelName(raw) else {
                     return .failed("unknown model \(raw)")
@@ -57,7 +59,7 @@ enum Switcher {
         pulse: (() -> Bool)? = nil
     ) -> Result {
         guard let focus = FocusOperation(preferred: preferredBundleID) else {
-            return .failed("ChatGPT, Cursor, OpenCode, or Rig is not focused")
+            return .failed("ChatGPT, Cursor, OpenCode, Rig, or Claude is not focused")
         }
         if focus.kind == .openCode {
             return .applied(path: "OpenCode effort sync unsupported; skipped")
@@ -71,6 +73,8 @@ enum Switcher {
             switch focus.kind {
             case .openCode:
                 return .applied(path: "OpenCode effort sync unsupported; skipped")
+            case .claude:
+                return ClaudePicker.thinking(raw, focus: focus, preferred: preferredBundleID, pulse: pulse)
             case .chatGPT:
                 guard let target = Catalog.chatgptThinkingIndex(raw), let name = Catalog.chatgptThinkingName(raw) else {
                     return .failed("unknown thinking \(raw)")
@@ -252,7 +256,7 @@ enum Switcher {
             if PromptFocus.ensure(pid: focus.pid, kind: focus.kind) == .missing {
                 return nil
             }
-        case .rig:
+        case .rig, .claude:
             break
         }
         guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else { return .interrupted }

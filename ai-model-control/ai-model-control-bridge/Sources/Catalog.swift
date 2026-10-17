@@ -14,6 +14,22 @@ enum Catalog {
         "GPT-5.6 Sol",
         "GPT-5.6 Luna",
     ]
+    // Claude desktop menu order. The fallback matches firmware claude_models;
+    // rows read from Claude's own model menu replace it. Fable and other
+    // usage-credit models are omitted; selection is by label, never by digit.
+    static let claudeFallbackModels = ["Opus 5.5", "Sonnet 5.5", "Haiku 5.5"]
+    /// Set after a model menu read; the bridge forwards it as CONFIG CLAUDE_*.
+    static private(set) var claudeLiveModels: [String]?
+    static var claudeModels: [String] { claudeLiveModels ?? claudeFallbackModels }
+
+    static func setClaudeModels(_ names: [String]) {
+        if !names.isEmpty { claudeLiveModels = names }
+    }
+    // Dial effort names, aligned with firmware claude_thinking, and the matching
+    // Claude effort menu labels. Max (3.5x usage) and Ultracode stay off the dial.
+    static let claudeThinking = ["Low", "Medium", "High", "Extra High"]
+    static let claudeEffortLabels = ["Low", "Medium", "High", "Extra"]
+
     // OpenRouter Latest aliases. Panel labels keep the slug provider and omit Latest.
     static let rigModels = [
         "xAI Grok", "OpenAI Astra", "OpenAI Sol", "OpenAI Terra", "OpenAI Luna",
@@ -155,6 +171,25 @@ enum Catalog {
         ])
     }
 
+    static func claudeModelIndex(_ raw: String) -> Int? {
+        if let exact = index(raw, in: claudeModels, aliases: [:]) { return exact }
+        // "Opus" matches the listed Opus row whatever its version.
+        let family = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return claudeModels.firstIndex { $0.lowercased().hasPrefix(family + " ") }
+    }
+
+    static func claudeModelName(_ raw: String) -> String? {
+        claudeModelIndex(raw).map { claudeModels[$0] }
+    }
+
+    /// Claude effort menu label for a dial level; unsupported endpoints clamp.
+    static func claudeEffortLabel(_ raw: String) -> String? {
+        let full = index(raw, in: claudeThinking, aliases: [
+            "none": 0, "minimal": 0, "light": 0, "extra": 3, "xhigh": 3, "max": 3, "ultra": 3,
+        ])
+        return full.map { claudeEffortLabels[$0] }
+    }
+
     static func rigModelIndex(_ raw: String) -> Int? {
         if let exact = rigModels.firstIndex(where: { panelNamesMatch($0, raw) }) {
             return exact
@@ -208,7 +243,8 @@ enum Catalog {
     }
 
     static func modelIndex(_ raw: String) -> Int? {
-        chatgptModelIndex(raw) ?? cursorModelIndex(raw) ?? openCodeModelIndex(raw) ?? rigModelIndex(raw)
+        chatgptModelIndex(raw) ?? cursorModelIndex(raw) ?? openCodeModelIndex(raw)
+            ?? claudeModelIndex(raw) ?? rigModelIndex(raw)
     }
 
     // Keep these small protocol tables aligned with firmware catalog.c.
@@ -286,6 +322,7 @@ enum Catalog {
         return chatgptModelName(trimmed)
             ?? cursorModelName(trimmed)
             ?? openCodeModelName(trimmed)
+            ?? claudeModelName(trimmed)
             ?? rigModelName(trimmed)
             ?? trimmed
     }

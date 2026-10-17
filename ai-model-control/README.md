@@ -11,7 +11,7 @@ ChatGPT, Cursor, and OpenCode
 on the desk-mounted 3.5" ST7796U panel. Rotary encoders change both locally
 (display + NVS). After **0.4 s** with no further changes, the firmware sends
 the latest complete state plus `APPLY` to `ai-model-control-bridge/` only while
-ChatGPT, Cursor, OpenCode, or Rig is already foreground. Focus changes restore the
+ChatGPT, Cursor, OpenCode, Rig, or Claude is already foreground. Focus changes restore the
 app-specific panel state without posting keys. Pressing either encoder sends
 the complete current state plus `PUSH`, which forces model and effort into
 the currently focused supported app.
@@ -36,6 +36,9 @@ Mac → ESP: CONFIG CHATGPT_OLDER <0|1> (legacy fallback only)
 Mac → ESP: CONFIG CHATGPT_CLEAR
 Mac → ESP: CONFIG CHATGPT_ADD <2-hex effort mask> <picker model name>
 Mac → ESP: CONFIG CHATGPT_END
+Mac → ESP: CONFIG CLAUDE_CLEAR
+Mac → ESP: CONFIG CLAUDE_ADD <Claude model menu name>
+Mac → ESP: CONFIG CLAUDE_END
 Mac → ESP: CONFIG RIG_MODELS <16-hex Latest-alias mask>
 Mac → ESP: MODEL <Rig display name>
 Mac → ESP: THINKING <Rig effort name>
@@ -74,7 +77,7 @@ the USB device path to disappear.
 Mac also sends `TIME <unix-seconds> <tz-offset-minutes>` on connect and every
 30 s so the panel can show a local clock. Firmware ticks minutes from that
 snapshot; it does not use Wi-Fi or SNTP. the helper also sends `FRONT Cursor`,
-`FRONT ChatGPT`, `FRONT OpenCode`, `FRONT Rig`, or `FRONT None` when the focused app changes so the
+`FRONT ChatGPT`, `FRONT OpenCode`, `FRONT Rig`, `FRONT Claude`, or `FRONT None` when the focused app changes so the
 header brand lockup and app-specific panel state match without applying anything
 to the desktop app. `FRONT None` keeps the last app's catalog and logo; it
 does not fall back to ChatGPT. After each SYNC the helper resends FRONT so a
@@ -382,8 +385,8 @@ swift build -c release
 
 - `main/main.c`: focused-app input coordination, immediate no-focus clock view, and save/paint retries.
 - `main/ui.c`: drawing including the idle screensaver; `display.c`: SPI and DMA ownership; `canvas.c`/`font.c`: pixels/text.
-- `main/front_title.c`: Mac `FRONT Cursor` / `FRONT ChatGPT` / `FRONT OpenCode` / `FRONT Rig` / `FRONT None`;
-  None keeps the last app and does not restore ChatGPT. Rig reuses the ChatGPT encoder list and draws a text lockup.
+- `main/front_title.c`: Mac `FRONT Cursor` / `FRONT ChatGPT` / `FRONT OpenCode` / `FRONT Rig` / `FRONT Claude` / `FRONT None`;
+  None keeps the last app and does not restore ChatGPT. Rig reuses the ChatGPT encoder list; Rig and Claude draw text lockups.
 - `main/logo.c`: header brand masks generated from `assets/` by
   `scripts/generate_logos.py`; re-run it (needs Pillow) after changing the
   artwork or its target height, and commit the result.
@@ -431,6 +434,37 @@ OpenCode model outside this set resets to GPT-5.6 Luna when OpenCode next become
 focused.
 See the [OpenCode bridge mapping](ai-model-control-bridge/README.md#opencode) for
 model availability, effort mappings, and integration limits.
+
+## Claude
+
+`FRONT Claude` (bundle `com.anthropic.claudefordesktop`) selects a text
+"Claude" header. Effort is Low, Medium, High, Extra High (Claude's **Extra**).
+The model encoder starts from the fallback Opus 5.5, Sonnet 5.5, Haiku 5.5.
+Whenever the bridge opens Claude's model menu for an apply, it reads the
+visible `AXMenuItem` rows that start with a family and version (`Sonnet 5.5
+Default 2` → `Sonnet 5.5`) and sends them as a complete `CONFIG CLAUDE_*`
+transaction; an empty or interrupted list keeps the previous one. The live list
+lives in RAM on both sides, so after a bridge restart the fallback applies
+until the next model apply. Usage-credit rows (Fable), Max (3.5x usage) and
+Ultracode stay off the dial; More models is not expanded. The last Claude
+model is stored under NVS `cgpt`/`last_a`. Keep firmware `claude_models` /
+`claude_thinking` and Swift `Catalog.claudeFallbackModels` / `claudeThinking`
+aligned.
+
+The bridge opens the model menu with Command-Shift-I or the effort menu with
+Command-Shift-E, then presses the row whose accessible name matches the label
+(badges such as `Default` may follow it) with AXPress, falling back to a
+tagged click only if the row refuses the action. Menu rows are searched before
+radio buttons and buttons so a sidebar session title cannot win. Selection
+never uses digits. Afterwards it reads the composer status button (for example
+`Opus 5.5 Medium`) and reports a mismatch as a failure. Escape is posted only
+while a model or effort menu row is still visible: with no menu open, Escape in
+Claude's Code tab stops the running response. Requires Accessibility.
+
+To check what the bridge sees, open a Claude menu by hand and run the bundled
+`ai-model-control-bridge --check-claude`. It prints the status control, each
+candidate row with its role and match, and the model rows it would send. It
+posts no keys or clicks.
 
 The event-driven recovery build retains version 0.90 by user request. Older
 v0.90 binaries lack READY and require a serial reconnect after a silent reset

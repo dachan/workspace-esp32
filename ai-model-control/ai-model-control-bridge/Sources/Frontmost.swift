@@ -9,6 +9,7 @@ enum DeskKind {
     case cursor
     case openCode
     case rig
+    case claude
 }
 
 enum DeskFront {
@@ -19,13 +20,15 @@ enum DeskFront {
     static let cursorID = "com.todesktop.230313mzl4w4u92"
     static let openCodeID = "ai.opencode.desktop"
     static let rigID = "dev.rig.desktop"
-    static let bundleIDs: Set<String> = chatGPTIDs.union([cursorID, openCodeID, rigID])
+    static let claudeID = "com.anthropic.claudefordesktop"
+    static let bundleIDs: Set<String> = chatGPTIDs.union([cursorID, openCodeID, rigID, claudeID])
 
     static func kind(of app: NSRunningApplication) -> DeskKind? {
         guard let id = app.bundleIdentifier else { return isRigApp(app) ? .rig : nil }
         if chatGPTIDs.contains(id) { return .chatGPT }
         if id == cursorID { return .cursor }
         if id == openCodeID { return .openCode }
+        if id == claudeID { return .claude }
         if id == rigID || isRigApp(app) { return .rig }
         return nil
     }
@@ -49,6 +52,7 @@ enum DeskFront {
         case "com.openai.codex": return "Codex"
         case cursorID: return "Cursor"
         case openCodeID: return "OpenCode"
+        case claudeID: return "Claude"
         case rigID: return "Rig"
         default: return isRigApp(app) ? "Rig" : (app.localizedName ?? "?")
         }
@@ -81,6 +85,7 @@ enum DeskFront {
         }
         if kind(of: app) == .openCode { return "OpenCode" }
         if kind(of: app) == .rig { return "Rig" }
+        if kind(of: app) == .claude { return "Claude" }
         return kind(of: app) == .cursor ? "Cursor" : "ChatGPT"
     }
 
@@ -90,7 +95,7 @@ enum DeskFront {
         if let app, isTarget(app, preferred: preferred) {
             return "\(displayName(for: app)) foreground"
         }
-        return "ChatGPT/Cursor/OpenCode/Rig background (\(name))"
+        return "ChatGPT/Cursor/OpenCode/Rig/Claude background (\(name))"
     }
 }
 

@@ -208,6 +208,7 @@ final class BridgeRuntime {
             if let update = SerialBridge.parseInbound(raw) { receive(update) }
         }
         session.setPanelFront(DeskFront.panelTitle(preferred: options.bundleID))
+        if let names = Catalog.claudeLiveModels { session.setClaudeCatalog(names) }
         session.flushWrites()
         resetConnectionIfNeeded(session)
     }

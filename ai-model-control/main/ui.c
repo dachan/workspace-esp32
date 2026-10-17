@@ -225,10 +225,17 @@ static const logo_t *front_logo(bool icon)
     case DESK_CURSOR:
         return icon ? &logo_cursor_icon : &logo_cursor;
     case DESK_RIG:
+    case DESK_CLAUDE:
         return NULL;
     default:
         return icon ? &logo_openai_icon : &logo_openai;
     }
+}
+
+/* Header text for apps without a generated logo mask. */
+static const char *front_text_title(void)
+{
+    return front_title_app() == DESK_CLAUDE ? "Claude" : "Rig";
 }
 
 #if defined(AI_MODEL_PROFILE_SUPERMINI)
@@ -254,7 +261,7 @@ static esp_err_t ui_render_round(const model_fields_t *fields)
         display_blit_alpha((DISPLAY_WIDTH - logo->width) / 2, 12,
                            logo->width, logo->height, logo->alpha, text, bg);
     } else {
-        draw_centered(12, "Rig", text, bg, 2);
+        draw_centered(12, front_text_title(), text, bg, 2);
     }
 
     const int model_scale = 2;
@@ -325,7 +332,7 @@ esp_err_t ui_render(const model_fields_t *fields)
         display_blit_alpha(pad, header_y + title_h - logo->baseline, logo->width, logo->height,
                            logo->alpha, text, card);
     } else {
-        font_draw_text(pad, header_y, "Rig", text, card, title_scale);
+        font_draw_text(pad, header_y, front_text_title(), text, card, title_scale);
     }
     if (have_clock) {
         const int right = DISPLAY_WIDTH - pad;

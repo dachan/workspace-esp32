@@ -6,6 +6,7 @@ struct Options {
     var listPorts = false
     var hidInfo = false
     var checkAX = false
+    var checkClaude = false
     var checkInputGuard = false
     var front = false
     var watch = false
@@ -47,6 +48,8 @@ func parseOptions(_ args: [String]) -> Options? {
             options.checkInputGuard = true
         case "--check-ax":
             options.checkAX = true
+        case "--check-claude":
+            options.checkClaude = true
         case "--front":
             options.front = true
         case "--watch":
@@ -152,6 +155,8 @@ func usage() -> String {
       --dial-swap 0|1     1 swaps the knobs (left effort, right model)
       --hid-info          Describe the keyboard control path
       --check-ax          Check Accessibility permission and exit
+      --check-claude      Read-only: list the Claude rows the bridge would match
+                          (open a Claude menu first); posts no keys or clicks
       --check-input-guard Check input filter availability for the focused app; no keys posted
       --send-serial       Accepted for the old watch command; unused
       -h, --help

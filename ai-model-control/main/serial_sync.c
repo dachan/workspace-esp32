@@ -225,6 +225,19 @@ bool serial_sync_handle_line(const char *line)
         s_config_changed |= catalog_cursor_catalog_commit();
         return true;
     }
+    if (strcmp(line, "CONFIG CLAUDE_CLEAR") == 0) {
+        catalog_claude_catalog_begin();
+        return true;
+    }
+    const char *claude_add = "CONFIG CLAUDE_ADD ";
+    if (strncmp(line, claude_add, strlen(claude_add)) == 0) {
+        catalog_claude_catalog_add(line + strlen(claude_add));
+        return true;
+    }
+    if (strcmp(line, "CONFIG CLAUDE_END") == 0) {
+        s_config_changed |= catalog_claude_catalog_commit();
+        return true;
+    }
     if (strcmp(line, "CONFIG RIG_CLEAR") == 0) {
         catalog_rig_catalog_begin();
         return true;

@@ -19,15 +19,10 @@ final class SerialSession {
     private var rigModelMaskSent: UInt64?
     private var rigEffortMasks: [UInt8] = []
     private var rigEffortMasksSent: [UInt8]?
-    private var chatGPTCatalogWanted: [String] = []
-    private var chatGPTCatalogIndex = 0
-    private var chatGPTCatalogSent = true
-    private var cursorCatalogWanted: [String] = []
-    private var cursorCatalogIndex = 0
-    private var cursorCatalogSent = true
-    private var rigCatalogWanted: [String] = []
-    private var rigCatalogIndex = 0
-    private var rigCatalogSent = true
+    private var chatGPTCatalog = CatalogQueue()
+    private var cursorCatalog = CatalogQueue()
+    private var rigCatalog = CatalogQueue()
+    private var claudeCatalog = CatalogQueue()
     private var fd: Int32 = -1
     private(set) var connectionGeneration: UInt64 = 0
     var isConnected: Bool { fd >= 0 }
@@ -110,12 +105,10 @@ final class SerialSession {
         configurationStep = 0
         rigModelMaskSent = nil
         rigEffortMasksSent = nil
-        chatGPTCatalogIndex = 0
-        chatGPTCatalogSent = chatGPTCatalogWanted.isEmpty
-        cursorCatalogIndex = 0
-        cursorCatalogSent = cursorCatalogWanted.isEmpty
-        rigCatalogIndex = 0
-        rigCatalogSent = rigCatalogWanted.isEmpty
+        chatGPTCatalog.restart()
+        cursorCatalog.restart()
+        rigCatalog.restart()
+        claudeCatalog.restart()
         hostModelSent = nil
         hostThinkingSent = nil
         hostEffortMaskSent = nil
@@ -183,12 +176,10 @@ final class SerialSession {
         configurationStep = 0
         rigModelMaskSent = nil
         rigEffortMasksSent = nil
-        chatGPTCatalogIndex = 0
-        chatGPTCatalogSent = chatGPTCatalogWanted.isEmpty
-        cursorCatalogIndex = 0
-        cursorCatalogSent = cursorCatalogWanted.isEmpty
-        rigCatalogIndex = 0
-        rigCatalogSent = rigCatalogWanted.isEmpty
+        chatGPTCatalog.restart()
+        cursorCatalog.restart()
+        rigCatalog.restart()
+        claudeCatalog.restart()
         hostModelSent = nil
         hostThinkingSent = nil
         hostEffortMaskSent = nil
@@ -219,11 +210,7 @@ final class SerialSession {
             lines.append("CONFIG CHATGPT_ADD \(String(format: "%02x", entry.effortMask)) \(entry.name)")
         }
         lines.append("CONFIG CHATGPT_END")
-        if lines != chatGPTCatalogWanted {
-            chatGPTCatalogWanted = lines
-            chatGPTCatalogIndex = 0
-            chatGPTCatalogSent = false
-        }
+        chatGPTCatalog.replace(lines)
     }
 
     func setCursorCatalog(_ entries: [CursorModelList.Entry]) {
@@ -232,11 +219,16 @@ final class SerialSession {
             lines.append("CONFIG CURSOR_ADD \(String(format: "%02x", entry.effortMask)) \(entry.name)")
         }
         lines.append("CONFIG CURSOR_END")
-        if lines != cursorCatalogWanted {
-            cursorCatalogWanted = lines
-            cursorCatalogIndex = 0
-            cursorCatalogSent = false
-        }
+        cursorCatalog.replace(lines)
+    }
+
+    /// Claude model rows read from its own menu; names only (efforts are uniform).
+    func setClaudeCatalog(_ names: [String]) {
+        let entries = names.map { String($0.prefix(31)) }.filter { !$0.isEmpty }
+        guard !entries.isEmpty else { return }
+        claudeCatalog.replace(
+            ["CONFIG CLAUDE_CLEAR"] + entries.map { "CONFIG CLAUDE_ADD \($0)" } + ["CONFIG CLAUDE_END"]
+        )
     }
 
     func setRigCatalog(_ entries: [(name: String, mask: UInt8)]) {
@@ -247,11 +239,7 @@ final class SerialSession {
             lines.append("CONFIG RIG_ADD \(String(format: "%02x", entry.mask)) \(name)")
         }
         lines.append("CONFIG RIG_END")
-        if lines != rigCatalogWanted {
-            rigCatalogWanted = lines
-            rigCatalogIndex = 0
-            rigCatalogSent = false
-        }
+        rigCatalog.replace(lines)
     }
 
     func clearHostPanel() {
@@ -281,7 +269,7 @@ final class SerialSession {
                    let revision = acknowledgements.removeValue(forKey: kind) {
                     line = "ACK \(String(format: "%016llx", revision)) \(kind.rawValue)"
                 } else if let wanted = panelFrontWanted, wanted != panelFrontSent,
-                          wanted != "Cursor" || cursorCatalogSent {
+                          wanted != "Cursor" || cursorCatalog.isSent {
                     line = "FRONT \(wanted)"
                     panelFrontSent = wanted
                     hostModelSent = nil
@@ -304,36 +292,26 @@ final class SerialSession {
                 } else if configurationStep == 2 {
                     line = "CONFIG DIAL_SWAP \(dialSwap ? 1 : 0)\nCONFIG CHATGPT_OLDER \(showOlderModels ? 1 : 0)"
                     configurationStep = 3
-                } else if !chatGPTCatalogSent, chatGPTCatalogIndex < chatGPTCatalogWanted.count {
-                    line = chatGPTCatalogWanted[chatGPTCatalogIndex]
-                    chatGPTCatalogIndex += 1
-                    if chatGPTCatalogIndex >= chatGPTCatalogWanted.count {
-                        chatGPTCatalogSent = true
-                    }
-                } else if !cursorCatalogSent, cursorCatalogIndex < cursorCatalogWanted.count {
-                    line = cursorCatalogWanted[cursorCatalogIndex]
-                    cursorCatalogIndex += 1
-                    if cursorCatalogIndex >= cursorCatalogWanted.count {
-                        cursorCatalogSent = true
-                    }
+                } else if let next = chatGPTCatalog.next() {
+                    line = next
+                } else if let next = cursorCatalog.next() {
+                    line = next
+                } else if let next = claudeCatalog.next() {
+                    line = next
                 } else if let wanted = panelFrontWanted, wanted != panelFrontSent {
                     line = "FRONT \(wanted)"
                     panelFrontSent = wanted
                     hostModelSent = nil
                     hostThinkingSent = nil
                     hostEffortMaskSent = nil
-                } else if !rigCatalogSent, rigCatalogIndex < rigCatalogWanted.count {
-                    line = rigCatalogWanted[rigCatalogIndex]
-                    rigCatalogIndex += 1
-                    if rigCatalogIndex >= rigCatalogWanted.count {
-                        rigCatalogSent = true
-                    }
+                } else if let next = rigCatalog.next() {
+                    line = next
                     configurationStep = 4
-                } else if rigCatalogWanted.isEmpty, configurationStep == 3 || rigModelMaskSent != rigModelMask {
+                } else if rigCatalog.isEmpty, configurationStep == 3 || rigModelMaskSent != rigModelMask {
                     line = "CONFIG RIG_MODELS \(String(format: "%016llx", rigModelMask))"
                     configurationStep = 4
                     rigModelMaskSent = rigModelMask
-                } else if rigCatalogWanted.isEmpty, !rigEffortMasks.isEmpty, configurationStep == 4 || rigEffortMasksSent != rigEffortMasks {
+                } else if rigCatalog.isEmpty, !rigEffortMasks.isEmpty, configurationStep == 4 || rigEffortMasksSent != rigEffortMasks {
                     line = "CONFIG RIG_EFFORTS \(rigEffortMasks.map { String(format: "%02x", $0) }.joined())"
                     configurationStep = 5
                     rigEffortMasksSent = rigEffortMasks
@@ -414,6 +392,34 @@ enum SerialError: Error, CustomStringConvertible {
     case io(String)
     var description: String {
         switch self { case .io(let message): return message }
+    }
+}
+/// One ordered CONFIG transaction, resent whole after every reconnect or SYNC.
+struct CatalogQueue {
+    private var wanted: [String] = []
+    private var index = 0
+    private(set) var isSent = true
+
+    var isEmpty: Bool { wanted.isEmpty }
+
+    mutating func replace(_ lines: [String]) {
+        guard lines != wanted else { return }
+        wanted = lines
+        index = 0
+        isSent = false
+    }
+
+    mutating func restart() {
+        index = 0
+        isSent = wanted.isEmpty
+    }
+
+    mutating func next() -> String? {
+        guard !isSent, index < wanted.count else { return nil }
+        let line = wanted[index]
+        index += 1
+        if index >= wanted.count { isSent = true }
+        return line
     }
 }
 #endif

@@ -55,7 +55,7 @@ Hard lanes for this repo:
   `main` and any branch that still has unmerged commits. Do not leave merged
   feature branches around.
 
-## AI model control (encoders → ChatGPT / Cursor / OpenCode / Rig)
+## AI model control (encoders → ChatGPT / Cursor / OpenCode / Rig / Claude)
 
 On-device UI is `ai-model-control/` (3.5" ST7796 480x320 and SuperMini round).
 Edit on Hetzner codex, push, pull the Mac, then **flash the attached board on
@@ -91,7 +91,7 @@ explicit intent and applies only fields that differ. Model picker /
 confirmation waits are **0.15 s**; every bridge-posted keystroke is separated
 by **0.05 s**.
 
-The helper **never activates** ChatGPT, Cursor, OpenCode, or Rig. Encoder lines
+The helper **never activates** ChatGPT, Cursor, OpenCode, Rig, or Claude. Encoder lines
 apply only while that app is already focused; otherwise they are dropped —
 no activate, no CANCEL, no deferred apply when focus returns. Focus lost
 mid-apply drops the change. App focus and connection snapshots update state
@@ -178,8 +178,10 @@ notarization, a bundled flasher, and signed firmware artifacts.
 
 Keep `ai-model-control/VERSION` at **0.90**. The user explicitly authorized
 rebuilding and reflashing the event-driven serial recovery and intent-driven
-synchronization changes, and `FRONT Rig` (Rig lockup plus ChatGPT encoder reuse),
-while retaining this version number. Focus never posts
+synchronization changes, `FRONT Rig` (Rig lockup plus ChatGPT encoder reuse),
+and `FRONT Claude` (text lockup, model list read from Claude's own menu with
+an Opus/Sonnet/Haiku 5.5 fallback, Low to Extra High effort; see
+`ai-model-control/README.md#claude`), while retaining this version number. Focus never posts
 keys, settled rotation sends `APPLY`, and either encoder click sends `PUSH`.
 These exceptions do not authorize other firmware changes.
 Firmware repeats `READY <16-hex boot id>` until SYNC. The bridge sends SYNC

@@ -94,6 +94,67 @@ static const char *const *chatgpt_model_table(int *count)
 static const char *const opencode_models[] = {
     "GPT-6 Astra", "GPT-5.6 Terra", "GPT-5.6 Sol", "GPT-5.6 Luna",
 };
+/* Claude desktop model menu order until the bridge sends rows read from that
+ * menu. Fable (usage credits) is deliberately omitted. */
+static const char *const claude_models[] = {
+    "Opus 5.5", "Sonnet 5.5", "Haiku 5.5",
+};
+#define CLAUDE_LIVE_MAX 12
+#define CLAUDE_LIVE_NAME 32
+static char s_claude_live[CLAUDE_LIVE_MAX][CLAUDE_LIVE_NAME];
+static const char *s_claude_live_names[CLAUDE_LIVE_MAX];
+static int s_claude_live_count;
+static char s_claude_build[CLAUDE_LIVE_MAX][CLAUDE_LIVE_NAME];
+static int s_claude_build_count;
+static bool s_claude_building;
+
+void catalog_claude_catalog_begin(void)
+{
+    s_claude_build_count = 0;
+    s_claude_building = true;
+}
+
+void catalog_claude_catalog_add(const char *name)
+{
+    if (!s_claude_building || !name || !name[0]
+        || strlen(name) >= CLAUDE_LIVE_NAME || s_claude_build_count >= CLAUDE_LIVE_MAX) return;
+    for (int i = 0; i < s_claude_build_count; i++) {
+        if (strcasecmp(s_claude_build[i], name) == 0) return;
+    }
+    snprintf(s_claude_build[s_claude_build_count++], CLAUDE_LIVE_NAME, "%s", name);
+}
+
+/* An empty or interrupted transaction keeps the previous list. */
+bool catalog_claude_catalog_commit(void)
+{
+    if (!s_claude_building || s_claude_build_count == 0) {
+        s_claude_building = false;
+        return false;
+    }
+    s_claude_building = false;
+    bool changed = s_claude_live_count != s_claude_build_count;
+    for (int i = 0; i < s_claude_build_count; i++) {
+        changed |= strcmp(s_claude_live[i], s_claude_build[i]) != 0;
+        snprintf(s_claude_live[i], CLAUDE_LIVE_NAME, "%s", s_claude_build[i]);
+        s_claude_live_names[i] = s_claude_live[i];
+    }
+    s_claude_live_count = s_claude_build_count;
+    return changed;
+}
+
+static const char *const *claude_model_table(int *count)
+{
+    if (s_claude_live_count > 0) {
+        *count = s_claude_live_count;
+        return s_claude_live_names;
+    }
+    *count = COUNT(claude_models);
+    return claude_models;
+}
+/* Claude effort menu Low..Extra; Max (3.5x usage) and Ultracode stay off the dial. */
+static const char *const claude_thinking[] = {
+    "Low", "Medium", "High", "Extra High",
+};
 /* Encoder slots are OpenRouter Latest aliases. Labels keep the slug provider and omit Latest. */
 static const char *const rig_models[] = {
     "xAI Grok",
@@ -718,6 +779,10 @@ static const char *const *active_thinking(const char *model, int *count)
     if (front_title_app() == DESK_RIG) {
         return rig_thinking_table(model, count);
     }
+    if (front_title_app() == DESK_CLAUDE) {
+        *count = COUNT(claude_thinking);
+        return claude_thinking;
+    }
     return thinking_table(front_title_is_cursor(), model, count);
 }
 
@@ -772,6 +837,11 @@ int catalog_model_count(void)
 int catalog_model_count_for(desk_app_t app)
 {
     if (app == DESK_OPENCODE) return COUNT(opencode_models);
+    if (app == DESK_CLAUDE) {
+        int count;
+        claude_model_table(&count);
+        return count;
+    }
     if (app == DESK_RIG) {
         if (s_rig_live_count > 0) return s_rig_live_count;
         return rig_enabled_count();
@@ -796,6 +866,12 @@ const char *catalog_model_at_for(desk_app_t app, int index)
     if (app == DESK_OPENCODE) {
         if (index < 0 || index >= COUNT(opencode_models)) return opencode_models[0];
         return opencode_models[index];
+    }
+    if (app == DESK_CLAUDE) {
+        int count;
+        const char *const *names = claude_model_table(&count);
+        if (index < 0 || index >= count) return names[0];
+        return names[index];
     }
     if (app == DESK_RIG) {
         if (s_rig_live_count > 0) {
@@ -828,6 +904,11 @@ int catalog_model_index_for(desk_app_t app, const char *name)
 {
     if (app == DESK_OPENCODE) {
         return table_count(opencode_models, COUNT(opencode_models), name);
+    }
+    if (app == DESK_CLAUDE) {
+        int count;
+        const char *const *names = claude_model_table(&count);
+        return table_count(names, count, name);
     }
     if (app == DESK_RIG) {
         if (s_rig_live_count > 0) {
@@ -929,6 +1010,8 @@ bool catalog_model_known(const char *name)
         || table_count(chatgpt_models, COUNT(chatgpt_models), name) >= 0) return true;
     return cursor_live_index(name) >= 0 || cursor_index(name) >= 0
         || table_count(opencode_models, COUNT(opencode_models), name) >= 0
+        || table_count(s_claude_live_names, s_claude_live_count, name) >= 0
+        || table_count(claude_models, COUNT(claude_models), name) >= 0
         || rig_name_index(s_rig_live, s_rig_live_count, name) >= 0
         || rig_full_index(name) >= 0;
 }
@@ -941,6 +1024,11 @@ const char *catalog_default_model(void)
 const char *catalog_default_model_for(desk_app_t app)
 {
     if (app == DESK_OPENCODE) return "GPT-5.6 Luna";
+    if (app == DESK_CLAUDE) {
+        int count;
+        const char *const *names = claude_model_table(&count);
+        return names[0];
+    }
     if (app == DESK_RIG) {
         if (s_rig_live_count > 0) return s_rig_live[0];
         int idx = catalog_model_index_for(app, "xAI Grok");
@@ -968,6 +1056,9 @@ int catalog_thinking_count_for(desk_app_t app, const char *model)
 {
     if (app == DESK_OPENCODE) {
         return 0;
+    }
+    if (app == DESK_CLAUDE) {
+        return COUNT(claude_thinking);
     }
     if (app == DESK_RIG) {
         int count;
@@ -1009,7 +1100,7 @@ int catalog_thinking_level(const char *model, const char *name)
         }
         return 0;
     }
-    if (!front_title_is_cursor()) {
+    if (front_title_app() == DESK_CHATGPT) {
         int full = table_count(chatgpt_thinking, COUNT(chatgpt_thinking), name);
         if (full >= 0) {
             for (int i = full; i >= 0; i--) {
@@ -1031,7 +1122,7 @@ int catalog_thinking_level(const char *model, const char *name)
     // Preserve names across app/model changes; clamp unsupported endpoints.
     if (strcasecmp(name, "None") == 0 || strcasecmp(name, "Low") == 0
         || strcasecmp(name, "Light") == 0 || strcasecmp(name, "Minimal") == 0) {
-        int low = table_count(names, count, front_title_is_cursor() ? "Low" : "Light");
+        int low = table_count(names, count, front_title_app() == DESK_CHATGPT ? "Light" : "Low");
         if (low < 0) {
             return 1;
         }
@@ -1078,6 +1169,9 @@ const char *catalog_default_thinking_for(desk_app_t app, const char *model)
     }
     if (app == DESK_RIG) {
         return "Auto";
+    }
+    if (app == DESK_CLAUDE) {
+        return "Medium";
     }
     return catalog_default_thinking_in(app == DESK_CURSOR, model);
 }

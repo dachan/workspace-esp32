@@ -51,6 +51,11 @@ void catalog_chatgpt_set_thinking_mask(uint64_t mask);
 uint64_t catalog_rig_enabled_mask(void);
 void catalog_rig_set_enabled_mask(uint64_t mask);
 
+/* Transactional Claude model rows read from Claude's own model menu. */
+void catalog_claude_catalog_begin(void);
+void catalog_claude_catalog_add(const char *name);
+bool catalog_claude_catalog_commit(void);
+
 void catalog_rig_catalog_begin(void);
 void catalog_rig_catalog_add(const char *name, uint8_t effort_mask);
 void catalog_rig_catalog_commit(void);
