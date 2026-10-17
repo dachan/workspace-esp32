@@ -3,12 +3,11 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-/// Claude desktop: Command-Shift-I opens the model menu and Command-Shift-E the
-/// effort menu. Choices are pressed by visible label; the effort menu shows no
-/// digit badges and the model digits shift with the account's model list.
+/// Claude desktop: the composer's "Model: Opus 5.5 Medium" pop-up opens one menu
+/// with model rows and an Effort submenu. Its documented Command-Shift-I/E
+/// shortcuts do not respond to posted keys, so the bridge presses that control
+/// by Accessibility, then presses rows by visible label (never by digit).
 enum ClaudePicker {
-    private static let keyI: UInt16 = 0x22
-    private static let keyE: UInt16 = 0x0E
     /// Most specific first: a sidebar button named "Opus 5.5 notes" must never
     /// win over a real menu row.
     private static let choiceRoles = ["AXMenuItem", "AXRadioButton", "AXButton"]
@@ -22,13 +21,14 @@ enum ClaudePicker {
         guard let name = Catalog.claudeModelName(raw) else {
             return .failed("unknown Claude model \(raw)")
         }
-        return choose(
-            label: name, shortcut: keyI, focus: focus, preferred: preferred, pulse: pulse,
-            whileOpen: { root, status in
+        return withMenu(
+            target: name, focus: focus, preferred: preferred, pulse: pulse,
+            act: { root, status in
                 // The menu is open anyway: refresh the dial's live model list.
                 Catalog.setClaudeModels(modelRows(in: root, excluding: status))
+                return pressChoice(name, in: root, excluding: status, pulse: pulse)
             },
-            confirmed: { status in status.hasPrefix(name) }
+            confirmed: { status in status.hasPrefix(name + " ") }
         )
     }
 
@@ -41,9 +41,25 @@ enum ClaudePicker {
         guard let label = Catalog.claudeEffortLabel(raw) else {
             return .failed("unknown Claude effort \(raw)")
         }
-        return choose(
-            label: label, shortcut: keyE, focus: focus, preferred: preferred, pulse: pulse,
-            whileOpen: { _, _ in },
+        return withMenu(
+            target: label, focus: focus, preferred: preferred, pulse: pulse,
+            act: { root, status in
+                if findChoice(label, in: root, excluding: status) == nil {
+                    guard let effort = findChoice("Effort", in: root, excluding: status) else {
+                        return .failed("Claude Effort row unavailable")
+                    }
+                    guard press(effort, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
+                        return .interrupted
+                    }
+                    // A submenu that opens on hover may still need its keyboard opener.
+                    if findChoice(label, in: root, excluding: status) == nil {
+                        guard Keys.key(Keys.right, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
+                            return .interrupted
+                        }
+                    }
+                }
+                return pressChoice(label, in: root, excluding: status, pulse: pulse)
+            },
             confirmed: { status in status.hasSuffix(" " + label) }
         )
     }
@@ -59,7 +75,7 @@ enum ClaudePicker {
         }
         let root = applicationElement(pid: app.processIdentifier)
         let status = statusControl(in: root)
-        print("status control: \(status.map { "\(AXQuery.role($0)) \"\(statusLabel($0))\"" } ?? "not found")")
+        print("status control: \(status.map { "\(AXQuery.role($0)) \"\(statusText($0))\"" } ?? "not found")")
         var rows = 0
         _ = AXQuery.find(in: root, where: { element in
             let role = AXQuery.role(element)
@@ -109,51 +125,59 @@ enum ClaudePicker {
         emit("scanned \(visited) elements, \(lines) matched")
     }
 
-    private static func choose(
-        label: String,
-        shortcut: UInt16,
+    /// Opens the composer model menu, runs `act`, closes what is left open, and
+    /// confirms the result from the control's own label.
+    private static func withMenu(
+        target: String,
         focus: FocusOperation,
         preferred: String?,
         pulse: @escaping () -> Bool,
-        whileOpen: (AXUIElement, AXUIElement?) -> Void,
+        act: (AXUIElement, AXUIElement) -> Switcher.Result,
         confirmed: (String) -> Bool
     ) -> Switcher.Result {
         let root = applicationElement(pid: focus.pid)
-        // The composer status ("Opus 5.5 Medium") also starts with a model name.
-        let status = statusControl(in: root)
-
-        let letter = shortcut == keyI ? "I" : "E"
-        fputs("ai-model-control-bridge: Claude Command-Shift-\(letter) \(label)\n", stderr)
-        guard Keys.commandShift(shortcut, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
-            return pulse() ? .interrupted : .failed("could not open the Claude menu")
+        guard let control = statusControl(in: root) else {
+            dumpCandidates(root) { fputs("ai-model-control-bridge: Claude AX \($0)\n", stderr) }
+            return .failed("Claude model control unavailable")
+        }
+        fputs("ai-model-control-bridge: Claude \(statusText(control)) -> \(target)\n", stderr)
+        guard press(control, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
+            return pulse() ? .interrupted : .failed("could not open the Claude model menu")
         }
         guard DeskFront.isForeground(preferred: preferred) else {
             return .failed("\(focus.displayName) is not focused")
         }
-        whileOpen(root, status)
-
-        guard let item = findChoice(label: label, in: root, excluding: status) else {
-            // Record what the open menu exposes so a label/role mismatch is diagnosable.
-            dumpCandidates(root) { fputs("ai-model-control-bridge: Claude AX \($0)\n", stderr) }
+        let result = act(root, control)
+        guard case .applied = result else {
+            if case .failed = result {
+                // Record what the open menu exposes so a label/role mismatch is diagnosable.
+                dumpCandidates(root) { fputs("ai-model-control-bridge: Claude AX \($0)\n", stderr) }
+            }
             closeIfOpen(root, pulse: pulse)
-            return .failed("Claude menu choice \(label) unavailable")
+            return result
         }
-        guard press(item, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
-            return pulse() ? .interrupted : .failed("could not select Claude \(label)")
-        }
+        guard Keys.wait(Keys.pickerTiming, pulse: pulse) else { return .interrupted }
         guard DeskFront.isForeground(preferred: preferred) else {
             return .failed("\(focus.displayName) is not focused")
         }
         closeIfOpen(root, pulse: pulse)
 
-        let path = "Claude Command-Shift-\(letter) \(label)"
-        guard let current = statusControl(in: root).map(statusLabel) else {
-            return .applied(path: "\(path) (no status readback)")
+        guard let current = statusControl(in: root).map(statusText) else {
+            return .applied(path: "Claude \(target) (no status readback)")
         }
         guard confirmed(current) else {
-            return .failed("Claude shows \(current) after selecting \(label)")
+            return .failed("Claude shows \(current) after selecting \(target)")
         }
-        return .applied(path: "\(path), confirmed \(current)")
+        return .applied(path: "Claude \(target), confirmed \(current)")
+    }
+
+    private static func pressChoice(
+        _ label: String, in root: AXUIElement, excluding control: AXUIElement, pulse: @escaping () -> Bool
+    ) -> Switcher.Result {
+        guard let item = findChoice(label, in: root, excluding: control) else {
+            return .failed("Claude menu choice \(label) unavailable")
+        }
+        return press(item, pulse: pulse) ? .applied(path: label) : .interrupted
     }
 
     private static func applicationElement(pid: pid_t) -> AXUIElement {
@@ -200,29 +224,42 @@ enum ClaudePicker {
     }
 
     /// A menu row's accessible name may append badges ("Sonnet 5.5 Default 2").
+    /// Rows are searched inside open AXMenu containers when Claude exposes them,
+    /// so a sidebar or transcript control can never be pressed.
     private static func findChoice(
-        label: String, in root: AXUIElement, excluding status: AXUIElement?
+        _ label: String, in root: AXUIElement, excluding control: AXUIElement?
     ) -> AXUIElement? {
-        for role in choiceRoles {
-            let found = AXQuery.find(in: root, where: { element in
-                if let status, CFEqual(element, status) { return false }
-                return AXQuery.role(element) == role && matches(statusLabel(element), label: label)
-            })
-            if let found { return found }
+        var menus: [AXUIElement] = []
+        _ = AXQuery.find(in: root, where: { element in
+            if AXQuery.role(element) == "AXMenu" { menus.append(element) }
+            return false
+        })
+        for scope in menus.isEmpty ? [root] : menus {
+            for role in choiceRoles {
+                let found = AXQuery.find(in: scope, where: { element in
+                    if let control, CFEqual(element, control) { return false }
+                    return AXQuery.role(element) == role && matches(statusLabel(element), label: label)
+                })
+                if let found { return found }
+            }
         }
         return nil
     }
 
+    /// Label followed by nothing or a non-word separator: "High" matches
+    /// "High" and "High, selected" but not "Higher".
     private static func matches(_ name: String, label: String) -> Bool {
-        name.caseInsensitiveCompare(label) == .orderedSame
-            || name.lowercased().hasPrefix(label.lowercased() + " ")
+        let lowered = name.lowercased()
+        guard lowered.hasPrefix(label.lowercased()) else { return false }
+        guard let next = lowered.dropFirst(label.count).first else { return true }
+        return !(next.isLetter || next.isNumber || next == ".")
     }
 
     private static func statusControl(in root: AXUIElement) -> AXUIElement? {
         AXQuery.find(in: root, where: { element in
             let role = AXQuery.role(element)
             guard role == "AXButton" || role == "AXPopUpButton" else { return false }
-            let words = statusLabel(element).split(separator: " ")
+            let words = statusText(element).split(separator: " ")
             // Model plus effort, so a bare menu row such as "Opus 5.5" never matches.
             guard words.count == 3, let model = modelRowName(words.prefix(2).joined(separator: " ")) else {
                 return false
@@ -231,6 +268,13 @@ enum ClaudePicker {
             return !model.isEmpty
                 && (Catalog.claudeEffortLabels.contains(effort) || effort == "Max" || effort == "Ultracode")
         })
+    }
+
+    /// The composer control's label without its "Model:" prefix: "Opus 5.5 Medium".
+    private static func statusText(_ element: AXUIElement) -> String {
+        let label = statusLabel(element)
+        let prefix = "Model: "
+        return label.hasPrefix(prefix) ? String(label.dropFirst(prefix.count)) : label
     }
 
     private static func statusLabel(_ element: AXUIElement) -> String {

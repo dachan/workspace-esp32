@@ -451,15 +451,20 @@ model is stored under NVS `cgpt`/`last_a`. Keep firmware `claude_models` /
 `claude_thinking` and Swift `Catalog.claudeFallbackModels` / `claudeThinking`
 aligned.
 
-The bridge opens the model menu with Command-Shift-I or the effort menu with
-Command-Shift-E, then presses the row whose accessible name matches the label
-(badges such as `Default` may follow it) with AXPress, falling back to a
-tagged click only if the row refuses the action. Menu rows are searched before
-radio buttons and buttons so a sidebar session title cannot win. Selection
-never uses digits. Afterwards it reads the composer status button (for example
-`Opus 5.5 Medium`) and reports a mismatch as a failure. Escape is posted only
-while a model or effort menu row is still visible: with no menu open, Escape in
-Claude's Code tab stops the running response. Requires Accessibility.
+Claude's documented Command-Shift-I/E shortcuts do not respond to posted keys,
+so the bridge presses the composer's `AXPopUpButton` named `Model: Opus 5.5
+Medium` by Accessibility to open its menu. A model change presses the model row
+whose accessible name starts with the label (badges such as `Default` may
+follow it). An effort change presses the `Effort` row, adds Right only if the
+submenu has not appeared, then presses the effort row. Rows are searched inside
+open `AXMenu` containers when present, menu items before radio buttons and
+buttons, so a sidebar or transcript control cannot win. Presses use AXPress,
+falling back to a tagged click only if refused; selection never uses digits.
+Afterwards the bridge reads that control again and reports a mismatch as a
+failure, and a failed lookup logs the matching Accessibility elements to the
+bridge log. Escape is posted only while a model or effort menu row is still
+visible: with no menu open, Escape in Claude's Code tab stops the running
+response. Requires Accessibility.
 
 To check what the bridge sees, open a Claude menu by hand and run the bundled
 `ai-model-control-bridge --check-claude`. It prints the status control, each
