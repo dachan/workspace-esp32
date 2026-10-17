@@ -133,21 +133,21 @@ func usage() -> String {
     Usage: ai-model-control-bridge [options]
 
     Apply ESP32 encoder SET MODEL / SET THINKING with keyboard
-    shortcuts, only while ChatGPT, Cursor, OpenCode, or Rig is already the foreground app.
+    shortcuts, only while ChatGPT, Cursor, OpenCode, Rig, or Claude is already the foreground app.
     ChatGPT: accessibility model control → Select model → exact label; thinking Ctrl+Shift+, / .
     Cursor: Command-/ model first, then Command-/ again for Effort.
     Rig: models.active / agent.focus / agent.setFocus on the local Rig socket.
 
     Options:
-      --front             Print whether ChatGPT, Cursor, OpenCode, or Rig is foreground and exit
+      --front             Print whether a supported app is foreground and exit
       --watch             Follow foreground + optional serial SET lines
       --listen            Read SET MODEL / SET THINKING from --port
                           (implied by --watch --port)
       --port PATH         USB serial device
       --baud N            Serial baud (default 115200)
       --list-ports        List likely USB serial devices
-      --set-model NAME    One-shot: select NAME if ChatGPT, Cursor, OpenCode, or Rig is focused
-      --set-thinking LVL  One-shot: set reasoning if ChatGPT, Cursor, OpenCode, or Rig is focused
+      --set-model NAME    One-shot: select NAME if a supported app is focused
+      --set-thinking LVL  One-shot: set reasoning if a supported app is focused
       --bundle-id ID      Force ChatGPT, Codex, Cursor, OpenCode, or Rig
       --show-older-models 0|1   Include older ChatGPT generations (default 0)
       --chatgpt-effort-mask HEX  Enabled ChatGPT effort levels (default 0x0f)

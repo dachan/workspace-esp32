@@ -521,7 +521,7 @@ final class BridgeRuntime {
             print("\(stamp()) Cursor model catalog: \(entries.map(\.name).joined(separator: ", "))")
         }
         nextCursorRefreshAt = ProcessInfo.processInfo.systemUptime + 10
-        print("watching ChatGPT / Cursor / OpenCode / Rig foreground\(session.map { "; listening on \($0.port)" } ?? "") (Ctrl+C to stop)")
+        print("watching ChatGPT / Cursor / OpenCode / Rig / Claude foreground\(session.map { "; listening on \($0.port)" } ?? "") (Ctrl+C to stop)")
         fflush(stdout)
         while true {
             refreshChatGPTCatalog()
