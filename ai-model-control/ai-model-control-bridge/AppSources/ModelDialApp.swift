@@ -9,7 +9,8 @@ struct ModelDialApp: App {
     @NSApplicationDelegateAdaptor(StatusItemDelegate.self) private var delegate
 
     var body: some Scene {
-        Settings { EmptyView() }
+        // Command-comma opens this scene; show the same panel as the menu's Settings….
+        Settings { SettingsView(preferences: delegate.preferences) }
     }
 }
 
@@ -17,6 +18,7 @@ struct ModelDialApp: App {
 @MainActor
 private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let controller = DialController()
+    var preferences: BridgePreferences { controller.preferences }
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
     private var bridgeToggleRow: NSMenuItem!
@@ -47,6 +49,7 @@ private final class StatusItemDelegate: NSObject, NSApplicationDelegate, NSMenuD
         for item in menu.items { item.target = self }
         statusItem.menu = menu
         controller.onChange = { [weak self] in self?.refreshMenu() }
+        controller.preferences.onChange = { [weak controller] in controller?.restartBridge() }
         controller.start()
         refreshMenu()
     }
