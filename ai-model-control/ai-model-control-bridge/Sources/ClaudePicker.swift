@@ -49,12 +49,12 @@ enum ClaudePicker {
                     guard let effort = findChoice("Effort", in: root, excluding: status) else {
                         return .failed("Claude Effort row unavailable")
                     }
-                    guard press(effort, pulse: pulse) else { return .interrupted }
-                    // A submenu that opens on hover may still need its keyboard opener.
-                    if !poll(pulse: pulse, until: visible) {
-                        guard Keys.key(Keys.right, pulse: pulse) else { return .interrupted }
-                        _ = poll(pulse: pulse, until: visible)
+                    // Pressing the row highlights it but does not open the submenu; Right
+                    // opens it and does nothing if it is already open.
+                    guard press(effort, pulse: pulse), Keys.key(Keys.right, pulse: pulse) else {
+                        return .interrupted
                     }
+                    _ = poll(pulse: pulse, until: visible)
                 }
                 return pressChoice(label, in: root, excluding: status, pulse: pulse)
             },
@@ -138,7 +138,10 @@ enum ClaudePicker {
             dumpCandidates(root) { fputs("ai-model-control-bridge: Claude AX \($0)\n", stderr) }
             return .failed("Claude model control unavailable")
         }
-        fputs("ai-model-control-bridge: Claude \(statusText(control)) -> \(target)\n", stderr)
+        let before = statusText(control)
+        // The control already names the model and effort; skip a no-op menu trip.
+        if confirmed(before) { return .applied(path: "Claude already \(before)") }
+        fputs("ai-model-control-bridge: Claude \(before) -> \(target)\n", stderr)
         guard press(control, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not open the Claude model menu")
         }
