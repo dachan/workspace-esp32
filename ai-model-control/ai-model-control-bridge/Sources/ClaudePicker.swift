@@ -8,9 +8,8 @@ import Foundation
 /// shortcuts do not respond to posted keys, so the bridge presses that control
 /// by Accessibility, then presses rows by visible label (never by digit).
 enum ClaudePicker {
-    /// Most specific first: a sidebar button named "Opus 5.5 notes" must never
-    /// win over a real menu row.
-    private static let choiceRoles = ["AXMenuItem", "AXRadioButton", "AXButton"]
+    /// Claude's model and effort rows are AXMenuItem elements inside its window.
+    private static let choiceRole = "AXMenuItem"
 
     static func model(
         _ raw: String,
@@ -75,10 +74,10 @@ enum ClaudePicker {
         let status = statusControl(in: root)
         print("status control: \(status.map { "\(AXQuery.role($0)) \"\(statusText($0))\"" } ?? "not found")")
         var rows = 0
-        _ = AXQuery.find(in: root, where: { element in
+        _ = find(in: root, where: { element in
             let role = AXQuery.role(element)
             let name = statusLabel(element)
-            if choiceRoles.contains(role), !name.isEmpty, rows < 80 {
+            if role == choiceRole || role == "AXPopUpButton", !name.isEmpty, rows < 80 {
                 rows += 1
                 var notes: [String] = []
                 if let status, CFEqual(element, status) { notes.append("status") }
@@ -106,7 +105,7 @@ enum ClaudePicker {
         let words = families.union(Catalog.claudeEffortLabels).union(["Effort"])
         var visited = 0
         var lines = 0
-        _ = AXQuery.find(in: root, where: { element in
+        _ = find(in: root, where: { element in
             visited += 1
             let title = AXQuery.title(element)
             let description = AXQuery.description(element)
@@ -164,7 +163,10 @@ enum ClaudePicker {
             closeIfOpen(root, pulse: pulse)
             return result
         }
-        guard Keys.wait(Keys.pickerTiming, pulse: pulse) else { return .interrupted }
+        // Let the menu finish closing; pressing the control while it closes
+        // toggles it shut and the next field's apply then fails.
+        _ = poll(pulse: pulse) { !menuOpen(root) }
+        guard !pulse() else { return .interrupted }
         guard DeskFront.isForeground(preferred: preferred) else {
             return .failed("\(focus.displayName) is not focused")
         }
@@ -218,9 +220,9 @@ enum ClaudePicker {
     /// Only AXMenuItem rows count, so session titles can never enter the dial.
     private static func modelRows(in root: AXUIElement, excluding status: AXUIElement?) -> [String] {
         var names: [String] = []
-        _ = AXQuery.find(in: root, where: { element in
+        _ = find(in: root, where: { element in
             if let status, CFEqual(element, status) { return false }
-            guard AXQuery.role(element) == "AXMenuItem",
+            guard AXQuery.role(element) == choiceRole,
                   let name = modelRowName(statusLabel(element)),
                   !names.contains(name) else { return false }
             names.append(name)
@@ -241,25 +243,22 @@ enum ClaudePicker {
         return "\(words[0]) \(words[1])"
     }
 
-    /// A menu row's accessible name may append badges ("Sonnet 5.5 Default 2").
-    /// Rows are searched inside open AXMenu containers when Claude exposes them,
-    /// so a sidebar or transcript control can never be pressed.
+    /// A menu row's accessible name may append badges ("Sonnet 5.5 Default").
     private static func findChoice(
         _ label: String, in root: AXUIElement, excluding control: AXUIElement?
     ) -> AXUIElement? {
-        var menus: [AXUIElement] = []
-        _ = AXQuery.find(in: root, where: { element in
-            if AXQuery.role(element) == "AXMenu" { menus.append(element) }
-            return false
+        find(in: root, where: { element in
+            if let control, CFEqual(element, control) { return false }
+            return AXQuery.role(element) == choiceRole && matches(statusLabel(element), label: label)
         })
-        for scope in menus.isEmpty ? [root] : menus {
-            for role in choiceRoles {
-                let found = AXQuery.find(in: scope, where: { element in
-                    if let control, CFEqual(element, control) { return false }
-                    return AXQuery.role(element) == role && matches(statusLabel(element), label: label)
-                })
-                if let found { return found }
-            }
+    }
+
+    /// Searches Claude's windows only. The application element also holds the
+    /// native menu bar, whose AXMenu/AXMenuItem entries must never be searched.
+    private static func find(in app: AXUIElement, where matches: (AXUIElement) -> Bool) -> AXUIElement? {
+        let windows = AXQuery.copy(app, kAXWindowsAttribute as String) as? [AXUIElement] ?? []
+        for window in windows {
+            if let found = AXQuery.find(in: window, where: matches) { return found }
         }
         return nil
     }
@@ -274,7 +273,7 @@ enum ClaudePicker {
     }
 
     private static func statusControl(in root: AXUIElement) -> AXUIElement? {
-        AXQuery.find(in: root, where: { element in
+        find(in: root, where: { element in
             let role = AXQuery.role(element)
             guard role == "AXButton" || role == "AXPopUpButton" else { return false }
             let words = statusText(element).split(separator: " ")
@@ -306,15 +305,19 @@ enum ClaudePicker {
     /// submenu of the model menu, so allow one Escape per level.
     private static func closeIfOpen(_ root: AXUIElement, pulse: @escaping () -> Bool) {
         for _ in 0..<2 {
-            let open = AXQuery.find(in: root, where: { element in
-                guard AXQuery.role(element) == "AXMenuItem" else { return false }
-                let name = statusLabel(element)
-                return modelRowName(name) != nil
-                    || Catalog.claudeEffortLabels.contains { matches(name, label: $0) }
-            }) != nil
-            guard open, Keys.key(Keys.escape, pulse: pulse),
+            guard menuOpen(root), Keys.key(Keys.escape, pulse: pulse),
                   Keys.wait(Keys.keystrokeDelay, pulse: pulse) else { return }
         }
+    }
+
+    /// True while any model or effort menu row is visible.
+    private static func menuOpen(_ root: AXUIElement) -> Bool {
+        find(in: root, where: { element in
+            guard AXQuery.role(element) == choiceRole else { return false }
+            let name = statusLabel(element)
+            return modelRowName(name) != nil
+                || Catalog.claudeEffortLabels.contains { matches(name, label: $0) }
+        }) != nil
     }
 }
 #endif

@@ -456,9 +456,9 @@ so the bridge presses the composer's `AXPopUpButton` named `Model: Opus 5.5
 Medium` by Accessibility to open its menu. A model change presses the model row
 whose accessible name starts with the label (badges such as `Default` may
 follow it). An effort change presses the `Effort` row, adds Right only if the
-submenu has not appeared, then presses the effort row. Rows are searched inside
-open `AXMenu` containers when present, menu items before radio buttons and
-buttons, so a sidebar or transcript control cannot win. Presses use AXPress,
+submenu has not appeared, then presses the effort row. Lookups search Claude's
+windows only, never the application's native menu bar, and match only
+`AXMenuItem` rows, so a menu-bar entry, sidebar or transcript control cannot win. Presses use AXPress,
 falling back to a tagged click only if refused; selection never uses digits.
 Afterwards the bridge reads that control again and reports a mismatch as a
 failure, and a failed lookup logs the matching Accessibility elements to the
