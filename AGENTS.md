@@ -200,7 +200,7 @@ cd radar
 # Transmitter
 idf.py -B ESP32_S3-no_display-Radar_Sensor \
   -D RADAR_LINK_ROLE=transmitter build
-ESP_PORT=/dev/ttyUSB0 ./tools/flash-radar.sh transmitter
+ESP_PORT=/dev/cu.usbmodemXXXX ./tools/flash-radar.sh transmitter
 
 # Super Mini transmitter (4 MB / quad PSRAM; UART GPIO4/GPIO5)
 idf.py -B ESP32_MINI-no_display-Radar_Sensor \
@@ -208,14 +208,15 @@ idf.py -B ESP32_MINI-no_display-Radar_Sensor \
   -D RADAR_BOARD=supermini \
   -D SDKCONFIG=/absolute/path/to/ESP32_MINI-no_display-Radar_Sensor/sdkconfig \
   -D SDKCONFIG_DEFAULTS=sdkconfig.defaults.supermini build
-ESP_PORT=/dev/ttyUSB0 ./tools/flash-radar.sh transmitter-supermini
+ESP_PORT=/dev/cu.usbmodemXXXX ./tools/flash-radar.sh transmitter-supermini
 
 # Receiver
 idf.py -B ESP32_S3-28_tft__touch_320x240-Radar_Receiver \
   -D RADAR_LINK_ROLE=receiver build
-ESP_PORT=/dev/ttyUSB1 ./tools/flash-radar.sh receiver
+ESP_PORT=/dev/cu.usbmodemYYYY ./tools/flash-radar.sh receiver
 ```
 
+Pick each `/dev/cu.usbmodem*` port from [HARDWARE.md](HARDWARE.md) by board MAC.
 Flash scripts require both `IDF_PATH` (or `IDF_EXPORT`) and `ESP_PORT` so no
 machine-specific path or device identity is stored in the repository.
 
