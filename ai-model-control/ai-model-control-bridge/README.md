@@ -134,7 +134,27 @@ interrupts the apply.
 Escape cancels the transaction. The filter is removed on every exit; an independent
 five-second watchdog disables it even if an Accessibility call stalls. Focus loss,
 Escape, or filter failure/timeout during an apply drops that target; move or
-click the dial to try again. A newer dial state can supersede the current sequence.
+click the dial to try again. A newer dial state stops the current sequence and
+waits for the next `APPLY` or `PUSH`.
+
+The apply path is an explicit phase: idle, or armed by one `APPLY`/`PUSH` for
+the focused app. Every outcome (applied, superseded, interrupted, focus loss,
+third failure) returns to idle, so `STATE` frames alone never post keys. The
+serial link and its handshake are explicit too: `SYNC` is always the first line
+after a connection or `READY`, then `FRONT`, then the fixed `CONFIG` lines and
+catalogs. The bridge reports its status to Model Dial through
+`BRIDGE_STATUS <TOKEN>` stdout lines (`SERIAL_CONNECTED`, `SERIAL_UNAVAILABLE`,
+`DIAL_STATE`, `APPLYING`, `APPLY_DROPPED`, `POSTED`, `APPLY_FAILED`,
+`INPUT_GUARD_UNAVAILABLE`), not by the wording of its log. Rig readback polls
+the Rig socket at most every 0.4 s with a 1 s timeout. A Cursor or OpenCode
+picker left open by an interrupted apply is closed with Escape before the next
+one; ChatGPT and Claude send Escape only while a model menu row is visible.
+
+Each Model Dial launch starts its first bridge with `--reset-panel`, which
+hardware-resets the panel once (esptool's RTS-with-DTR-released pulse) before
+connecting. A panel on a powered hub keeps running across a Mac restart and can
+come back with a stalled USB link; the reset replaces unplugging it. Settings
+changes restart the bridge without resetting the panel.
 When creating the filter fails, the bridge posts no keys and reports a permission
 error (check Accessibility and Input Monitoring for the launching app).
 

@@ -20,6 +20,7 @@ struct Options {
     var cursorModelMask: UInt64 = 0xFF
     var showOlderModels = false
     var dialSwap = false
+    var resetPanel = false
 }
 
 private func parseMask(_ raw: String) -> UInt64? {
@@ -56,6 +57,8 @@ func parseOptions(_ args: [String]) -> Options? {
             options.watch = true
         case "--listen":
             options.listen = true
+        case "--reset-panel":
+            options.resetPanel = true
         case "--send-serial":
             break // Compatibility with existing launch commands.
         case "--set-model":
@@ -153,6 +156,8 @@ func usage() -> String {
       --chatgpt-effort-mask HEX  Enabled ChatGPT effort levels (default 0x0f)
       --cursor-model-mask HEX   Enabled Cursor model entries (Auto is always on)
       --dial-swap 0|1     1 swaps the knobs (left effort, right model)
+      --reset-panel       Hardware-reset the panel once on the first serial connect,
+                          like replugging it (Model Dial passes this at launch)
       --hid-info          Describe the keyboard control path
       --check-ax          Check Accessibility permission and exit
       --check-claude      Read-only: list the Claude rows the bridge would match

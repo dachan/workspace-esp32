@@ -133,6 +133,13 @@ enum ClaudePicker {
         confirmed: (String) -> Bool
     ) -> Switcher.Result {
         let root = applicationElement(pid: focus.pid)
+        // An interrupted apply can leave the menu open, and pressing the control
+        // then toggles it shut. Close what is visible first (never a blind Escape).
+        if menuOpen(root) {
+            closeIfOpen(root, pulse: pulse)
+            _ = poll(pulse: pulse) { !menuOpen(root) }
+            guard !pulse() else { return .interrupted }
+        }
         guard let control = statusControl(in: root) else {
             dumpCandidates(root) { fputs("ai-model-control-bridge: Claude AX \($0)\n", stderr) }
             return .failed("Claude model control unavailable")

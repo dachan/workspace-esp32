@@ -3,15 +3,13 @@ import Foundation
 
 /// OpenCode's encoder order is reversed from its native Luna-first picker.
 enum OpenCodeApply {
-    private static var openPickers: Set<Int32> = []
-
     static func model(_ raw: String, focus: FocusOperation, pulse: @escaping () -> Bool) -> Switcher.Result {
         guard let name = Catalog.openCodeModelName(raw),
               let pickerIndex = Catalog.openCodePickerIndex(raw) else {
             return .failed("unknown OpenCode model \(raw)")
         }
         if let result = prepare(focus, pulse: pulse) { return result }
-        openPickers.insert(focus.pid)
+        OpenMenus.opening(focus.pid)
         guard Keys.command(Keys.apostrophe, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
             return .interrupted
         }
@@ -27,18 +25,13 @@ enum OpenCodeApply {
         guard Keys.key(Keys.return, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
             return .interrupted
         }
-        openPickers.remove(focus.pid)
+        OpenMenus.closed(focus.pid)
         return .applied(path: "OpenCode Command-' Down \(pickerIndex) Return \(name)")
     }
 
     private static func prepare(_ focus: FocusOperation, pulse: @escaping () -> Bool) -> Switcher.Result? {
         guard !pulse() else { return .interrupted }
-        if openPickers.contains(focus.pid) {
-            guard Keys.key(Keys.escape, pulse: pulse), Keys.wait(Keys.keystrokeDelay, pulse: pulse) else {
-                return .interrupted
-            }
-            openPickers.remove(focus.pid)
-        }
+        if let result = OpenMenus.dismiss(focus.pid, pulse: pulse) { return result }
         guard PromptFocus.ensure(pid: focus.pid, kind: .openCode) == .focused else {
             return .failed("OpenCode prompt unavailable")
         }

@@ -15,6 +15,7 @@ enum ChatGPTPicker {
         let root = AXUIElementCreateApplication(focus.pid)
         AXUIElementSetMessagingTimeout(root, 0.4)
 
+        if let stopped = closeOpenMenu(focus: focus, pulse: pulse) { return stopped }
         guard let control = findModelControl(in: root) else {
             return .failed("ChatGPT model control unavailable")
         }
@@ -28,7 +29,7 @@ enum ChatGPTPicker {
         guard let selectModel = AXQuery.find(in: root, where: {
             AXQuery.description($0) == "Select model"
         }) else {
-            closeMenus(pulse: pulse)
+            _ = closeOpenMenu(focus: focus, pulse: pulse)
             return .failed("ChatGPT Select model menu unavailable")
         }
         guard AXQuery.click(selectModel, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
@@ -41,7 +42,7 @@ enum ChatGPTPicker {
         guard let choice = AXQuery.find(in: root, where: {
             AXQuery.role($0) == "AXMenuItem" && AXQuery.title($0).caseInsensitiveCompare(name) == .orderedSame
         }) else {
-            closeMenus(pulse: pulse)
+            _ = closeOpenMenu(focus: focus, pulse: pulse)
             return .failed("ChatGPT model \(name) is unavailable")
         }
         guard AXQuery.click(choice, pulse: pulse), Keys.wait(Keys.pickerTiming, pulse: pulse) else {
@@ -61,10 +62,27 @@ enum ChatGPTPicker {
         })
     }
 
-    private static func closeMenus(pulse: @escaping () -> Bool) {
-        _ = Keys.key(Keys.escape, pulse: pulse)
-        _ = Keys.wait(Keys.keystrokeDelay, pulse: pulse)
-        _ = Keys.key(Keys.escape, pulse: pulse)
+    /// Closes a model menu an earlier, interrupted apply left open, one Escape
+    /// per visible level. Escape is sent only while a menu row is visible, so a
+    /// closed menu never passes Escape through to the composer.
+    static func closeOpenMenu(focus: FocusOperation, pulse: @escaping () -> Bool) -> Switcher.Result? {
+        let root = AXUIElementCreateApplication(focus.pid)
+        AXUIElementSetMessagingTimeout(root, 0.4)
+        for _ in 0..<2 {
+            guard menuOpen(root) else { return nil }
+            guard Keys.key(Keys.escape, pulse: pulse),
+                  Keys.wait(Keys.keystrokeDelay, pulse: pulse) else { return .interrupted }
+        }
+        return nil
+    }
+
+    private static func menuOpen(_ root: AXUIElement) -> Bool {
+        AXQuery.find(in: root, where: { element in
+            guard AXQuery.role(element) == "AXMenuItem" else { return false }
+            if AXQuery.description(element) == "Select model" { return true }
+            let title = AXQuery.title(element)
+            return Catalog.models.contains { title.caseInsensitiveCompare($0) == .orderedSame }
+        }) != nil
     }
 }
 #endif

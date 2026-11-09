@@ -23,14 +23,32 @@ final class SerialSession {
     private var cursorCatalog = CatalogQueue()
     private var rigCatalog = CatalogQueue()
     private var claudeCatalog = CatalogQueue()
-    private var fd: Int32 = -1
+    /// Port lifecycle: closed (reopen once `retryAt` passes) ↔ open.
+    private enum Link {
+        case closed(retryAt: TimeInterval)
+        case open(Int32)
+    }
+
+    /// Per-connection handshake. SYNC goes first so the panel switches from
+    /// legacy SET to acknowledged STATE before a FRONT can change its fields,
+    /// then the fixed CONFIG lines, then catalogs and host state.
+    private enum Handshake: Equatable {
+        case needSync
+        case config(Int)
+        case ready
+    }
+
+    private var link = Link.closed(retryAt: 0)
+    private var fd: Int32? {
+        if case .open(let fd) = link { return fd }
+        return nil
+    }
     private(set) var connectionGeneration: UInt64 = 0
-    var isConnected: Bool { fd >= 0 }
+    var isConnected: Bool { fd != nil }
     private var pending: [UInt8] = []
     private var discardLine = false
-    private var reconnectAt: TimeInterval = 0
     private var lastConnectionError: String?
-    private var syncPending = true
+    private var handshake = Handshake.needSync
     private var nextTimeAt: TimeInterval = 0
     private var panelFrontWanted: String?
     private var panelFrontSent: String?
@@ -43,7 +61,8 @@ final class SerialSession {
     private var acknowledgements: [SettingKind: UInt64] = [:]
     private var outgoing: [UInt8] = []
     private var outgoingOffset = 0
-    private var configurationStep = 0
+    /// One hardware reset on the first successful open, then normal operation.
+    private var resetPending: Bool
 
     init(
         port: String,
@@ -52,8 +71,10 @@ final class SerialSession {
         cursorModelMask: UInt64 = 0xFF,
         rigModelMask: UInt64 = 0xFFF,
         showOlderModels: Bool = false,
-        dialSwap: Bool = false
+        dialSwap: Bool = false,
+        resetOnFirstOpen: Bool = false
     ) {
+        resetPending = resetOnFirstOpen
         self.port = port
         self.baud = baud
         self.chatGPTThinkingMask = chatGPTThinkingMask
@@ -80,43 +101,41 @@ final class SerialSession {
             Darwin.close(opened)
             throw error
         }
-        fd = opened
+        if resetPending {
+            resetPending = false
+            pulseReset(opened)
+            Darwin.close(opened)
+            // The chip drops off USB while it reboots; reopen once it is back.
+            link = .closed(retryAt: ProcessInfo.processInfo.systemUptime + 1.5)
+            fputs("ai-model-control-bridge: reset the panel; reconnecting after it boots\n", stderr)
+            return
+        }
+        link = .open(opened)
         connectionGeneration &+= 1
         requestSync()
-        nextTimeAt = 0
-        panelFrontSent = nil
         lastConnectionError = nil
         fputs("ai-model-control-bridge: serial connected; requesting current dial state\n", stderr)
-        print("BRIDGE_STATUS SERIAL_CONNECTED")
-        fflush(stdout)
+        BridgeStatus.serialConnected.emit()
     }
 
-    func close() {
-        if fd >= 0 {
+    /// open → closed(retryAt). Everything sent on the old link is resent after reopen.
+    func close(retryAt: TimeInterval = 0) {
+        if let fd {
             Darwin.close(fd)
-            fd = -1
             connectionGeneration &+= 1
         }
+        link = .closed(retryAt: retryAt)
         pending.removeAll(keepingCapacity: true)
         discardLine = false
         outgoing.removeAll(keepingCapacity: true)
         outgoingOffset = 0
         acknowledgements.removeAll()
-        configurationStep = 0
-        rigModelMaskSent = nil
-        rigEffortMasksSent = nil
-        chatGPTCatalog.restart()
-        cursorCatalog.restart()
-        rigCatalog.restart()
-        claudeCatalog.restart()
-        hostModelSent = nil
-        hostThinkingSent = nil
-        hostEffortMaskSent = nil
+        requestSync()
     }
 
     func readLines() -> [String] {
-        if fd < 0 {
-            guard ProcessInfo.processInfo.systemUptime >= reconnectAt else { return [] }
+        if case .closed(let retryAt) = link {
+            guard ProcessInfo.processInfo.systemUptime >= retryAt else { return [] }
             do {
                 try open()
             } catch {
@@ -124,6 +143,7 @@ final class SerialSession {
                 return []
             }
         }
+        guard let fd else { return [] }
         var lines: [String] = []
         var chunk = [UInt8](repeating: 0, count: 256)
         // Bound memory and work per poll; continuous input must not starve focus checks.
@@ -169,11 +189,11 @@ final class SerialSession {
         }
     }
 
+    /// Any state → needSync: the whole configuration is resent after SYNC.
     func requestSync() {
-        syncPending = true
+        handshake = .needSync
         panelFrontSent = nil
         nextTimeAt = 0
-        configurationStep = 0
         rigModelMaskSent = nil
         rigEffortMasksSent = nil
         chatGPTCatalog.restart()
@@ -260,79 +280,90 @@ final class SerialSession {
         }
     }
 
+    private var configLines: [String] {
+        [
+            "CONFIG CHATGPT_EFFORTS \(String(format: "%016llx", chatGPTThinkingMask))",
+            "CONFIG CURSOR_MODELS \(String(format: "%016llx", cursorModelMask))",
+            "CONFIG DIAL_SWAP \(dialSwap ? 1 : 0)\nCONFIG CHATGPT_OLDER \(showOlderModels ? 1 : 0)",
+        ]
+    }
+
+    /// The FRONT line to send now, if any, recording it as sent.
+    private func nextFront() -> String? {
+        guard handshake != .needSync, let wanted = panelFrontWanted, wanted != panelFrontSent else { return nil }
+        // The panel clamps Cursor's saved model against its catalog, so send that first.
+        guard wanted != "Cursor" || cursorCatalog.isSent else { return nil }
+        panelFrontSent = wanted
+        hostModelSent = nil
+        hostThinkingSent = nil
+        hostEffortMaskSent = nil
+        if wanted != "Rig" {
+            clearHostPanel()
+        }
+        return wanted
+    }
+
+    /// One line per pass, highest priority first: ACK, SYNC, FRONT, handshake
+    /// CONFIG, catalogs, Rig masks, Rig host state, then the TIME refresh.
+    private func nextLine() -> String? {
+        if let kind = SettingKind.allCases.first(where: { acknowledgements[$0] != nil }),
+           let revision = acknowledgements.removeValue(forKey: kind) {
+            return "ACK \(String(format: "%016llx", revision)) \(kind.rawValue)"
+        }
+        if handshake == .needSync {
+            // READY retries recover a reset without periodic state polling.
+            handshake = .config(0)
+            return "SYNC"
+        }
+        if let front = nextFront() {
+            return "FRONT \(front)"
+        }
+        if case .config(let index) = handshake {
+            let lines = configLines
+            handshake = index + 1 < lines.count ? .config(index + 1) : .ready
+            return lines[index]
+        }
+        if let next = chatGPTCatalog.next() ?? cursorCatalog.next() ?? claudeCatalog.next() ?? rigCatalog.next() {
+            return next
+        }
+        // A Rig catalog, once received, carries enablement itself and supersedes the masks.
+        if rigCatalog.isEmpty, rigModelMaskSent != rigModelMask {
+            rigModelMaskSent = rigModelMask
+            return "CONFIG RIG_MODELS \(String(format: "%016llx", rigModelMask))"
+        }
+        if rigCatalog.isEmpty, !rigEffortMasks.isEmpty, rigEffortMasksSent != rigEffortMasks {
+            rigEffortMasksSent = rigEffortMasks
+            return "CONFIG RIG_EFFORTS \(rigEffortMasks.map { String(format: "%02x", $0) }.joined())"
+        }
+        if panelFrontSent == "Rig" {
+            if let model = hostModelWanted, model != hostModelSent {
+                hostModelSent = model
+                hostEffortMaskSent = nil
+                return "MODEL \(model)"
+            }
+            if let mask = hostEffortMaskWanted, mask != hostEffortMaskSent {
+                hostEffortMaskSent = mask
+                return "CONFIG RIG_HOST_EFFORTS \(String(format: "%02x", mask)) \(hostModelWanted ?? "")"
+            }
+            if let thinking = hostThinkingWanted, thinking != hostThinkingSent {
+                hostThinkingSent = thinking
+                return "THINKING \(thinking)"
+            }
+        }
+        if ProcessInfo.processInfo.systemUptime >= nextTimeAt {
+            nextTimeAt = ProcessInfo.processInfo.systemUptime + 30
+            let unix = Int64(Date().timeIntervalSince1970)
+            let tzMin = TimeZone.current.secondsFromGMT() / 60
+            return "TIME \(unix) \(tzMin)"
+        }
+        return nil
+    }
+
     func flushWrites() {
-        guard fd >= 0 else { return }
+        guard let fd else { return }
         for _ in 0..<4 {
             if outgoing.isEmpty {
-                let line: String
-                if let kind = SettingKind.allCases.first(where: { acknowledgements[$0] != nil }),
-                   let revision = acknowledgements.removeValue(forKey: kind) {
-                    line = "ACK \(String(format: "%016llx", revision)) \(kind.rawValue)"
-                } else if let wanted = panelFrontWanted, wanted != panelFrontSent,
-                          wanted != "Cursor" || cursorCatalog.isSent {
-                    line = "FRONT \(wanted)"
-                    panelFrontSent = wanted
-                    hostModelSent = nil
-                    hostThinkingSent = nil
-                    hostEffortMaskSent = nil
-                    if wanted != "Rig" {
-                        clearHostPanel()
-                    }
-                } else if syncPending {
-                    // READY retries recover a reset without periodic state polling.
-                    line = "SYNC"
-                    syncPending = false
-                    panelFrontSent = nil
-                } else if configurationStep == 0 {
-                    line = "CONFIG CHATGPT_EFFORTS \(String(format: "%016llx", chatGPTThinkingMask))"
-                    configurationStep = 1
-                } else if configurationStep == 1 {
-                    line = "CONFIG CURSOR_MODELS \(String(format: "%016llx", cursorModelMask))"
-                    configurationStep = 2
-                } else if configurationStep == 2 {
-                    line = "CONFIG DIAL_SWAP \(dialSwap ? 1 : 0)\nCONFIG CHATGPT_OLDER \(showOlderModels ? 1 : 0)"
-                    configurationStep = 3
-                } else if let next = chatGPTCatalog.next() {
-                    line = next
-                } else if let next = cursorCatalog.next() {
-                    line = next
-                } else if let next = claudeCatalog.next() {
-                    line = next
-                } else if let wanted = panelFrontWanted, wanted != panelFrontSent {
-                    line = "FRONT \(wanted)"
-                    panelFrontSent = wanted
-                    hostModelSent = nil
-                    hostThinkingSent = nil
-                    hostEffortMaskSent = nil
-                } else if let next = rigCatalog.next() {
-                    line = next
-                    configurationStep = 4
-                } else if rigCatalog.isEmpty, configurationStep == 3 || rigModelMaskSent != rigModelMask {
-                    line = "CONFIG RIG_MODELS \(String(format: "%016llx", rigModelMask))"
-                    configurationStep = 4
-                    rigModelMaskSent = rigModelMask
-                } else if rigCatalog.isEmpty, !rigEffortMasks.isEmpty, configurationStep == 4 || rigEffortMasksSent != rigEffortMasks {
-                    line = "CONFIG RIG_EFFORTS \(rigEffortMasks.map { String(format: "%02x", $0) }.joined())"
-                    configurationStep = 5
-                    rigEffortMasksSent = rigEffortMasks
-                } else if let model = hostModelWanted, model != hostModelSent, panelFrontSent == "Rig" {
-                    line = "MODEL \(model)"
-                    hostModelSent = model
-                    hostEffortMaskSent = nil
-                } else if let mask = hostEffortMaskWanted, mask != hostEffortMaskSent, panelFrontSent == "Rig" {
-                    line = "CONFIG RIG_HOST_EFFORTS \(String(format: "%02x", mask)) \(hostModelWanted ?? "")"
-                    hostEffortMaskSent = mask
-                } else if let thinking = hostThinkingWanted, thinking != hostThinkingSent, panelFrontSent == "Rig" {
-                    line = "THINKING \(thinking)"
-                    hostThinkingSent = thinking
-                } else if ProcessInfo.processInfo.systemUptime >= nextTimeAt {
-                    let unix = Int64(Date().timeIntervalSince1970)
-                    let tzMin = TimeZone.current.secondsFromGMT() / 60
-                    line = "TIME \(unix) \(tzMin)"
-                    nextTimeAt = ProcessInfo.processInfo.systemUptime + 30
-                } else {
-                    break
-                }
+                guard let line = nextLine() else { break }
                 outgoing = Array("\n\(line)\n".utf8)
                 outgoingOffset = 0
             }
@@ -355,14 +386,24 @@ final class SerialSession {
     }
 
     private func connectionFailed(_ message: String) {
-        close()
-        reconnectAt = ProcessInfo.processInfo.systemUptime + 2
+        close(retryAt: ProcessInfo.processInfo.systemUptime + 2)
         if message != lastConnectionError {
             fputs("ai-model-control-bridge: \(message); retrying configured port every 2 seconds\n", stderr)
             lastConnectionError = message
-            print("BRIDGE_STATUS SERIAL_UNAVAILABLE")
-            fflush(stdout)
+            BridgeStatus.serialUnavailable.emit()
         }
+    }
+
+    /// esptool's hard reset: RTS asserted with DTR released holds EN low, on
+    /// USB Serial/JTAG and on auto-reset USB-UART boards alike. DTR is released
+    /// first because DTR held during release would boot download mode instead.
+    private func pulseReset(_ fd: Int32) {
+        var dtr = TIOCM_DTR
+        var rts = TIOCM_RTS
+        _ = ioctl(fd, TIOCMBIC, &dtr)
+        _ = ioctl(fd, TIOCMBIS, &rts)
+        usleep(200_000)
+        _ = ioctl(fd, TIOCMBIC, &rts)
     }
 
     private func configure(_ fd: Int32) throws {

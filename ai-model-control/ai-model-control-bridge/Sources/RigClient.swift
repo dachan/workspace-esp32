@@ -30,9 +30,10 @@ enum RigClient {
 
     private static var lastActive: ActiveModels?
 
-    static func modelsActive() throws -> ActiveModels {
+    /// Panel readback passes a short timeout so a stalled Rig cannot freeze the bridge loop.
+    static func modelsActive(timeout: Int = 5) throws -> ActiveModels {
         do {
-            let next = try parseActive(call("models.active"))
+            let next = try parseActive(call("models.active", timeout: timeout))
             lastActive = next
             return next
         } catch {
@@ -41,8 +42,8 @@ enum RigClient {
         }
     }
 
-    static func focus() throws -> Focus {
-        let raw = try call("agent.focus")
+    static func focus(timeout: Int = 5) throws -> Focus {
+        let raw = try call("agent.focus", timeout: timeout)
         guard let object = raw as? [String: Any], let main = object["main"] as? String else {
             throw Error(errorDescription: "agent.focus returned empty")
         }
@@ -98,7 +99,7 @@ enum RigClient {
         return paths.first { FileManager.default.fileExists(atPath: $0) }
     }
 
-    private static func call(_ method: String, params: [Any] = []) throws -> Any? {
+    private static func call(_ method: String, params: [Any] = [], timeout: Int = 5) throws -> Any? {
         guard let path = socketPath() else { throw Error(errorDescription: "Rig is not running") }
         let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw Error(errorDescription: "Could not open the Rig socket") }
@@ -122,9 +123,9 @@ enum RigClient {
             }
         }
         guard connected == 0 else { throw Error(errorDescription: "Could not connect to Rig") }
-        var timeout = timeval(tv_sec: 5, tv_usec: 0)
-        _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
-        _ = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        var limit = timeval(tv_sec: timeout, tv_usec: 0)
+        _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
+        _ = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
         let payload: [String: Any] = ["jsonrpc": "2.0", "id": 1, "method": method, "params": params]
         let body = try JSONSerialization.data(withJSONObject: payload)
         var line = body

@@ -30,6 +30,7 @@ final class InputGuard {
         let guardInput = InputGuard(focus: focus)
         guard guardInput.start() else {
             guardInput.stop()
+            BridgeStatus.inputGuardUnavailable.emit()
             return .failed("input guard unavailable; check Accessibility and Input Monitoring permissions")
         }
         current = guardInput

@@ -2,8 +2,6 @@
 import Foundation
 
 enum Switcher {
-    private static var interruptedPickers: [Int32: Int] = [:]
-
     enum Result {
         case applied(path: String)
         case interrupted
@@ -115,7 +113,7 @@ enum Switcher {
         pulse: @escaping () -> Bool
     ) -> Result {
         fputs("ai-model-control-bridge: ChatGPT model via accessibility Select model \(name)\n", stderr)
-        if let stopped = dismissInterruptedPicker(pid: focus.pid, pulse: pulse) {
+        if let stopped = ChatGPTPicker.closeOpenMenu(focus: focus, pulse: pulse) {
             return stopped
         }
         if let stopped = primePrompt(focus: focus, preferred: preferred, pulse: pulse) {
@@ -156,7 +154,7 @@ enum Switcher {
             "ai-model-control-bridge: reasoning absolute set via Ctrl+Shift+, then up to \(name)\n",
             stderr
         )
-        if let stopped = dismissInterruptedPicker(pid: focus.pid, pulse: pulse) {
+        if let stopped = ChatGPTPicker.closeOpenMenu(focus: focus, pulse: pulse) {
             return stopped
         }
         if let stopped = primePrompt(focus: focus, preferred: preferred, pulse: pulse) {
@@ -193,16 +191,11 @@ enum Switcher {
         let result = CursorPicker.model(
             name: name, focus: focus, preferred: preferred, pulse: pulse
         )
-        switch result {
-        case .applied:
-            interruptedPickers.removeValue(forKey: focus.pid)
-            return nil
-        case .interrupted:
-            return .interrupted
-        case .failed:
-            interruptedPickers.removeValue(forKey: focus.pid)
-            return result
-        }
+        // An interrupted picker stays owed; a finished or failed one closed itself.
+        if case .interrupted = result { return .interrupted }
+        OpenMenus.closed(focus.pid)
+        if case .applied = result { return nil }
+        return result
     }
 
     private static func cursorSelectEffort(
@@ -221,16 +214,9 @@ enum Switcher {
         let result = CursorPicker.effort(
             name: name, focus: focus, preferred: preferred, pulse: pulse
         )
-        switch result {
-        case .applied:
-            interruptedPickers.removeValue(forKey: focus.pid)
-            return result
-        case .interrupted:
-            return .interrupted
-        case .failed:
-            interruptedPickers.removeValue(forKey: focus.pid)
-            return result
-        }
+        if case .interrupted = result { return .interrupted }
+        OpenMenus.closed(focus.pid)
+        return result
     }
 
     private static func wrappedPulse(focus: FocusOperation, upstream: (() -> Bool)?) -> () -> Bool {
@@ -271,13 +257,13 @@ enum Switcher {
         preferred: String?,
         pulse: @escaping () -> Bool
     ) -> Result? {
-        if let stopped = dismissInterruptedPicker(pid: focus.pid, pulse: pulse) {
+        if let stopped = OpenMenus.dismiss(focus.pid, pulse: pulse) {
             return stopped
         }
         if let stopped = primePrompt(focus: focus, preferred: preferred, pulse: pulse) {
             return stopped
         }
-        interruptedPickers[focus.pid] = 1
+        OpenMenus.opening(focus.pid)
         guard Keys.command(Keys.slash, pulse: pulse) else {
             return pulse() ? .interrupted : .failed("could not post Command-/")
         }
@@ -305,16 +291,6 @@ enum Switcher {
                 return .interrupted
             }
         }
-        return nil
-    }
-
-    private static func dismissInterruptedPicker(pid: Int32, pulse: @escaping () -> Bool) -> Result? {
-        while let remaining = interruptedPickers[pid], remaining > 0 {
-            guard Keys.key(Keys.escape, pulse: pulse) else { return .interrupted }
-            interruptedPickers[pid] = remaining - 1
-            guard Keys.wait(Keys.keystrokeDelay, pulse: pulse) else { return .interrupted }
-        }
-        interruptedPickers.removeValue(forKey: pid)
         return nil
     }
 

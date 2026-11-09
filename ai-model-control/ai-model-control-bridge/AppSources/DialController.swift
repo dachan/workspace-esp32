@@ -6,7 +6,23 @@ import ServiceManagement
 
 @MainActor
 final class DialController {
-    var status = "Starting" { didSet { onChange?() } }
+    /// Bridge child lifecycle. `wantsBridge` is the user's intent; this is what
+    /// is actually running. A child is owned until its terminationHandler runs,
+    /// so two helpers never compete for the port's TIOCEXCL claim.
+    private enum Child {
+        case none(retryAt: TimeInterval)
+        case running(Process)
+        case stopping(Process)
+
+        var process: Process? {
+            switch self {
+            case .none: return nil
+            case .running(let process), .stopping(let process): return process
+            }
+        }
+    }
+
+    var status = DialStatus.starting { didSet { onChange?() } }
     var onChange: (() -> Void)?
     var port: String?
     var message: String? { didSet { onChange?() } }
@@ -17,19 +33,20 @@ final class DialController {
 
     private let bridgeLogURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Logs/Model Dial/bridge.log")
-    private var bridge: Process?
+    private var child = Child.none(retryAt: 0)
     private var monitor: Timer?
     private var cursorSignature: String?
     private var lastCursorRead: TimeInterval = 0
     private var wantsBridge = true
-    private var stopping = false
-    private var restartAt: TimeInterval = 0
+    /// The panel can sit on a powered hub and keep running across a Mac restart
+    /// with its USB link stalled, so each Model Dial launch resets it once.
+    private var panelResetPending = true
     private(set) var selectedPort = UserDefaults.standard.string(forKey: "selectedSerialPort")
 
     var statusSummary: String {
         guard wantsBridge else { return "Bridge off" }
         if !AXIsProcessTrusted() { return "Accessibility permission needed" }
-        return status
+        return status.title
     }
 
     var availablePorts: [String] { ports() }
@@ -69,21 +86,21 @@ final class DialController {
         stopBridge()
         // The app's run loop is about to stop, so its delayed shutdown fallback
         // cannot be relied on to release the child and serial port.
-        if let bridge, bridge.isRunning { kill(bridge.processIdentifier, SIGKILL) }
+        if let process = child.process, process.isRunning { kill(process.processIdentifier, SIGKILL) }
     }
 
     func setBridgeEnabled(_ enabled: Bool) {
         guard enabled != wantsBridge else { return }
         wantsBridge = enabled
         if enabled {
-            restartAt = 0
-            status = "Starting"
+            if case .none = child { child = .none(retryAt: 0) }
+            status = .starting
             recordBridgeEvent("Bridge enabled")
             startBridge()
         } else {
             stopBridge()
             port = nil
-            status = "Off"
+            status = .off
             recordBridgeEvent("Bridge disabled")
         }
     }
@@ -109,11 +126,20 @@ final class DialController {
 
     func restartBridge() {
         guard wantsBridge else { return }
-        restartAt = ProcessInfo.processInfo.systemUptime + 0.2
-        status = "Restarting"
+        status = .restarting
         recordBridgeEvent("Bridge restart requested")
-        stopBridge()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+        switch child {
+        case .running: stopBridge()  // terminationHandler schedules the replacement
+        case .stopping: break        // already exiting; same outcome
+        case .none: scheduleStart(after: 0.2)
+        }
+    }
+
+    /// none(retryAt) and a start attempt once it passes; the 2 s port check
+    /// is the fallback if this attempt finds no port.
+    private func scheduleStart(after delay: TimeInterval) {
+        child = .none(retryAt: ProcessInfo.processInfo.systemUptime + delay)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             self?.startBridge()
         }
     }
@@ -166,15 +192,15 @@ final class DialController {
         onChange?()
         guard wantsBridge else { return }
         if let port, !ports().contains(port) {
-            status = "Waiting for selected panel"
+            status = .waitingForSelectedPanel
             stopBridge()
         }
         startBridge()
     }
 
     private func startBridge() {
-        guard wantsBridge, bridge == nil,
-              ProcessInfo.processInfo.systemUptime >= restartAt else { return }
+        guard wantsBridge, case .none(let retryAt) = child,
+              ProcessInfo.processInfo.systemUptime >= retryAt else { return }
         let available = ports()
         if selectedPort == nil, available.count == 1 {
             selectedPort = available[0]
@@ -182,16 +208,16 @@ final class DialController {
         }
         guard let candidate = selectedPort else {
             port = nil
-            status = available.isEmpty ? "Waiting for panel" : "Choose a device in Device menu"
+            status = available.isEmpty ? .waitingForPanel : .chooseDevice
             return
         }
         guard available.contains(candidate) else {
             port = nil
-            status = "Waiting for selected panel"
+            status = .waitingForSelectedPanel
             return
         }
         guard let executable = bridgeExecutable() else {
-            status = "Unavailable"
+            status = .unavailable
             message = "The bundled ai-model-control-bridge executable is missing."
             recordBridgeEvent(message!)
             return
@@ -202,56 +228,57 @@ final class DialController {
             "--cursor-model-mask", maskArgument(preferences.cursorModelMask),
             "--show-older-models", preferences.showOlderModels ? "1" : "0",
             "--dial-swap", preferences.swapDials ? "1" : "0",
-        ]
+        ] + (panelResetPending ? ["--reset-panel"] : [])
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
         capture(process) { [weak self, weak process] text in
-            guard let self, let process, self.bridge === process, !self.stopping else { return }
+            guard let self, let process, case .running(let current) = self.child, current === process else { return }
             self.recordBridgeOutput(text)
         }
         process.terminationHandler = { [weak self] completed in
             Task { @MainActor in
-                guard let self, self.bridge === completed else { return }
-                let wasStopping = self.stopping
-                self.bridge = nil
-                self.stopping = false
+                guard let self, self.child.process === completed else { return }
+                let requested: Bool
+                if case .stopping = self.child { requested = true } else { requested = false }
                 self.port = nil
-                guard self.wantsBridge else { return }
-                if !wasStopping {
-                    self.restartAt = ProcessInfo.processInfo.systemUptime + 2
-                    self.status = "Restarting"
-                    self.recordBridgeEvent("Bridge exited (status \(completed.terminationStatus)); retrying")
+                guard self.wantsBridge else {
+                    self.child = .none(retryAt: 0)
+                    return
                 }
-                self.startBridge()
+                if requested {
+                    self.scheduleStart(after: 0.2)
+                } else {
+                    self.status = .restarting
+                    self.recordBridgeEvent("Bridge exited (status \(completed.terminationStatus)); retrying")
+                    self.scheduleStart(after: 2)
+                }
             }
         }
         do {
-            bridge = process
+            child = .running(process)
             try process.run()
+            panelResetPending = false
             port = candidate
-            status = "Connecting to panel"
+            status = .connecting
             message = "Bridge started on \(candidate)"
             recordBridgeEvent(message!)
         } catch {
-            bridge = nil
+            child = .none(retryAt: ProcessInfo.processInfo.systemUptime + 2)
             port = nil
-            restartAt = ProcessInfo.processInfo.systemUptime + 2
-            status = "Unavailable"
+            status = .unavailable
             message = error.localizedDescription
             recordBridgeEvent("Bridge could not start: \(message!)")
         }
     }
 
     private func stopBridge() {
-        guard let process = bridge, !stopping else { return }
-        stopping = true
-        // Retain ownership until terminationHandler confirms exit. A settings
-        // change must never overlap two helpers competing for TIOCEXCL.
+        guard case .running(let process) = child else { return }
+        child = .stopping(process)
         if process.isRunning { process.terminate() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self, weak process] in
-            guard let self, let process, self.bridge === process,
-                  self.stopping, process.isRunning else { return }
+            guard let self, let process, case .stopping(let current) = self.child,
+                  current === process, process.isRunning else { return }
             kill(process.processIdentifier, SIGKILL)
         }
     }
@@ -271,22 +298,11 @@ final class DialController {
     }
 
     private func recordBridgeOutput(_ text: String) {
-        message = lastLine(text)
-        if text == "BRIDGE_STATUS SERIAL_CONNECTED" { status = "Panel connected — waiting for dial state" }
-        if text.contains(" rx MODEL ") || text.contains(" rx THINKING ")
-            || text.contains(" ignored MODEL ") || text.contains(" ignored THINKING ") {
-            status = "Dial state received"
+        if let next = DialStatus(bridgeLine: text) {
+            status = next
+        } else {
+            message = lastLine(text)
         }
-        if text == "BRIDGE_STATUS SERIAL_UNAVAILABLE" { status = "Serial unavailable — retrying" }
-        if text.contains("input guard unavailable") { status = "Input permission needed — see log" }
-        if text.contains("stopped until the next") { status = "Apply failed — change dial or apply again" }
-        if text.contains("dropped APPLY") || text.contains("dropped PUSH") {
-            status = "Apply dropped — focus a supported app"
-        }
-        if text.contains(" rx APPLY") || text.contains(" rx PUSH") {
-            status = "Applying dial to focused app"
-        }
-        if text.contains(" posted ") { status = "Command sent — verify app setting" }
         appendLogLines(text.split(whereSeparator: \.isNewline).map(String.init))
     }
 

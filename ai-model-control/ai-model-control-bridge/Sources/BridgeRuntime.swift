@@ -4,11 +4,49 @@ import Foundation
 
 private let timestampFormatter = ISO8601DateFormatter()
 private func stamp() -> String { timestampFormatter.string(from: Date()) }
+private var uptime: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
 func printFront(preferred: String?) {
     let app = DeskFront.frontmost()
     print(DeskFront.label(preferred: preferred))
     print("frontmost: \(app?.localizedName ?? "?") (\(app?.bundleIdentifier ?? "?"))")
+}
+
+/// Keyboard-transaction lifecycle. Only an explicit APPLY/PUSH arms it, and
+/// every outcome (applied, superseded, interrupted, focus loss, final failure)
+/// returns to idle, so receiving STATE alone can never post keys.
+private enum ApplyPhase {
+    case idle
+    case armed(ApplyArm)
+
+    var arm: ApplyArm? {
+        if case .armed(let arm) = self { return arm }
+        return nil
+    }
+}
+
+private struct ApplyArm {
+    /// Distinguishes a re-arm that arrived while a transaction was running.
+    let id: UInt64
+    let focus: FocusOperation
+    /// Bridge settle after the intent, then retry backoff after a failure.
+    var runAt: TimeInterval
+    var force: Bool
+    var failures = 0
+    var lastFailure: String?
+}
+
+/// Who owns the Rig model/effort shown on the panel. Rig owns it unless a
+/// dial intent recently claimed it.
+private enum RigOwner {
+    case rig
+    case dial(until: TimeInterval)
+}
+
+private struct RigPanel: Equatable {
+    let model: String
+    let thinking: String
+    let mask: UInt64
 }
 
 final class BridgeRuntime {
@@ -18,34 +56,39 @@ final class BridgeRuntime {
     // there is no detent queue.
     private var desired: [SettingKind: String] = [:]
     private var generation: UInt64 = 0
-    private var targetFocus: FocusOperation?
+    private var phase = ApplyPhase.idle
+    private var armCount: UInt64 = 0
     private var receivedRevisions: [SettingKind: UInt64] = [:]
     private var lastFront: Bool?
     private var lastFrontPID: Int32?
-    private var retryAt: TimeInterval = 0
-    private var settleAt: TimeInterval = 0
-    private var lastFailure: String?
-    private var applyFailures = 0
     private var receivedModel: String?
     private var receivedThinking: String?
     private var lastApplied: [Int32: [SettingKind: String]] = [:]
-    private var forceApply = false
     private var bootID: UInt64?
     private var connectionGeneration: UInt64 = 0
-    private var nextChatGPTRefreshAt: TimeInterval = 0
-    private var chatGPTRefreshInFlight = false
-    private var lastChatGPTCatalogError = false
-    private var lastChatGPTCatalog: [CodexModelList.Entry]?
-    private var nextCursorRefreshAt: TimeInterval = 0
-    private var cursorRefreshInFlight = false
-    private var lastCursorCatalogError = false
-    private var lastCursorCatalog: [CursorModelList.Entry]?
-    private var lastRigPushAt: TimeInterval = 0
-    private var lastRigPanel: (model: String, thinking: String, mask: UInt64)?
+    private var rigOwner = RigOwner.rig
+    private var rigShown: RigPanel?
+    private var rigNextPollAt: TimeInterval = 0
     private var lastRigError: String?
-    /// Skip Rig→panel MODEL/THINKING while a dial apply is settling or just posted.
-    private var suppressHostPushUntil: TimeInterval = 0
     private var axPrompted = false
+
+    private lazy var chatGPTCatalog = CatalogPoller<CodexModelList.Entry>(
+        name: "Codex", load: { CodexModelList.load() }
+    ) { [unowned self] entries in
+        Catalog.setChatGPTModels(entries.map(\.name))
+        self.session?.setChatGPTCatalog(entries)
+        print("\(stamp()) ChatGPT model catalog: \(entries.map(\.name).joined(separator: ", "))")
+        fflush(stdout)
+    }
+
+    private lazy var cursorCatalog = CatalogPoller<CursorModelList.Entry>(
+        name: "Cursor", load: { CursorModelList.load() }
+    ) { [unowned self] entries in
+        Catalog.setCursorCatalog(entries)
+        self.session?.setCursorCatalog(entries)
+        print("\(stamp()) Cursor model catalog: \(entries.map(\.name).joined(separator: ", "))")
+        fflush(stdout)
+    }
 
     init(options: Options) {
         self.options = options
@@ -58,13 +101,18 @@ final class BridgeRuntime {
                 chatGPTThinkingMask: options.chatGPTThinkingMask,
                 cursorModelMask: options.cursorModelMask,
                 showOlderModels: options.showOlderModels,
-                dialSwap: options.dialSwap
+                dialSwap: options.dialSwap,
+                resetOnFirstOpen: options.resetPanel
             )
         }
     }
 
+    // MARK: Panel state
+
+    /// Revisioned STATE is panel state only, never an intent. Legacy SET (firmware
+    /// that never negotiated SYNC) stays an intent for compatibility; SYNC is sent
+    /// before FRONT, so current firmware never emits SET while connected.
     private func receive(_ update: SerialUpdate) {
-        let legacyIntent = update.revision == nil
         guard let value = update.kind.canonicalName(update.value) else {
             fputs("ai-model-control-bridge: ignore unknown \(update.kind.rawValue) \(update.value)\n", stderr)
             return
@@ -83,27 +131,10 @@ final class BridgeRuntime {
         }
         replaceDesiredWithPanelState()
         print("\(stamp()) rx \(update.kind.rawValue) \(value)")
-        fflush(stdout)
-        if legacyIntent {
+        BridgeStatus.dialState.emit()
+        if update.revision == nil {
             requestApply(force: false, source: "legacy SET")
         }
-    }
-
-    private func requestApply(force: Bool, source: String) {
-        guard DeskFront.isForeground(preferred: options.bundleID) else {
-            suspendPending("\(source) received without focus")
-            print("\(stamp()) dropped \(source) (no supported app is focused)")
-            fflush(stdout)
-            return
-        }
-        beginApplyingToFocusedApp(force: force)
-        if source == "APPLY", targetFocus?.kind == .rig {
-            // Firmware ignores host display updates for 8.4 s after rotation.
-            // Wait out that window so a later Rig selection is actually received.
-            suppressHostPushUntil = ProcessInfo.processInfo.systemUptime + 8.4
-        }
-        print("\(stamp()) rx \(source)")
-        fflush(stdout)
     }
 
     private func replaceDesiredWithPanelState() {
@@ -113,63 +144,87 @@ final class BridgeRuntime {
         generation &+= 1
     }
 
-    /// The dial is authoritative, but state receipt alone never posts keys.
-    /// A complete snapshot is applied only after explicit APPLY/PUSH intent
-    /// while a supported app is already foreground.
-    private func beginApplyingToFocusedApp(force: Bool = false) {
-        guard !desired.isEmpty, DeskFront.isForeground(preferred: options.bundleID) else { return }
-        let continuingTarget = targetFocus?.isCurrent == true
-        if !continuingTarget {
-            targetFocus = FocusOperation(preferred: options.bundleID)
-        }
-        guard targetFocus != nil else { return }
-        if targetFocus?.kind == .rig {
-            session?.clearHostPanel()
-        }
-        applyFailures = 0
-        forceApply = forceApply || force
-        // Explicit APPLY/PUSH intents arrive after their complete state frames.
-        // Keep the short settle so a newer physical action can supersede this one.
-        settleAt = ProcessInfo.processInfo.systemUptime + Keys.bridgeSettle
-        retryAt = 0
-        lastFailure = nil
+    private func forgetPanel() {
+        receivedRevisions.removeAll()
+        receivedModel = nil
+        receivedThinking = nil
+        lastApplied.removeAll()
     }
 
-    /// Interrupting an apply retains panel state, but a new APPLY/PUSH intent
-    /// is required before another keyboard transaction starts.
-    private func suspendPending(_ reason: String) {
-        if targetFocus != nil && !desired.isEmpty {
+    // MARK: Apply phase transitions
+
+    private func requestApply(force: Bool, source: String) {
+        guard DeskFront.isForeground(preferred: options.bundleID) else {
+            cancelApply("\(source) received without focus")
+            print("\(stamp()) dropped \(source) (no supported app is focused)")
+            BridgeStatus.applyDropped.emit()
+            return
+        }
+        arm(force: force)
+        if source == "APPLY", phase.arm?.focus.kind == .rig {
+            // Firmware ignores host display updates for 8.4 s after rotation.
+            // Wait out that window so a later Rig selection is actually received.
+            holdRigReadback(for: 8.4)
+        }
+        print("\(stamp()) rx \(source)")
+        BridgeStatus.applying.emit()
+    }
+
+    /// idle/armed → armed. Explicit APPLY/PUSH intents arrive after their complete
+    /// state frames; the short settle lets a newer physical action supersede this one.
+    private func arm(force: Bool) {
+        guard !desired.isEmpty else { return }
+        let previous = phase.arm
+        let focus: FocusOperation
+        if let previous, previous.focus.isCurrent {
+            focus = previous.focus
+        } else if let next = FocusOperation(preferred: options.bundleID) {
+            focus = next
+        } else {
+            return
+        }
+        if focus.kind == .rig {
+            session?.clearHostPanel()
+        }
+        armCount &+= 1
+        phase = .armed(ApplyArm(
+            id: armCount,
+            focus: focus,
+            runAt: uptime + Keys.bridgeSettle,
+            force: force || previous?.force == true
+        ))
+    }
+
+    /// armed → idle, keeping panel state; a new APPLY/PUSH is required.
+    private func cancelApply(_ reason: String) {
+        if phase.arm != nil && !desired.isEmpty {
             print("\(stamp()) deferred target (\(reason))")
             fflush(stdout)
         }
-        targetFocus = nil
+        phase = .idle
         generation &+= 1
-        retryAt = 0
-        lastFailure = nil
-        forceApply = false
     }
 
-    private func suspendAfterFocusLoss(_ reason: String) {
-        suspendPending(reason)
+    private func cancelAfterFocusLoss(_ reason: String) {
+        cancelApply(reason)
         // Focus may leave and return during one apply; keep the transition
         // visible to noteFront() without restarting keyboard automation.
         lastFront = false
         lastFrontPID = nil
     }
 
+    /// Panel identity changed: drop both the intent and the state it referred to.
     private func discardPending(_ reason: String) {
         if !desired.isEmpty {
             print("\(stamp()) dropped target (\(reason))")
             fflush(stdout)
         }
-        applyFailures = 0
         desired.removeAll()
-        targetFocus = nil
+        phase = .idle
         generation &+= 1
-        retryAt = 0
-        lastFailure = nil
-        forceApply = false
     }
+
+    // MARK: Serial
 
     private func drainSerial() {
         guard let session else { return }
@@ -182,10 +237,7 @@ final class BridgeRuntime {
                 if bootID != id {
                     bootID = id
                     discardPending("panel restarted")
-                    receivedRevisions.removeAll()
-                    receivedModel = nil
-                    receivedThinking = nil
-                    lastApplied.removeAll()
+                    forgetPanel()
                     print("\(stamp()) rx READY \(hex)")
                     fflush(stdout)
                 }
@@ -217,66 +269,112 @@ final class BridgeRuntime {
         guard connectionGeneration != session.connectionGeneration else { return }
         connectionGeneration = session.connectionGeneration
         discardPending("serial connection changed")
-        receivedRevisions.removeAll()
-        receivedModel = nil
-        receivedThinking = nil
+        forgetPanel()
         bootID = nil
-        lastApplied.removeAll()
     }
 
+    // MARK: Applying
+
     private func applyPending() {
-        guard !desired.isEmpty, let focus = targetFocus else { return }
-        if focus.kind == .rig {
-            applyRig(focus: focus)
+        guard var arm = phase.arm, !desired.isEmpty else { return }
+        guard arm.focus.isCurrent else {
+            cancelAfterFocusLoss("target app left the foreground")
             return
         }
-        if !AXTrust.isTrusted(prompt: false) {
-            if !axPrompted {
-                axPrompted = true
-                _ = AXTrust.isTrusted(prompt: true)
-                let message = "Accessibility is not granted; ChatGPT / Cursor / OpenCode keys are skipped. Enable Model Dial in System Settings → Privacy & Security → Accessibility."
-                fputs("ai-model-control-bridge: \(message)\n", stderr)
-                print("\(stamp()) \(message)")
-                fflush(stdout)
-            }
-            if !AXTrust.isTrusted(prompt: false) { return }
+        guard uptime >= arm.runAt else { return }
+        if arm.focus.kind != .rig, !accessibilityReady() { return }
+        if arm.force {
+            lastApplied.removeValue(forKey: arm.focus.pid)
+            arm.force = false
+            phase = .armed(arm)
         }
-        guard focus.isCurrent else {
-            suspendAfterFocusLoss("target app left the foreground")
-            return
-        }
-        let now = ProcessInfo.processInfo.systemUptime
-        guard now >= retryAt, now >= settleAt else { return }
         let snapshot = desired
-        let revision = generation
-        let pid = focus.pid
-        if forceApply {
-            lastApplied.removeValue(forKey: pid)
-            forceApply = false
+        guard needsApply(snapshot, focus: arm.focus) else {
+            phase = .idle
+            return
         }
-        let pulse: () -> Bool = {
+        let revision = generation
+        let result = arm.focus.kind == .rig
+            ? applyRig(snapshot, focus: arm.focus)
+            : applyKeys(snapshot, focus: arm.focus, revision: revision)
+        finish(arm, revision: revision, result: result)
+        fflush(stdout)
+    }
+
+    /// armed → idle, or armed (retry) after a failure while still current.
+    private func finish(_ arm: ApplyArm, revision: UInt64, result: Switcher.Result) {
+        // A newer APPLY/PUSH re-armed during the transaction; it owns the phase now.
+        guard var current = phase.arm, current.id == arm.id else { return }
+        guard arm.focus.isCurrent else {
+            cancelAfterFocusLoss("target app left the foreground")
+            return
+        }
+        guard generation == revision else {
+            cancelApply("newer panel state arrived during apply")
+            return
+        }
+        switch result {
+        case .applied:
+            phase = .idle
+        case .interrupted:
+            cancelApply("input guard or apply interrupted")
+        case .failed(let message):
+            current.failures += 1
+            if current.failures >= 3 {
+                fputs("ai-model-control-bridge: \(message); stopped until the next APPLY or PUSH\n", stderr)
+                BridgeStatus.applyFailed.emit()
+                cancelApply("\(arm.focus.displayName) apply failed")
+                return
+            }
+            if message != current.lastFailure {
+                fputs("ai-model-control-bridge: \(message); retrying while focused\n", stderr)
+            }
+            current.lastFailure = message
+            current.runAt = uptime + 2
+            phase = .armed(current)
+        }
+    }
+
+    private func accessibilityReady() -> Bool {
+        if AXTrust.isTrusted(prompt: false) { return true }
+        if !axPrompted {
+            axPrompted = true
+            _ = AXTrust.isTrusted(prompt: true)
+            let message = "Accessibility is not granted; ChatGPT / Cursor / OpenCode keys are skipped. Enable Model Dial in System Settings → Privacy & Security → Accessibility."
+            fputs("ai-model-control-bridge: \(message)\n", stderr)
+            print("\(stamp()) \(message)")
+            fflush(stdout)
+        }
+        return AXTrust.isTrusted(prompt: false)
+    }
+
+    private func needsApply(_ snapshot: [SettingKind: String], focus: FocusOperation) -> Bool {
+        snapshot.contains { kind, value in
+            if skipsField(kind, value, focus: focus) { return false }
+            return lastApplied[focus.pid]?[kind] != value
+        }
+    }
+
+    /// Cursor models outside its picker cannot be selected; leave them alone.
+    private func skipsField(_ kind: SettingKind, _ value: String, focus: FocusOperation) -> Bool {
+        focus.kind == .cursor && kind == .model && Catalog.cursorPickerIndex(value) == nil
+    }
+
+    private func applyKeys(
+        _ snapshot: [SettingKind: String], focus: FocusOperation, revision: UInt64
+    ) -> Switcher.Result {
+        let pid = focus.pid
+        let serialPulse: () -> Bool = {
             self.drainSerial()
             return !focus.isCurrent || self.generation != revision
         }
-
-        let needsApply = snapshot.contains { kind, value in
-            if focus.kind == .cursor, kind == .model, Catalog.cursorPickerIndex(value) == nil { return false }
-            return lastApplied[pid]?[kind] != value
-        }
-        guard needsApply else { return }
-
-        var guardInterrupted = false
-        let guardedResult = InputGuard.protect(focus: focus) { inputGuard in
-            defer { guardInterrupted = !inputGuard.isValid }
-            let serialPulse = pulse
+        return InputGuard.protect(focus: focus) { inputGuard in
             let pulse = { !inputGuard.isValid || serialPulse() }
             // Finish one field at a time, always model before its dependent effort.
             // Invalidate before posting: even a failed/interrupted sequence may mutate UI.
-            applyFields: for kind in SettingKind.allCases {
-                guard let value = snapshot[kind] else { continue }
-                if focus.kind == .cursor, kind == .model,
-                   Catalog.cursorPickerIndex(value) == nil { continue }
-                if lastApplied[pid]?[kind] == value { continue }
+            fields: for kind in SettingKind.allCases {
+                guard let value = snapshot[kind], !skipsField(kind, value, focus: focus),
+                      lastApplied[pid]?[kind] != value else { continue }
                 if pulse() { break }
                 lastApplied[pid, default: [:]].removeValue(forKey: kind)
                 if kind == .model {
@@ -297,98 +395,39 @@ final class BridgeRuntime {
                 switch result {
                 case .applied(let path):
                     lastApplied[pid, default: [:]][kind] = value
-                    lastFailure = nil
-                    retryAt = 0
                     print("\(stamp()) posted \(kind.rawValue) \(value) via \(path)")
+                    BridgeStatus.posted.emit()
                     if kind == .model, focus.kind == .cursor,
-                       !Keys.wait(Keys.pickerTiming, pulse: pulse) { break applyFields }
-                case .interrupted:
-                    return .interrupted
-                case .failed(let message):
-                    return .failed(message)
+                       !Keys.wait(Keys.pickerTiming, pulse: pulse) { break fields }
+                case .interrupted, .failed:
+                    return result
                 }
             }
             return inputGuard.isValid ? .applied(path: "guarded transaction") : .interrupted
         }
-        if case .failed(let message) = guardedResult, generation == revision {
-            applyFailures += 1
-            if applyFailures >= 3 {
-                fputs("ai-model-control-bridge: \(message); stopped until the next supported-app focus or dial update\n", stderr)
-                suspendPending("\(focus.displayName) apply failed")
-            } else {
-                if message != lastFailure {
-                    fputs("ai-model-control-bridge: \(message); retrying while focused\n", stderr)
-                }
-                lastFailure = message
-                retryAt = ProcessInfo.processInfo.systemUptime + 2
-            }
-        }
-        if guardInterrupted, targetFocus === focus {
-            suspendPending("input guard or apply interrupted")
-        }
-        if !focus.isCurrent, targetFocus === focus {
-            suspendAfterFocusLoss("target app left the foreground")
-        }
-        fflush(stdout)
     }
 
-    private func applyRig(focus: FocusOperation) {
-        guard focus.isCurrent else {
-            suspendAfterFocusLoss("target app left the foreground")
-            return
-        }
-        let now = ProcessInfo.processInfo.systemUptime
-        guard now >= retryAt, now >= settleAt else { return }
-        let snapshot = desired
-        let pid = focus.pid
-        if forceApply {
-            lastApplied.removeValue(forKey: pid)
-            forceApply = false
-        }
-        let needsApply = snapshot.contains { kind, value in lastApplied[pid]?[kind] != value }
-        guard needsApply else {
-            targetFocus = nil
-            return
-        }
+    private func applyRig(_ snapshot: [SettingKind: String], focus: FocusOperation) -> Switcher.Result {
         let result = RigApply.apply(model: snapshot[.model], thinking: snapshot[.thinking])
-        switch result {
-        case .applied(let path):
-            lastApplied[pid] = snapshot
-            lastFailure = nil
-            retryAt = 0
-            applyFailures = 0
-            lastRigPanel = (
-                snapshot[.model] ?? lastRigPanel?.model ?? "",
-                snapshot[.thinking] ?? lastRigPanel?.thinking ?? "",
-                lastRigPanel?.mask ?? 0
-            )
-            targetFocus = nil
-            suppressHostPushUntil = max(suppressHostPushUntil, ProcessInfo.processInfo.systemUptime + 1.5)
-            if let model = snapshot[.model] {
-                print("\(stamp()) posted model \(model) via \(path)")
-            }
-            if let thinking = snapshot[.thinking] {
-                print("\(stamp()) posted thinking \(thinking) via \(path)")
-            }
-        case .interrupted:
-            suspendPending("Rig apply interrupted")
-        case .failed(let message):
-            applyFailures += 1
-            if applyFailures >= 3 {
-                fputs("ai-model-control-bridge: \(message); stopped until the next supported-app focus or dial update\n", stderr)
-                suspendPending("Rig apply failed")
-            } else {
-                if message != lastFailure {
-                    fputs("ai-model-control-bridge: \(message); retrying while focused\n", stderr)
-                }
-                lastFailure = message
-                retryAt = ProcessInfo.processInfo.systemUptime + 2
-            }
+        guard case .applied(let path) = result else { return result }
+        lastApplied[focus.pid] = snapshot
+        rigShown = RigPanel(
+            model: snapshot[.model] ?? rigShown?.model ?? "",
+            thinking: snapshot[.thinking] ?? rigShown?.thinking ?? "",
+            mask: rigShown?.mask ?? 0
+        )
+        holdRigReadback(for: 1.5)
+        if let model = snapshot[.model] {
+            print("\(stamp()) posted model \(model) via \(path)")
         }
-        if !focus.isCurrent, targetFocus === focus {
-            suspendAfterFocusLoss("target app left the foreground")
+        if let thinking = snapshot[.thinking] {
+            print("\(stamp()) posted thinking \(thinking) via \(path)")
         }
+        BridgeStatus.posted.emit()
+        return result
     }
+
+    // MARK: Focus and Rig readback
 
     private func noteFront() {
         let app = DeskFront.frontmost()
@@ -399,44 +438,59 @@ final class BridgeRuntime {
             lastFrontPID = pid
             print("\(stamp()) \(DeskFront.label(preferred: options.bundleID))")
             fflush(stdout)
-            if targetFocus != nil {
-                suspendPending(front ? "focused app changed" : "no supported app is focused")
+            if phase.arm != nil {
+                cancelApply(front ? "focused app changed" : "no supported app is focused")
             }
-            lastRigPanel = nil
-            lastRigPushAt = 0
+            rigShown = nil
+            rigNextPollAt = 0
         }
         pushRigToPanel(app: app)
+    }
+
+    /// rig → dial(until), extending but never shortening an existing hold.
+    private func holdRigReadback(for seconds: TimeInterval) {
+        let until = uptime + seconds
+        if case .dial(let current) = rigOwner, current >= until { return }
+        rigOwner = .dial(until: until)
+    }
+
+    /// Saved STATE frames are snapshots; only explicit dial intent holds Rig
+    /// readback. A mismatch alone would block the first sync forever.
+    private func rigReadbackHeld() -> Bool {
+        if phase.arm?.focus.kind == .rig { return true }
+        guard case .dial(let until) = rigOwner else { return false }
+        if uptime < until { return true }
+        rigOwner = .rig
+        return false
     }
 
     private func pushRigToPanel(app: NSRunningApplication?) {
         guard let session else { return }
         guard let app, DeskFront.kind(of: app) == .rig else {
-            lastRigPanel = nil
+            rigShown = nil
             return
         }
-        let now = ProcessInfo.processInfo.systemUptime
-        // Saved STATE frames are snapshots; only explicit dial intent holds
-        // Rig readback. A mismatch alone would block the first sync forever.
-        let holdHost = now < suppressHostPushUntil || targetFocus?.kind == .rig
+        // Poll Rig's socket at the panel refresh rate, not on every 50 ms loop:
+        // each poll is two blocking round trips.
+        guard uptime >= rigNextPollAt else { return }
+        rigNextPollAt = uptime + 0.4
         do {
-            let active = try RigClient.modelsActive()
-            let focus = try RigClient.focus()
+            let active = try RigClient.modelsActive(timeout: 1)
+            let focus = try RigClient.focus(timeout: 1)
             let mask = Catalog.rigEnabledMask(from: active.models)
             let model = Catalog.rigPanelModel(from: focus, active: active.models)
-            let masks = Catalog.rigEffortMasks(from: active.models)
-            let effortMask = Catalog.rigEffortMask(from: focus.efforts)
             let thinking = Catalog.rigPanelThinking(from: focus.effort)
-            let catalog = Catalog.rigCatalogEntries(from: active.models)
-            session.setRigCatalog(catalog)
+            session.setRigCatalog(Catalog.rigCatalogEntries(from: active.models))
             session.setRigModelMask(mask)
-            session.setRigEffortMasks(masks)
-            if holdHost { return }
-            if lastRigPanel != nil, now - lastRigPushAt < 0.4 {
-                return
-            }
-            lastRigPushAt = now
-            session.setHostPanel(model: model, thinking: thinking, effortMask: effortMask)
-            if lastRigPanel?.model != model || lastRigPanel?.thinking != thinking || lastRigPanel?.mask != mask {
+            session.setRigEffortMasks(Catalog.rigEffortMasks(from: active.models))
+            lastRigError = nil
+            if rigReadbackHeld() { return }
+            session.setHostPanel(
+                model: model, thinking: thinking,
+                effortMask: Catalog.rigEffortMask(from: focus.efforts)
+            )
+            let shown = RigPanel(model: model, thinking: thinking, mask: mask)
+            if shown != rigShown {
                 lastApplied[app.processIdentifier] = [.model: model, .thinking: thinking]
                 receivedModel = model
                 receivedThinking = thinking
@@ -444,8 +498,7 @@ final class BridgeRuntime {
                 print("\(stamp()) panel Rig \(model) \(thinking)")
                 fflush(stdout)
             }
-            lastRigPanel = (model, thinking, mask)
-            lastRigError = nil
+            rigShown = shown
         } catch {
             let message = error.localizedDescription
             if message != lastRigError {
@@ -455,77 +508,15 @@ final class BridgeRuntime {
         }
     }
 
-    private func refreshChatGPTCatalog() {
-        let now = ProcessInfo.processInfo.systemUptime
-        guard !chatGPTRefreshInFlight, now >= nextChatGPTRefreshAt else { return }
-        chatGPTRefreshInFlight = true
-        nextChatGPTRefreshAt = now + 10
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let entries = CodexModelList.load()
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.chatGPTRefreshInFlight = false
-                guard let entries else {
-                    if !self.lastChatGPTCatalogError {
-                        fputs("ai-model-control-bridge: Codex model list unavailable; retaining panel catalog\n", stderr)
-                    }
-                    self.lastChatGPTCatalogError = true
-                    return
-                }
-                self.lastChatGPTCatalogError = false
-                guard entries != self.lastChatGPTCatalog else { return }
-                self.lastChatGPTCatalog = entries
-                Catalog.setChatGPTModels(entries.map(\.name))
-                self.session?.setChatGPTCatalog(entries)
-                print("\(stamp()) ChatGPT model catalog: \(entries.map(\.name).joined(separator: ", "))")
-                fflush(stdout)
-            }
-        }
-    }
-
-    private func refreshCursorCatalog() {
-        let now = ProcessInfo.processInfo.systemUptime
-        guard !cursorRefreshInFlight, now >= nextCursorRefreshAt else { return }
-        cursorRefreshInFlight = true
-        nextCursorRefreshAt = now + 10
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let entries = CursorModelList.load()
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.cursorRefreshInFlight = false
-                guard let entries else {
-                    if !self.lastCursorCatalogError {
-                        fputs("ai-model-control-bridge: Cursor model list unavailable; retaining panel catalog\n", stderr)
-                    }
-                    self.lastCursorCatalogError = true
-                    return
-                }
-                self.lastCursorCatalogError = false
-                guard entries != self.lastCursorCatalog else { return }
-                self.lastCursorCatalog = entries
-                Catalog.setCursorCatalog(entries)
-                self.session?.setCursorCatalog(entries)
-                print("\(stamp()) Cursor model catalog: \(entries.map(\.name).joined(separator: ", "))")
-                fflush(stdout)
-            }
-        }
-    }
-
     func run() -> Never {
         // Load once before FRONT Cursor so a saved model is not clamped against
         // the firmware fallback catalog during the initial USB handshake.
-        if let entries = CursorModelList.load() {
-            lastCursorCatalog = entries
-            Catalog.setCursorCatalog(entries)
-            session?.setCursorCatalog(entries)
-            print("\(stamp()) Cursor model catalog: \(entries.map(\.name).joined(separator: ", "))")
-        }
-        nextCursorRefreshAt = ProcessInfo.processInfo.systemUptime + 10
+        cursorCatalog.loadNow()
         print("watching ChatGPT / Cursor / OpenCode / Rig / Claude foreground\(session.map { "; listening on \($0.port)" } ?? "") (Ctrl+C to stop)")
         fflush(stdout)
         while true {
-            refreshChatGPTCatalog()
-            refreshCursorCatalog()
+            chatGPTCatalog.poll()
+            cursorCatalog.poll()
             drainSerial()
             noteFront()
             applyPending()
