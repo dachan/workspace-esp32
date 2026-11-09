@@ -118,7 +118,7 @@ I2C pins; they are a different interface.
   - Desk pose: display left of breadboard, header pins toward ESP32, USB toward bottom of frame → OpenAI/Cursor brand lockup at top of glass, MODEL left, version bottom-right
 - Mac serial: unknown (not attached this pass; `/dev/cu.usbmodem21201` is currently the second Super Mini)
 - Last verified: 2026-09-10 — application-only reflash, hash-verified, preserving NVS and the **v0.90** version. The panel has no SYNC control; Model Dial owns Sync, ChatGPT effort, and Cursor model enable lists. Build from commit `fd2c5d2`; firmware SHA-256 `f8f31afe5ca9efabd5ee3440dc20769be1c1123da98393fe8577ed1f28d0b612`. Board identity matched the recorded ESP32-S3. Bridge launched with the configured masks; live serial received ENABLED and both state fields after reconnect. Physical touch behavior was not rechecked; the documented model-knob wiring fault remains unresolved.
-- Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
+- Notes: edit, push, and flash on the Mac in `~/Development/workspace-esp32`
 
 ## ESP32_MINI-128_tft_240x240-AI_Model_Control-Original
 
@@ -132,7 +132,7 @@ I2C pins; they are a different interface.
 - Firmware expected: original round-display image from `ai-model-control/ESP32_MINI-128_tft_240x240-AI_Model_Control-Original` (old display order); do not flash the New label unless this board is rewired to RST/CS/DC/SDA/SCL -> GPIO8/9/10/11/12.
 - Mac USB serial: last seen `/dev/cu.usbmodem21101` on 2026-09-11; this transient path now identifies the New board, so re-identify the Original board by MAC if it is reattached.
 - Last verified: 2026-09-11 — application-only reflash of `ESP32_MINI-128_tft_240x240-AI_Model_Control-Original` v0.90 to `/dev/cu.usbmodem21101` (hash verified, NVS preserved). Chip matched ESP32-S3 QFN56 rev v0.2, 4 MB flash + 2 MB PSRAM, MAC `90:da:72:73:5a:64`. Firmware SHA-256 `c58ad39d99e8bb6f845b7881c144b311688f1c520d9aabf3bd73599829f56a66`. This image uses a black/grayscale round UI and screensaver, standard 5×7 thinking text at 1× scale in the same white as the model name, 24 px model-to-thinking spacing, 8 px thinking-bar segments with 8 px gaps and a 4 px corner radius, and holds the GPIO48 WS2812 data line low after an RGB-off frame.
-- Notes: edit on Hetzner `/home/codex/workspace-esp32` as `codex`; push, pull Mac `~/Development/workspace-esp32`, flash on Mac
+- Notes: edit, push, and flash on the Mac in `~/Development/workspace-esp32`
 
 ## ESP32_MINI-128_tft_240x240-AI_Model_Control-New
 

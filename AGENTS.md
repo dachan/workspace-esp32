@@ -29,16 +29,14 @@ directories and technical build paths unchanged unless explicitly requested.
 
 Example: `ESP32_S3-128_tft_240x240-AI_Model_Control`.
 
-## Agent workflow (Hetzner edit, Mac flash)
+## Agent workflow (Mac edit and flash)
 
 Hard lanes for this repo:
 
-- **Edit on Hetzner as `codex`** at `/home/codex/workspace-esp32` (commit and
-  push from the server). Do not treat Hetzner `/home/david` as a place to edit
-  this codebase (`david` is for prod serving of other apps). Prefer connecting
-  as `codex` for any server-side browse/write of this tree.
-- After server changes land on GitHub, **pull on the Mac**
-  (`~/Development/workspace-esp32`) so the workstation clone stays in sync.
+- **Edit, commit, and push on the Mac** in `~/Development/workspace-esp32`.
+  Pull before starting so the clone matches GitHub. Do not edit this codebase
+  on Hetzner (the `codex` login is gone; `david` is for prod serving of other
+  apps).
 - After any ESP32 firmware, catalog, or on-device UI change, **flash immediately**
   on the Mac. Do not wait for the user to say flash. Identify the board by MAC
   from [HARDWARE.md](HARDWARE.md) (not a remembered `/dev/cu.usbmodem*` path).
@@ -47,9 +45,8 @@ Hard lanes for this repo:
   Do not flash a board that is not attached or that this change did not target.
 - Do not keep a separate standalone `ai-model-control-bridge` folder on the Mac;
   use `ai-model-control/ai-model-control-bridge/` inside this repo.
-- Keep Mac and server on the same branch/commit after every change:
-  edit on Hetzner codex → commit/push → pull on Mac → flash the targeted
-  attached board from Mac after every firmware change.
+- Flow for every change: pull → edit on the Mac → commit/push → flash the
+  targeted attached board after every firmware change.
 - After a branch merges into `main`, delete it from local and remote
   (`git branch -d <branch>` and `git push origin --delete <branch>`). Keep
   `main` and any branch that still has unmerged commits. Do not leave merged
@@ -58,8 +55,8 @@ Hard lanes for this repo:
 ## AI model control (encoders → ChatGPT / Cursor / OpenCode / Rig / Claude)
 
 On-device UI is `ai-model-control/` (3.5" ST7796 480x320 and SuperMini round).
-Edit on Hetzner codex, push, pull the Mac, then **flash the attached board on
-the Mac without waiting to be asked**. The Mac helper is
+Edit and push from the Mac, then **flash the attached board without waiting
+to be asked**. The Mac helper is
 `ai-model-control/ai-model-control-bridge/` (macOS CLI only; never a standalone
 Mac folder). Detail for keystroke recipes, InputGuard, NVS defaults, ST7796
 MADCTL lock, and logo codegen lives in `ai-model-control/README.md`.
